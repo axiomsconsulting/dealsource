@@ -83,3 +83,16 @@ export function strategiesBlockedByRisk(flags: RiskFlag[]): Set<string> {
   }
   return blocked;
 }
+
+export const RISK_IMPROVEMENTS: Record<RiskFlagKey, string> = {
+  shared_ownership: "Confirm whether the listing is genuinely shared ownership or just shared-equity wording. If shared ownership, exclude from your pipeline — staircasing and lender restrictions make it unsuitable for standard BTL.",
+  leasehold_short: "Get lease length from the agent. Under 80 years → ask the seller to extend before exchange, or price in the statutory extension premium (often £15–40k) as a negotiation chip.",
+  leasehold_unknown_term: "Ask the agent for lease term, ground rent, service charge, and any onerous clauses (doubling ground rent, permission fees). Required before any offer.",
+  listed_building: "Pull the Historic England listing entry. Listed status means LBC for most works — budget +15–25% on refurb and +6 weeks on timeline.",
+  auction: "Treat the guide price as a floor, not the price. Read the legal pack BEFORE bidding (special conditions can shift fees, completion timelines, and seller costs onto buyer).",
+  developer_invitation: "If this is a developer 'from £' listing, it's an invitation to register interest, not a real deal. Remove from comparables; price will be set at launch.",
+  land_only: "Out of scope for BTL/HMO/SA. Move to a 'development pipeline' list if you do land deals, otherwise hide.",
+  planning_only: "Verify planning is implemented and not lapsed (3-year rule). Cost out the build before offering — land+build often exceeds GDV in current market.",
+  fake_or_underpriced: "Cross-check sold prices on the street. If genuinely under-priced, expect best-and-final bidding war — set your walk-away number now. Otherwise likely auction guide or data error.",
+  retirement_only: "Age-restricted housing can't be let to under-55s. Exclude from rental strategies.",
+};

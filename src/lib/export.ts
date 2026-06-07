@@ -11,6 +11,7 @@ export interface ExportRow {
   yield_on_cash_in_pct: number | null;
   refurb_total: number | null;
   article4_status: string;
+  seller_flex_pct: number | null;
   best_strategy: string;
   deal_score: number | null;
   risk_severity: string;
@@ -28,6 +29,7 @@ const HEADERS: Record<keyof ExportRow, string> = {
   yield_on_cash_in_pct: "Yield on cash in (%)",
   refurb_total: "Refurb total (£)",
   article4_status: "Article 4",
+  seller_flex_pct: "Seller flex (%)",
   best_strategy: "Best strategy",
   deal_score: "Deal score",
   risk_severity: "Risk severity",

@@ -24,7 +24,10 @@ export function RefurbPanel({
 }) {
   const initialTier: RefurbTier = property?.refurb_estimate?.tier ?? "medium";
   const [tier, setTier] = useState<RefurbTier>(initialTier);
-  const aiItems = property?.ai_payload?.refurb?.items ?? property?.ai_payload?.condition?.items ?? [];
+  const aiItems = useMemo(
+    () => property?.ai_payload?.refurb?.items ?? property?.ai_payload?.condition?.items ?? [],
+    [property?.ai_payload?.refurb?.items, property?.ai_payload?.condition?.items],
+  );
   const est = useMemo(() => estimateRefurb(property, tier, aiItems), [property, tier, aiItems]);
 
   const qc = useQueryClient();
@@ -36,12 +39,13 @@ export function RefurbPanel({
   // when est changes (tier switch), ensure every line has a choice entry
   useEffect(() => {
     setChoices((prev) => {
+      let added = false;
       const next = { ...prev };
       est.lines.forEach((l, i) => {
         const k = `${l.category}:${i}`;
-        if (!next[k]) next[k] = { include: true, tier: "mid" };
+        if (!next[k]) { next[k] = { include: true, tier: "mid" }; added = true; }
       });
-      return next;
+      return added ? next : prev;
     });
   }, [est]);
 
