@@ -12,6 +12,10 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
     overrides: z.record(z.any()).optional(),
     heroPhotoId: z.string().uuid().nullable().optional(),
     title: z.string().max(200).optional(),
+    hide_address: z.boolean().optional(),
+    hide_photos: z.boolean().optional(),
+    include_refurb_breakdown: z.boolean().optional(),
+    include_risk_flags: z.boolean().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: prop, error: pe } = await context.supabase
@@ -50,6 +54,10 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
         is_public: data.is_public ?? true,
         hero_photo_id: data.heroPhotoId ?? null,
         title: data.title ?? prop.address,
+        hide_address: data.hide_address ?? false,
+        hide_photos: data.hide_photos ?? false,
+        include_refurb_breakdown: data.include_refurb_breakdown ?? true,
+        include_risk_flags: data.include_risk_flags ?? true,
       }).eq("id", existing.id).select("*").single();
       if (error) throw new Error(error.message);
       return row;
@@ -58,6 +66,10 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
       user_id: context.userId, property_id: data.propertyId, snapshot: snapshot as any,
       redact: data.redact ?? true, is_public: data.is_public ?? true,
       hero_photo_id: data.heroPhotoId ?? null, title: data.title ?? prop.address,
+      hide_address: data.hide_address ?? false,
+      hide_photos: data.hide_photos ?? false,
+      include_refurb_breakdown: data.include_refurb_breakdown ?? true,
+      include_risk_flags: data.include_risk_flags ?? true,
     }).select("*").single();
     if (error) throw new Error(error.message);
     return row;
