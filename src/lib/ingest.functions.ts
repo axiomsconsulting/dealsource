@@ -1,0 +1,109 @@
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
+
+const PropertyInputSchema = z.object({
+  address: z.string().min(1).max(500),
+  postcode: z.string().max(20).nullable().optional(),
+  city: z.string().max(120).nullable().optional(),
+  beds: z.number().int().min(0).max(20).nullable().optional(),
+  baths: z.number().int().min(0).max(20).nullable().optional(),
+  property_type: z.string().max(80).nullable().optional(),
+  epc_rate: z.string().max(3).nullable().optional(),
+  tenure: z.string().max(60).nullable().optional(),
+  area_sqm: z.number().nullable().optional(),
+  asking_price_gbp: z.number().nullable().optional(),
+  source: z.string().max(40).default("manual"),
+  source_link: z.string().max(1000).nullable().optional(),
+  agent_name: z.string().max(200).nullable().optional(),
+  csv_row: z.any().optional(),
+  pf_json: z.any().optional(),
+});
+
+export const bulkIngestProperties = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ items: z.array(PropertyInputSchema).max(500) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const rows = data.items.map((it) => ({ ...it, user_id: context.userId }));
+    const { data: inserted, error } = await context.supabase
+      .from("properties")
+      .insert(rows)
+      .select("id, address");
+    if (error) throw new Error(error.message);
+    return { inserted: inserted ?? [] };
+  });
+
+export const mergeJsonIntoProperty = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ propertyId: z.string().uuid(), pf_json: z.any() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("properties")
+      .update({ pf_json: data.pf_json })
+      .eq("id", data.propertyId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const listProperties = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("properties")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+export const getProperty = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ id: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase
+      .from("properties")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!row) throw new Error("Property not found");
+    return row;
+  });
+
+export const updateProperty = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      patch: z.object({
+        hide_address: z.boolean().optional(),
+        notes: z.string().max(5000).optional(),
+        asking_price_gbp: z.number().nullable().optional(),
+      }),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("properties")
+      .update(data.patch)
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const deleteProperty = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ id: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.from("properties").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
