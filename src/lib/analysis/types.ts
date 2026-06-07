@@ -80,9 +80,14 @@ export interface AnalysisOutput {
     mortgage_rate: number;
     ltv: number;
     arv: number;
+    rent_source?: string;
+    rent_trustworthy?: boolean;
+    refurb_source?: "algo" | "ai" | "persona_buffer" | "override";
   };
   strategies: StrategyResult[];
   negotiation: NegotiationPoint[];
   bestStrategy: StrategyKey;
   overallScore: number;
+  riskFlags?: any[];
+  article4?: { status: string; council: string | null } | null;
 }
