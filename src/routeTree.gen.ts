@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DealTokenRouteImport } from './routes/deal.$token'
+import { Route as AuthenticatedSearchesRouteImport } from './routes/_authenticated/searches'
 import { Route as AuthenticatedPropertiesRouteImport } from './routes/_authenticated/properties'
 import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -38,6 +39,11 @@ const DealTokenRoute = DealTokenRouteImport.update({
   id: '/deal/$token',
   path: '/deal/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedSearchesRoute = AuthenticatedSearchesRouteImport.update({
+  id: '/searches',
+  path: '/searches',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPropertiesRoute = AuthenticatedPropertiesRouteImport.update({
   id: '/properties',
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/searches': typeof AuthenticatedSearchesRoute
   '/deal/$token': typeof DealTokenRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/searches': typeof AuthenticatedSearchesRoute
   '/deal/$token': typeof DealTokenRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
   '/_authenticated/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/_authenticated/searches': typeof AuthenticatedSearchesRoute
   '/deal/$token': typeof DealTokenRoute
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/persona'
     | '/properties'
+    | '/searches'
     | '/deal/$token'
     | '/properties/$id'
     | '/api/deal-pdf/$token'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/persona'
     | '/properties'
+    | '/searches'
     | '/deal/$token'
     | '/properties/$id'
     | '/api/deal-pdf/$token'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
     | '/_authenticated/properties'
+    | '/_authenticated/searches'
     | '/deal/$token'
     | '/_authenticated/properties/$id'
     | '/api/deal-pdf/$token'
@@ -182,6 +194,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/deal/$token'
       preLoaderRoute: typeof DealTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/searches': {
+      id: '/_authenticated/searches'
+      path: '/searches'
+      fullPath: '/searches'
+      preLoaderRoute: typeof AuthenticatedSearchesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/properties': {
       id: '/_authenticated/properties'
@@ -246,12 +265,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPersonaRoute: typeof AuthenticatedPersonaRoute
   AuthenticatedPropertiesRoute: typeof AuthenticatedPropertiesRouteWithChildren
+  AuthenticatedSearchesRoute: typeof AuthenticatedSearchesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedPersonaRoute: AuthenticatedPersonaRoute,
   AuthenticatedPropertiesRoute: AuthenticatedPropertiesRouteWithChildren,
+  AuthenticatedSearchesRoute: AuthenticatedSearchesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -268,3 +289,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

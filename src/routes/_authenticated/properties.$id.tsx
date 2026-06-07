@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { SliderInput } from "@/components/SliderInput";
+import { PhotosPanel } from "@/components/PhotosPanel";
+import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -203,6 +205,9 @@ function PropertyDetail() {
               </CardContent>
             </Card>
           )}
+
+          <PhotosPanel propertyId={id} />
+          <DealSheetPanel propertyId={id} overrides={over} />
         </div>
       </div>
     </AppShell>

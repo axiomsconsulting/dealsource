@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { Building2, LayoutDashboard, ListChecks, LogOut, Sliders } from "lucide-react";
+import { Building2, LayoutDashboard, ListChecks, LogOut, Sliders, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReactNode } from "react";
 
@@ -19,6 +19,9 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             </Link>
             <Link to="/properties" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
               <ListChecks className="h-4 w-4" /> Properties
+            </Link>
+            <Link to="/searches" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
+              <Bell className="h-4 w-4" /> Searches
             </Link>
             <Link to="/persona" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
               <Sliders className="h-4 w-4" /> Persona
