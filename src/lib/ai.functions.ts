@@ -182,7 +182,12 @@ Given listing data and (optionally) images, produce ONE structured JSON object c
   const { data: existing } = await context.supabase
     .from("analyses").select("id").eq("property_id", propertyId).eq("user_id", context.userId).maybeSingle();
   const row = {
-    ai_notes: payload.condition ?? null,  // back-compat
+    ai_notes: payload.condition ? {
+      conditionScore: payload.condition.score,
+      summary: payload.condition.summary,
+      items: payload.condition.items,
+      negotiationAngles: payload.negotiation?.angles ?? [],
+    } : null,
     ai_payload: payload,
     ai_version: AI_VERSION,
     ai_used_at: new Date().toISOString(),
