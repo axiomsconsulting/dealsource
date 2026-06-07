@@ -198,13 +198,15 @@ export const estimateSellerFlex = createServerFn({ method: "POST" })
 {"reductionPctLow":0.02,"reductionPctMid":0.06,"reductionPctHigh":0.12,"rationale":"...","marketTemp":"hot|balanced|cold","comparables":[{"note":"3-bed terrace 0.2mi sold Jul 2025","gbp":182000}]}
 Use percentages as decimals (0.05 = 5%). Be realistic — typical UK reductions are 3-8% from initial asking.`;
 
+    const pf: any = prop.pf_json ?? {};
+    const light: any = pf.propertyLight ?? {};
     const user = `Property: ${prop.address}
 Postcode: ${prop.postcode ?? "?"}
 Type: ${prop.property_type ?? "?"} · ${prop.beds ?? "?"} bed
 Asking: £${prop.asking_price_gbp ?? "?"}
-Last sold (if known): ${prop.pf_json?.propertyLight?.lastSold ? `£${prop.pf_json.propertyLight.lastSold.value} (${prop.pf_json.propertyLight.lastSold.date})` : "n/a"}
-Reductions already taken: ${prop.pf_json?.propertyLight?.multipleReduce ?? 0}
-Back-on-market count: ${prop.pf_json?.propertyLight?.multipleBack ?? 0}
+Last sold (if known): ${light.lastSold ? `£${light.lastSold.value} (${light.lastSold.date})` : "n/a"}
+Reductions already taken: ${light.multipleReduce ?? 0}
+Back-on-market count: ${light.multipleBack ?? 0}
 EPC: ${prop.epc_rate ?? "?"}, Tenure: ${prop.tenure ?? "?"}`;
 
     let parsed: any;
