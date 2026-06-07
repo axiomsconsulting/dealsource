@@ -7,6 +7,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { analyseProperty } from "@/lib/analysis/engine";
 import { maxRiskSeverity } from "@/lib/analysis/risk";
 import { RiskChips } from "@/components/RiskChips";
+import { RiskExplainer } from "@/components/RiskExplainer";
+import { DealComparisonTable, type ComparisonRow } from "@/components/DealComparisonTable";
+import { circumstanceFlexPct } from "@/lib/seller-context";
 import { fmtGBP } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,6 +103,7 @@ function PropertiesPage() {
       const cashIn = eff ? (eff.offer_price * (1 - eff.ltv) + (eff.refurb_cost ?? 0) + 6000) : 0;
       const yci = rent && cashIn ? (rent * 12) / cashIn : null;
       const best = a?.strategies.find((s) => s.key === a.bestStrategy);
+      const flexPct = circumstanceFlexPct((p as any).seller_context);
       return {
         address: p.address,
         postcode: p.postcode ?? "",
@@ -111,6 +115,7 @@ function PropertiesPage() {
         yield_on_cash_in_pct: yci ? Math.round(yci * 10000) / 100 : null,
         refurb_total: eff ? Math.round(eff.refurb_cost ?? 0) : null,
         article4_status: (p as any).article4_status ?? "unknown",
+        seller_flex_pct: flexPct ? Math.round(flexPct * 10000) / 100 : 0,
         best_strategy: best?.name ?? "",
         deal_score: a?.overallScore ?? null,
         risk_severity: sev,
@@ -120,6 +125,33 @@ function PropertiesPage() {
     downloadCSV(`deal-comparison-${new Date().toISOString().slice(0, 10)}.csv`, rowsToCSV(out));
     toast.success(`Exported ${out.length} properties`);
   };
+
+  const comparisonRows: ComparisonRow[] = useMemo(() => {
+    const source = selected.size ? rows.filter((r) => selected.has(r.p.id)) : [];
+    return source.map(({ p, a, sev }) => {
+      const eff = a?.effectiveInputs;
+      const rent = (p as any).estimated_rent_pcm ?? eff?.monthly_rent ?? null;
+      const gy = rent && p.asking_price_gbp ? (rent * 12) / p.asking_price_gbp * 100 : null;
+      const best = a?.strategies.find((s) => s.key === a.bestStrategy);
+      const flex = circumstanceFlexPct((p as any).seller_context);
+      return {
+        id: p.id,
+        address: p.address,
+        postcode: p.postcode ?? null,
+        asking: p.asking_price_gbp ?? null,
+        recommended: eff ? Math.round(eff.offer_price) : null,
+        rent: rent ?? null,
+        grossYield: gy,
+        refurb: eff ? Math.round(eff.refurb_cost ?? 0) : null,
+        article4: (p as any).article4_status ?? "unknown",
+        sellerFlexPct: flex || null,
+        bestStrategy: best?.name ?? "",
+        score: a?.overallScore ?? null,
+        riskSeverity: sev as any,
+        riskCount: (a?.riskFlags ?? []).length,
+      };
+    });
+  }, [rows, selected]);
 
   return (
     <AppShell title={`All properties (${props.data?.length ?? 0})`}>
@@ -175,6 +207,12 @@ function PropertiesPage() {
         <Checkbox checked={selected.size === rows.length && rows.length > 0} onCheckedChange={(b) => b ? selectAll() : clearSel()} />
         Select all ({rows.length})
       </div>
+      {comparisonRows.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deal comparison · {comparisonRows.length} selected</p>
+          <DealComparisonTable rows={comparisonRows} />
+        </div>
+      )}
       {!props.data?.length ? (
         <Card className="p-12 text-center text-muted-foreground">
           No properties yet. <Link to="/dashboard" className="text-primary underline">Add some</Link>.
@@ -238,6 +276,11 @@ function PropertiesPage() {
                       {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
                     </div>
                     {a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
+                    {a && (
+                      <div className="mt-3">
+                        <RiskExplainer flags={a.riskFlags as any} score={a.overallScore} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {a && (
