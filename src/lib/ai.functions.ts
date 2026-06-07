@@ -84,6 +84,141 @@ export const analyseWithAI = createServerFn({ method: "POST" })
     return await runFullAnalysis(context, data.propertyId);
   });
 
+// Exported helper so background job runner (ai-jobs.functions) can invoke without going through RPC
+export async function runFullAnalysisForJob(context: any, propertyId: string) {
+  return runFullAnalysis(context, propertyId);
+}
+
+/* ------------------------------------------------------------------ */
+/* Photo-only refurb vision analysis                                  */
+/* ------------------------------------------------------------------ */
+
+const PhotoRefurbSchema = z.object({
+  summary: z.string().max(800).optional(),
+  conditionScore: z.number().min(0).max(10).optional(),
+  items: z.array(z.object({
+    category: z.string(),
+    issue: z.string(),
+    severity: z.enum(["low", "medium", "high"]),
+    estimateGbp: z.number().min(0).max(80000),
+    photoIndex: z.number().int().min(0).optional(),
+  })).max(40).optional(),
+});
+
+export const analysePhotosForRefurb = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const { data: photos } = await context.supabase
+      .from("photos").select("*").eq("property_id", data.propertyId).limit(12);
+    const urls: string[] = [];
+    for (const ph of photos ?? []) {
+      const { data: signed } = await context.supabase.storage.from("property-photos").createSignedUrl(ph.storage_path, 600);
+      if (signed?.signedUrl) urls.push(signed.signedUrl);
+    }
+    const external: string[] = Array.isArray(prop.image_urls) ? prop.image_urls.slice(0, 4) : [];
+    const all = [...urls, ...external].slice(0, 14);
+    if (!all.length) throw new Error("Upload at least one photo first.");
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+
+    const system = `You are a UK property surveyor. Look at the provided photos and produce a refurbishment issue list. Output STRICT JSON only, matching:
+{"summary":"...","conditionScore":0-10,"items":[{"category":"kitchen|bathroom|rewire|replumb|boiler|windows|roof|external|damp|plaster_decor|flooring|epc_upgrade|structural|other","issue":"short description","severity":"low|medium|high","estimateGbp":0,"photoIndex":0}]}
+Use UK 2026 trade prices. Be conservative.`;
+
+    const content: any[] = [
+      { type: "text", text: `Property: ${prop.address}\nType: ${prop.property_type ?? "?"}, ${prop.beds ?? "?"} bed, ${prop.area_sqm ?? "?"}m², EPC ${prop.epc_rate ?? "?"}.\n${all.length} photos attached (indices 0..${all.length - 1}).` },
+      ...all.map((u) => ({ type: "image", image: u })),
+    ];
+
+    let parsed: any;
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content }] });
+      parsed = PhotoRefurbSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Photo AI failed: " + e.message);
+    }
+
+    // Merge into ai_payload.refurb.items via analyses row
+    const { data: existing } = await context.supabase
+      .from("analyses").select("id, ai_payload").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    const prev = (existing?.ai_payload ?? {}) as any;
+    const items = parsed.items ?? [];
+    const merged = {
+      ...prev,
+      condition: {
+        ...(prev.condition ?? {}),
+        score: parsed.conditionScore ?? prev.condition?.score,
+        summary: parsed.summary ?? prev.condition?.summary,
+        photoFindings: items,
+      },
+      refurb: {
+        ...(prev.refurb ?? {}),
+        items: [
+          ...((prev.refurb?.items ?? []) as any[]).filter((x: any) => !items.some((i: any) => i.category === x.category && i.issue === x.issue)),
+          ...items.map((i: any) => ({ category: i.category, issue: i.issue, estimateGbp: i.estimateGbp })),
+        ],
+      },
+    };
+    const row = { ai_payload: merged, ai_version: AI_VERSION, ai_used_at: new Date().toISOString() };
+    if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
+    else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
+    return { items, summary: parsed.summary, conditionScore: parsed.conditionScore };
+  });
+
+/* ------------------------------------------------------------------ */
+/* Seller-flex estimate (comparables-based)                           */
+/* ------------------------------------------------------------------ */
+
+const FlexSchema = z.object({
+  reductionPctLow: z.number().min(0).max(0.4).optional(),
+  reductionPctMid: z.number().min(0).max(0.4).optional(),
+  reductionPctHigh: z.number().min(0).max(0.4).optional(),
+  rationale: z.string().max(600).optional(),
+  comparables: z.array(z.object({ note: z.string(), gbp: z.number().optional() })).max(8).optional(),
+  marketTemp: z.enum(["hot", "balanced", "cold"]).optional(),
+});
+
+export const estimateSellerFlex = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+    const system = `You estimate realistic seller flexibility on UK residential property based on local market dynamics and recent sold comparables for the postcode. Output STRICT JSON ONLY:
+{"reductionPctLow":0.02,"reductionPctMid":0.06,"reductionPctHigh":0.12,"rationale":"...","marketTemp":"hot|balanced|cold","comparables":[{"note":"3-bed terrace 0.2mi sold Jul 2025","gbp":182000}]}
+Use percentages as decimals (0.05 = 5%). Be realistic — typical UK reductions are 3-8% from initial asking.`;
+
+    const pf: any = prop.pf_json ?? {};
+    const light: any = pf.propertyLight ?? {};
+    const user = `Property: ${prop.address}
+Postcode: ${prop.postcode ?? "?"}
+Type: ${prop.property_type ?? "?"} · ${prop.beds ?? "?"} bed
+Asking: £${prop.asking_price_gbp ?? "?"}
+Last sold (if known): ${light.lastSold ? `£${light.lastSold.value} (${light.lastSold.date})` : "n/a"}
+Reductions already taken: ${light.multipleReduce ?? 0}
+Back-on-market count: ${light.multipleBack ?? 0}
+EPC: ${prop.epc_rate ?? "?"}, Tenure: ${prop.tenure ?? "?"}`;
+
+    let parsed: any;
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }] });
+      parsed = FlexSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Seller flex AI failed: " + e.message);
+    }
+    return parsed;
+  });
+
 export const getAIAnalysis = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))

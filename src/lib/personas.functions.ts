@@ -150,6 +150,7 @@ const PersonaPatchSchema = z.object({
   min_epc: z.string().max(2).optional(),
   require_parking: z.boolean().optional(),
   require_gas_boiler: z.boolean().optional(),
+  risk_policy: z.record(z.enum(["hide", "deprioritise", "show"])).optional(),
 });
 
 export const updateDefaultPersona = createServerFn({ method: "POST" })

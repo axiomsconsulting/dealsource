@@ -13,7 +13,11 @@ export const Route = createFileRoute("/api/deal-pdf/$token")({
         const a = snap.analysis;
         const ai = snap.ai;
         const best = a.strategies.find((s: any) => s.key === a.bestStrategy);
-        const redact = sheet.redact;
+        const redact = (sheet as any).redact;
+        const hideAddress = (sheet as any).hide_address ?? false;
+        const hidePhotos = (sheet as any).hide_photos ?? false;
+        const includeRefurb = (sheet as any).include_refurb_breakdown ?? true;
+        const includeRisk = (sheet as any).include_risk_flags ?? true;
 
         const pdf = await PDFDocument.create();
         const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -31,7 +35,9 @@ export const Route = createFileRoute("/api/deal-pdf/$token")({
           y -= size + 6;
         };
 
-        const title = redact ? `${prop.postcode?.split(" ")[0] ?? prop.city ?? "Location"} · ${prop.property_type ?? ""}` : prop.address;
+        const title = (hideAddress || redact)
+          ? `Property in ${prop.postcode?.split(" ")[0] ?? prop.city ?? "the area"} · ${prop.property_type ?? ""}`
+          : prop.address;
         write("INVESTMENT DEAL SHEET", { size: 10, color: [0.4, 0.4, 0.4] });
         write(title, { size: 18, bold: true });
         y -= 4;
@@ -64,7 +70,19 @@ export const Route = createFileRoute("/api/deal-pdf/$token")({
           write(`    ${n.description}`, { size: 9, color: [0.4, 0.4, 0.4] });
         });
 
-        if (ai) {
+        if (includeRisk && Array.isArray(a.riskFlags) && a.riskFlags.length) {
+          y -= 10;
+          write("RISK FLAGS", { size: 12, bold: true });
+          a.riskFlags.forEach((f: any) => write(`  ⚠ ${f.label} — ${f.reason}`, { size: 9, color: [0.5, 0.3, 0.1] }));
+        }
+
+        if (includeRefurb && a.effectiveInputs?.refurb_cost) {
+          y -= 10;
+          write("REFURB BUDGET", { size: 12, bold: true });
+          write(`  Estimated total: £${Math.round(a.effectiveInputs.refurb_cost).toLocaleString()}`, { size: 10 });
+        }
+
+        if (ai && !hidePhotos) {
           y -= 10;
           write("AI CONDITION REPORT", { size: 12, bold: true });
           write(ai.summary ?? "", { size: 10 });

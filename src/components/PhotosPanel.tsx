@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { listPhotos, addPhotoRecords, deletePhoto } from "@/lib/photos.functions";
-import { analyseWithAI, getAIAnalysis } from "@/lib/ai.functions";
+import { analyseWithAI, getAIAnalysis, analysePhotosForRefurb } from "@/lib/ai.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
   const del = useServerFn(deletePhoto);
   const runAI = useServerFn(analyseWithAI);
   const getAI = useServerFn(getAIAnalysis);
+  const runPhotoRefurb = useServerFn(analysePhotosForRefurb);
 
   const photos = useQuery({ queryKey: ["photos", propertyId], queryFn: () => list({ data: { propertyId } }) });
   const ai = useQuery({ queryKey: ["ai", propertyId], queryFn: () => getAI({ data: { propertyId } }) });
@@ -76,6 +77,15 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
     onSuccess: () => { toast.success("AI analysis complete"); qc.invalidateQueries({ queryKey: ["ai", propertyId] }); },
     onError: (e: any) => toast.error(e.message),
   });
+  const refurbMut = useMutation({
+    mutationFn: () => runPhotoRefurb({ data: { propertyId } }),
+    onSuccess: (r: any) => {
+      toast.success(`Found ${r.items?.length ?? 0} refurb items — populated estimator`);
+      qc.invalidateQueries({ queryKey: ["ai", propertyId] });
+      qc.invalidateQueries({ queryKey: ["property", propertyId] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const findings = (ai.data as any)?.ai_notes;
 
@@ -84,14 +94,25 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-base">
           <span>Photos & AI condition report</span>
-          <Button
-            size="sm" variant="default"
-            disabled={!photos.data?.length || aiMut.isPending}
-            onClick={() => aiMut.mutate()}
-          >
-            {aiMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            Run AI analysis
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm" variant="outline"
+              disabled={!photos.data?.length || refurbMut.isPending}
+              onClick={() => refurbMut.mutate()}
+              title="Vision-only refurb pass — populates the estimator from photos"
+            >
+              {refurbMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Analyse photos → refurb
+            </Button>
+            <Button
+              size="sm" variant="default"
+              disabled={!photos.data?.length || aiMut.isPending}
+              onClick={() => aiMut.mutate()}
+            >
+              {aiMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Full AI analysis
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

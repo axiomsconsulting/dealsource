@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_jobs: {
+        Row: {
+          completed: number
+          created_at: string
+          errors: number
+          id: string
+          kind: string
+          last_error: string | null
+          last_property_id: string | null
+          property_ids: Json
+          status: string
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: number
+          created_at?: string
+          errors?: number
+          id?: string
+          kind?: string
+          last_error?: string | null
+          last_property_id?: string | null
+          property_ids?: Json
+          status?: string
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed?: number
+          created_at?: string
+          errors?: number
+          id?: string
+          kind?: string
+          last_error?: string | null
+          last_property_id?: string | null
+          property_ids?: Json
+          status?: string
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       analyses: {
         Row: {
           ai_notes: Json
@@ -114,7 +159,11 @@ export type Database = {
         Row: {
           created_at: string
           hero_photo_id: string | null
+          hide_address: boolean
+          hide_photos: boolean
           id: string
+          include_refurb_breakdown: boolean
+          include_risk_flags: boolean
           is_public: boolean
           property_id: string
           redact: boolean
@@ -127,7 +176,11 @@ export type Database = {
         Insert: {
           created_at?: string
           hero_photo_id?: string | null
+          hide_address?: boolean
+          hide_photos?: boolean
           id?: string
+          include_refurb_breakdown?: boolean
+          include_risk_flags?: boolean
           is_public?: boolean
           property_id: string
           redact?: boolean
@@ -140,7 +193,11 @@ export type Database = {
         Update: {
           created_at?: string
           hero_photo_id?: string | null
+          hide_address?: boolean
+          hide_photos?: boolean
           id?: string
+          include_refurb_breakdown?: boolean
+          include_risk_flags?: boolean
           is_public?: boolean
           property_id?: string
           redact?: boolean
@@ -187,6 +244,7 @@ export type Database = {
           refurb_buffer_gbp: number
           require_gas_boiler: boolean
           require_parking: boolean
+          risk_policy: Json
           strategy: string
           stress_rate: number
           target_offer_gbp: number
@@ -213,6 +271,7 @@ export type Database = {
           refurb_buffer_gbp?: number
           require_gas_boiler?: boolean
           require_parking?: boolean
+          risk_policy?: Json
           strategy?: string
           stress_rate?: number
           target_offer_gbp?: number
@@ -239,6 +298,7 @@ export type Database = {
           refurb_buffer_gbp?: number
           require_gas_boiler?: boolean
           require_parking?: boolean
+          risk_policy?: Json
           strategy?: string
           stress_rate?: number
           target_offer_gbp?: number
@@ -337,6 +397,7 @@ export type Database = {
           refurb_estimate: Json | null
           rent_source: string | null
           risk_flags: Json
+          seller_context: Json
           source: string
           source_link: string | null
           tenure: string | null
@@ -369,6 +430,7 @@ export type Database = {
           refurb_estimate?: Json | null
           rent_source?: string | null
           risk_flags?: Json
+          seller_context?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null
@@ -401,6 +463,7 @@ export type Database = {
           refurb_estimate?: Json | null
           rent_source?: string | null
           risk_flags?: Json
+          seller_context?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null
