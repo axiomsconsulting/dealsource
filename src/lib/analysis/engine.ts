@@ -3,6 +3,9 @@ import type {
   StrategyResult, AnalysisOutput, StrategyKey,
 } from "./types";
 import { buildNegotiation } from "./negotiation";
+import { computeRiskFlags, strategiesBlockedByRisk, maxRiskSeverity } from "./risk";
+import { resolveMonthlyRent } from "./rent";
+import { estimateRefurb, tierFromConditionScore } from "./refurb";
 
 const SDLT_INVESTOR = (price: number) => {
   // UK SDLT additional-dwellings approximation (2024 rates +5% surcharge)
@@ -327,16 +330,51 @@ export function analyseProperty(
   persona: PersonaInput,
   overrides: SliderOverrides = {},
 ): AnalysisOutput {
+  // Risk flags (use stored if present, else compute)
+  const riskFlags = Array.isArray((prop as any).risk_flags?.flags)
+    ? (prop as any).risk_flags.flags
+    : computeRiskFlags(prop);
+  const blocked = strategiesBlockedByRisk(riskFlags as any);
+  const article4Status = prop.article4_status ?? prop.pf_json?.propertyLight?.article4Status ?? null;
+
   const offer_price = overrides.offer_price ?? Math.min(persona.target_offer_gbp, prop.asking_price_gbp ?? persona.target_offer_gbp);
-  const monthly_rent = overrides.monthly_rent ?? persona.target_rent_gbp;
-  const refurb_cost = overrides.refurb_cost ?? persona.refurb_buffer_gbp;
+
+  // Rent resolution
+  const rent = resolveMonthlyRent(prop, persona);
+  const monthly_rent = overrides.monthly_rent ?? rent.pcm ?? persona.target_rent_gbp;
+
+  // Refurb resolution
+  let refurb_cost = overrides.refurb_cost;
+  let refurb_source: "algo" | "ai" | "persona_buffer" | "override" = "override";
+  if (refurb_cost == null) {
+    const stored = (prop as any).refurb_estimate;
+    if (stored?.total) {
+      refurb_cost = Number(stored.total);
+      refurb_source = stored.lines?.some((l: any) => l.source === "ai") ? "ai" : "algo";
+    } else {
+      const ai = (prop as any).ai_payload?.refurb;
+      const conditionScore = (prop as any).ai_payload?.condition?.score ?? null;
+      const est = estimateRefurb(prop, tierFromConditionScore(conditionScore), ai?.items);
+      refurb_cost = est.total;
+      refurb_source = ai ? "ai" : "algo";
+      // attach for downstream display via overrides? leave it — UI calls estimateRefurb itself
+    }
+    if (!refurb_cost || refurb_cost < persona.refurb_buffer_gbp) {
+      refurb_cost = Math.max(refurb_cost ?? 0, persona.refurb_buffer_gbp);
+      if (refurb_source === "algo") refurb_source = "persona_buffer";
+    }
+  }
+
   const mortgage_rate = overrides.mortgage_rate ?? persona.mortgage_rate;
   const ltv = overrides.ltv ?? persona.ltv;
   const arv = overrides.arv ?? Math.round(offer_price * 1.18);
 
-  const eff = { offer_price, monthly_rent, refurb_cost, mortgage_rate, ltv, arv };
+  const eff = {
+    offer_price, monthly_rent, refurb_cost, mortgage_rate, ltv, arv,
+    rent_source: rent.source, rent_trustworthy: rent.trustworthy, refurb_source,
+  };
 
-  const strategies: StrategyResult[] = [
+  let strategies: StrategyResult[] = [
     btlAnalysis(prop, persona, eff),
     brrrAnalysis(prop, persona, eff),
     saAnalysis(prop, persona, eff, overrides),
@@ -345,8 +383,36 @@ export function analyseProperty(
     titleSplitAnalysis(prop, persona, eff),
   ];
 
+  // HMO Article 4 cap
+  if (article4Status === "inside" || article4Status === "In") {
+    strategies = strategies.map((s) => s.key === "HMO" ? {
+      ...s,
+      dealScore: Math.min(s.dealScore, 35),
+      feasible: false,
+      reasons: [...(s.reasons ?? []), "Article 4 area — full planning permission required for change of use to HMO (C3→C4/Sui Generis)."],
+    } : s);
+  } else if (article4Status === "partial") {
+    strategies = strategies.map((s) => s.key === "HMO" ? {
+      ...s,
+      reasons: [...(s.reasons ?? []), "Partial Article 4 in this postcode — verify the exact street before assuming permitted development."],
+    } : s);
+  }
+
+  // Risk-flag strategy blocks + score caps
+  if (blocked.size) {
+    strategies = strategies.map((s) => blocked.has(s.key) ? {
+      ...s,
+      dealScore: Math.min(s.dealScore, 15),
+      feasible: false,
+      reasons: [...(s.reasons ?? []), "Disabled by risk flag — see warnings above."],
+    } : s);
+  }
+
   const best = strategies.reduce((a, b) => (b.dealScore > a.dealScore ? b : a));
-  const overallScore = Math.round(strategies.reduce((s, x) => s + x.dealScore, 0) / strategies.length);
+  let overallScore = Math.round(strategies.reduce((s, x) => s + x.dealScore, 0) / strategies.length);
+  const sev = maxRiskSeverity(riskFlags as any);
+  if (sev === "red") overallScore = Math.min(overallScore, 20);
+  else if (sev === "amber") overallScore = Math.min(overallScore, 55);
 
   return {
     personaMatch: evalPersonaMatch(prop, persona),
@@ -355,5 +421,7 @@ export function analyseProperty(
     negotiation: buildNegotiation(prop, persona, eff),
     bestStrategy: best.key as StrategyKey,
     overallScore,
+    riskFlags: riskFlags as any[],
+    article4: article4Status ? { status: String(article4Status), council: (prop as any).article4_council ?? null } : null,
   };
 }
