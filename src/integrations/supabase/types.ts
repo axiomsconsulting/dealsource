@@ -17,7 +17,9 @@ export type Database = {
       analyses: {
         Row: {
           ai_notes: Json
+          ai_payload: Json | null
           ai_used_at: string | null
+          ai_version: string | null
           created_at: string
           deal_score: number | null
           id: string
@@ -31,7 +33,9 @@ export type Database = {
         }
         Insert: {
           ai_notes?: Json
+          ai_payload?: Json | null
           ai_used_at?: string | null
+          ai_version?: string | null
           created_at?: string
           deal_score?: number | null
           id?: string
@@ -45,7 +49,9 @@ export type Database = {
         }
         Update: {
           ai_notes?: Json
+          ai_payload?: Json | null
           ai_used_at?: string | null
+          ai_version?: string | null
           created_at?: string
           deal_score?: number | null
           id?: string
@@ -73,6 +79,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      article4_areas: {
+        Row: {
+          council: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          postcode_prefix: string
+          scope: string
+          source_url: string | null
+        }
+        Insert: {
+          council?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          postcode_prefix: string
+          scope?: string
+          source_url?: string | null
+        }
+        Update: {
+          council?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          postcode_prefix?: string
+          scope?: string
+          source_url?: string | null
+        }
+        Relationships: []
       }
       deal_sheets: {
         Row: {
@@ -279,6 +315,8 @@ export type Database = {
           address: string
           agent_name: string | null
           area_sqm: number | null
+          article4_source: string | null
+          article4_status: string | null
           asking_price_gbp: number | null
           baths: number | null
           beds: number | null
@@ -286,12 +324,19 @@ export type Database = {
           created_at: string
           csv_row: Json | null
           epc_rate: string | null
+          estimated_rent_pcm: number | null
+          hidden: boolean
           hide_address: boolean
           id: string
+          image_urls: string[]
+          lease_years_remaining: number | null
           notes: string | null
           pf_json: Json | null
           postcode: string | null
           property_type: string | null
+          refurb_estimate: Json | null
+          rent_source: string | null
+          risk_flags: Json
           source: string
           source_link: string | null
           tenure: string | null
@@ -302,6 +347,8 @@ export type Database = {
           address: string
           agent_name?: string | null
           area_sqm?: number | null
+          article4_source?: string | null
+          article4_status?: string | null
           asking_price_gbp?: number | null
           baths?: number | null
           beds?: number | null
@@ -309,12 +356,19 @@ export type Database = {
           created_at?: string
           csv_row?: Json | null
           epc_rate?: string | null
+          estimated_rent_pcm?: number | null
+          hidden?: boolean
           hide_address?: boolean
           id?: string
+          image_urls?: string[]
+          lease_years_remaining?: number | null
           notes?: string | null
           pf_json?: Json | null
           postcode?: string | null
           property_type?: string | null
+          refurb_estimate?: Json | null
+          rent_source?: string | null
+          risk_flags?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null
@@ -325,6 +379,8 @@ export type Database = {
           address?: string
           agent_name?: string | null
           area_sqm?: number | null
+          article4_source?: string | null
+          article4_status?: string | null
           asking_price_gbp?: number | null
           baths?: number | null
           beds?: number | null
@@ -332,12 +388,19 @@ export type Database = {
           created_at?: string
           csv_row?: Json | null
           epc_rate?: string | null
+          estimated_rent_pcm?: number | null
+          hidden?: boolean
           hide_address?: boolean
           id?: string
+          image_urls?: string[]
+          lease_years_remaining?: number | null
           notes?: string | null
           pf_json?: Json | null
           postcode?: string | null
           property_type?: string | null
+          refurb_estimate?: Json | null
+          rent_source?: string | null
+          risk_flags?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null
