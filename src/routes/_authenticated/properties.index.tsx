@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/properties")({
+export const Route = createFileRoute("/_authenticated/properties/")({
   head: () => ({ meta: [{ title: "Properties — Deal Sourcer" }] }),
   component: PropertiesPage,
 });
