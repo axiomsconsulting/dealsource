@@ -1,97 +1,106 @@
+# Phase 3 — Deal quality, risk flags, refurb estimator & smarter AI
 
-# Deal Sourcer — Property Investment Analyser
+This phase tightens analysis accuracy and reduces "junk" listings, then upgrades AI to a single multi-aspect call per property (and optionally batched across the library).
 
-A property deal sourcing & analysis platform for UK investors. Ingest properties from Property Filter CSV exports + per-property JSON, run strategy analysis (BTL / BRRR / SA / HMO / Flip / Title Split), generate negotiation playbooks and shareable deal sheets, store everything in the database, and iterate via interactive sliders.
+## 1. Risk & "junk listing" filter
 
-Because this is a large scope, I'll build it in **phases**. Phase 1 ships a working end-to-end product with the highest-value paths; later phases add depth.
+New per-property `risk_flags` (jsonb) computed on ingest + on demand:
 
----
+- `shared_ownership` — keyword scan: "shared ownership", "% share", "staircasing" in title/desc/agent blurb
+- `leasehold_short` — tenure = Leasehold AND (lease_years_remaining if known) < 80; flag separately `leasehold` when tenure is leasehold but term unknown
+- `listed_building` — "grade i", "grade ii", "listed building"
+- `auction` — "auction", "guide price", "modern method of auction", "MMoA", "unconditional", "reservation fee"
+- `developer_invitation` — "offers invited", "from £", "starting price", "coming soon", "off-plan", "reservations open", new-build developer agent patterns
+- `land_only` — propertyType = Land / "plot" / "building plot" / "planning granted" with no dwelling
+- `planning_only` — "planning permission" + no existing dwelling
+- `fake_or_underpriced` — price < 40% of postcode median per sqm (when comparable data available) OR price < £30k for a residential dwelling outside known low-value areas
 
-## Phase 1 — MVP (this build)
+UI:
+- Property card shows red/amber chip per flag (tooltipped)
+- Properties list: default sort pushes flagged items to bottom; toggle "Hide flagged" in filter bar
+- Per-flag setting in persona to **always hide** vs **show & rank low**
 
-### Stack
-- TanStack Start + Tailwind + shadcn (existing template)
-- Lovable Cloud (Postgres + Auth + Storage) — enabled now
-- Lovable AI Gateway (`google/gemini-3-flash-preview` for analysis, `google/gemini-2.5-flash` for image vision) — used only when user toggles "Use AI"
-- Algorithmic engine runs always (deterministic, no credits)
+Score impact: each red flag drops overallScore to ≤ 20 and disables incompatible strategies.
 
-### Database (Cloud)
-- `profiles` (auto)
-- `personas` — investor persona (cash, target rent, strategy bias, ignore list, refurb assumptions, mortgage rate, stress rate). Seeded with the BTL £60k persona.
-- `properties` — one row per address. Stores merged Property Filter JSON, CSV row, ingest source, hide_address flag.
-- `analyses` — strategy results (BTL/BRRR/SA/HMO/Flip/TitleSplit), scores, deal % rating, negotiation JSON, refurb estimate JSON, cashflow JSON, AI notes.
-- `photos` — uploaded photos (Storage bucket `property-photos`), linked to property, with AI-detected issues.
-- `deal_sheets` — generated snapshots, share token, redaction settings.
+## 2. HMO Article 4 check
 
-RLS: per-user on everything; `deal_sheets` readable by anon via share token.
+Add `article4_status` to properties (`unknown | inside | outside | partial`).
 
-### Pages / Routes
-- `/` — Landing → redirects to `/dashboard` if signed in.
-- `/auth` — email/password sign-in.
-- `/_authenticated/dashboard` — **single-screen ingest hub**: tabs for *Postcode/Area* (manual entry stub), *CSV upload* (Property Filter export), *Paste JSON*, *Upload JSON files*, *Photos zip*. Drop-zone style, one Submit.
-- `/_authenticated/properties` — grid/list of all ingested properties with filter (strategy fit, persona pass/fail, % deal rating).
-- `/_authenticated/properties/$id` — deep analysis view:
-  - Header (address, hide toggle, photos gallery)
-  - Strategy tabs (BTL / BRRR / SA / HMO / Flip / Title Split) each with full numbers
-  - **Sliders** (offer price, rent, mortgage rate, refurb, LTV, ARV) — all numbers update reactively; numeric inputs paired with each slider
-  - Negotiation panel (faults / leverage points / improvement gaps / condition issues — each with £ impact)
-  - Refurb estimate (from photo AI + heuristics)
-  - Cashflow max strategies (rent-by-room, SA, lease options suggestions)
-  - "Generate Deal Sheet" button
-- `/_authenticated/personas` — list + edit personas (seeded BTL persona pre-populated from user's description).
-- `/deal/$token` — public shareable deal sheet (respects redaction).
+Sources, in order of preference:
+1. Cached lookup table `article4_areas` (postcode prefix + council name) — seeded with known major Article 4 areas (Nottingham, Birmingham selective wards, Manchester, Sheffield, Leeds, Liverpool, Cardiff, Bristol BS5/6/7, Brighton, Portsmouth, Southampton SO14-17, Reading, Oxford, Milton Keynes, etc.)
+2. AI fallback when uncached (single call with postcode + council)
+3. User override per property
 
-### Ingestion logic
-- **CSV parser** (PapaParse) — handles the Property Filter export columns shown, creates property rows.
-- **JSON parser** — accepts the Property Filter JSON shape (`propertyLight` + `propertyDetail`), merges into property row.
-- **Photo upload** — multi-file + zip extraction client-side (JSZip), stored in Storage.
-- All ingest paths converge on `ingestProperty()` server fn → upsert by postcode+address.
+Engine rule: if `strategy = HMO` and `article4_status = inside`, the strategy is downgraded with a clear warning ("Article 4 — planning required") and score capped. Persona-match flags HMO mismatch automatically.
 
-### Analysis engine (`src/lib/analysis/`)
-Pure TS, deterministic. Computes per strategy:
-- BTL: yield, ROI on cash left in, cashflow @ stress rate, refinance equity release timing
-- BRRR: ARV, refi proceeds, cash left in, months to recycle
-- SA: occupancy-weighted income (city defaults), net after costs
-- HMO: room count × £/room, licensing flag, Article 4 check (from JSON)
-- Flip: GDV − costs − SDLT − fees − finance
-- Title Split: feasibility flag based on tenure/property type
-Plus **deal score** 0–100% combining yield, cash-left-in, equity gained, risk flags.
-Persona match runs filters (beds, bed-size, era, parking, heating, EPC).
+UI: chip on property detail + warning banner inside HMO strategy panel.
 
-### Negotiation generator
-Algorithmic rules using JSON signals (multipleReduce, multipleBack, days on market, price diff, EPC, last sold + years, equity). Each point outputs `{title, description, £impact, confidence}`. AI toggle enriches with photo-based and free-text reasoning.
+## 3. Gross yield — correctness & rent comparables
 
-### AI usage (opt-in per analysis)
-- Vision call on selected photos → refurb items + £ ranges + condition issues.
-- Text call → negotiation narrative + cashflow optimisation suggestions.
-Lovable AI Gateway via `createServerFn`.
+Today `engine.ts` uses `persona.target_rent_gbp` for every property — wrong. Fix:
 
-### Deal Sheet
-- Component renders a presentation-grade page with hero photo, key numbers, strategy summary, negotiation bullets.
-- Toggle: *Full details* vs *Redacted* (hides street, exact number, exterior photos).
-- Persisted; share via `/deal/$token`.
+- Add `properties.estimated_rent_pcm` and `rent_source` enum (`pf_json | csv | ai_comparables | manual | persona_default`)
+- Compute order:
+  1. If JSON/CSV provides a rent figure, use it
+  2. Else if AI comparables result stored, use it
+  3. Else if persona default exists, use it (mark `persona_default` — show amber)
+  4. Else `null` → show "Rent unknown" and exclude from yield-sensitive scores
+- Gross yield formula written in one place: `grossYield = (rent_pcm * 12) / asking_price`, displayed alongside `(rent_pcm * 12) / (offer + refurb + costs)` as "yield on total cash in"
+- Tooltip on every yield figure showing the inputs and source
 
----
+## 4. AI — one call per property, optional batch
 
-## Phase 2 (future — not in this build)
-- Rightmove / Zoopla scraping integration
-- Viewber API integration
-- Comparable comps pulled live
-- PDF export of deal sheet
-- Team workspaces / multi-investor sharing
-- Mortgage product lookup
-- Saved searches + email alerts on new matches
+Replace photo-only `analyseWithAI` with `analyseProperty` returning a single structured payload (one credit per property):
 
----
+```
+{
+  condition: { score, items[], summary, photoFindings[] },
+  refurb: { items[], totalLow, totalMid, totalHigh, confidence },
+  rent: { pcm, low, high, source: "ai_comparables", evidence[] },
+  article4: { status, council, evidence },
+  riskFlags: { sharedOwnership, leasehold, listed, auction, developerInvite, land, planningOnly, notes },
+  negotiation: { angles[], suggestedOffer, walkAway },
+  strategyHints: { suitable: ["BTL","HMO",...], unsuitable: [...], reasoning }
+}
+```
 
-## Technical notes
-- Money stored as integer pence to avoid float drift.
-- All slider state lives in component, persists via `useMutation` debounced to `analyses.overrides` JSONB so re-opening keeps your tuning.
-- Profitability spreadsheet logic ported into `analysis/btl.ts` as the **baseline** with comments noting which assumptions are weak (e.g. no void allowance, no management fee buffer) — the engine improves on it.
+- Stored on `analyses.ai_payload` (jsonb) with `ai_version`
+- Persona setting renamed: **AI usage** → `off | per-property | auto-all`
+- New `analyseLibraryWithAI` server fn iterates properties missing payloads and runs them with concurrency 4
 
----
+## 5. Refurb estimator (algorithmic, AI-augmented)
 
-## Deliverable for this turn
-Phase 1 end-to-end: schema + auth + ingest (CSV + JSON + photos) + analysis engine + property detail with sliders + negotiation + deal sheet + share link. Seeded with the user's BTL persona. AI features wired but optional.
+New module `src/lib/analysis/refurb.ts` with a categorised cost matrix (£/sqm and £/room, UK 2026):
 
-Confirm and I'll build it. If you want me to drop or defer anything from Phase 1 (e.g. skip SA/HMO/Flip in first pass, skip share link, skip AI vision), say so and I'll trim before starting.
+Categories: kitchen, bathroom, rewire, replumb, boiler/heating, windows, roof, external/render, damp, plaster/decor, flooring, garden/external works, EPC upgrade.
+
+Inputs:
+- `area_sqm`, `beds`, `baths`, `property_type`, `epc_rate`
+- Quality tier from AI condition score (or manual): `light | medium | heavy | full-gut`
+- Location modifier (London +25%, SE +15%, NW/NE/Wales -5%, etc., from postcode prefix)
+
+Output: per-category line items with low/mid/high, summed total, contingency 10%.
+
+If AI payload present, AI item estimates override matrix per-category and the matrix fills the gaps. Shown in a new `RefurbPanel` on property detail with editable rows.
+
+Refurb total feeds straight into BRRR/Flip ROI and total-cash-in yield.
+
+## 6. Images & multi-source ingest
+
+- Property card hero: prefer `pf_json.propertyDetail.images[0]` → CSV image column → uploaded photo → placeholder
+- Store image URLs in `properties.image_urls text[]` on ingest
+- Per-property "Enrich" button → paste Rightmove/Zoopla URL OR paste Property Filter JSON → server fn scrapes (Firecrawl) the listing page, fills missing fields and image URLs
+- Optional connector: Firecrawl (already documented) for Rightmove/Zoopla/OnTheMarket/Boomin scraping. We'll prompt user to link Firecrawl when they first use Enrich
+
+## 7. Migration & code surface
+
+- Migration: `risk_flags jsonb`, `article4_status text`, `estimated_rent_pcm numeric`, `rent_source text`, `image_urls text[]` on `properties`; `ai_payload jsonb`, `ai_version text` on `analyses`; new `article4_areas` reference table (seeded)
+- Engine: thread `risk_flags`, `article4_status`, real `estimated_rent_pcm`, and `refurb.total` through scoring
+- New files: `src/lib/analysis/risk.ts`, `src/lib/analysis/article4.ts`, `src/lib/analysis/refurb.ts`, `src/lib/enrich.functions.ts`, `src/components/RefurbPanel.tsx`, `src/components/RiskChips.tsx`
+- Replace `ai.functions.ts` `analyseWithAI` with `analyseProperty` + add `analyseLibraryWithAI`
+
+## Out of scope (next phase)
+
+- Live SA revenue scraping (AirDNA / Mashvisor)
+- Council-tax & EPC API integrations
+- Comparable-sales API (Land Registry)
