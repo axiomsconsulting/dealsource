@@ -1,6 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { computeRiskFlags } from "./analysis/risk";
+import { lookupArticle4WithClient } from "./analysis/article4";
+import { estimateRefurb } from "./analysis/refurb";
 
 const PropertyInputSchema = z.object({
   address: z.string().min(1).max(500),
@@ -16,6 +19,10 @@ const PropertyInputSchema = z.object({
   source: z.string().max(40).default("manual"),
   source_link: z.string().max(1000).nullable().optional(),
   agent_name: z.string().max(200).nullable().optional(),
+  image_urls: z.array(z.string().url()).max(50).optional(),
+  estimated_rent_pcm: z.number().nullable().optional(),
+  rent_source: z.string().max(40).nullable().optional(),
+  lease_years_remaining: z.number().int().nullable().optional(),
   csv_row: z.any().optional(),
   pf_json: z.any().optional(),
 });
@@ -26,7 +33,20 @@ export const bulkIngestProperties = createServerFn({ method: "POST" })
     z.object({ items: z.array(PropertyInputSchema).max(500) }).parse(input),
   )
   .handler(async ({ data, context }) => {
-    const rows = data.items.map((it) => ({ ...it, user_id: context.userId }));
+    const rows = await Promise.all(data.items.map(async (it) => {
+      const propInput: any = { ...it };
+      const risks = computeRiskFlags(propInput);
+      const a4 = await lookupArticle4WithClient(context.supabase, it.postcode ?? null);
+      const refurb = estimateRefurb(propInput, "medium");
+      return {
+        ...it,
+        user_id: context.userId,
+        risk_flags: { flags: risks, computed_at: new Date().toISOString() },
+        article4_status: a4.status,
+        article4_source: a4.status !== "unknown" ? "cache" : null,
+        refurb_estimate: refurb,
+      };
+    }));
     const { data: inserted, error } = await context.supabase
       .from("properties")
       .insert(rows)
