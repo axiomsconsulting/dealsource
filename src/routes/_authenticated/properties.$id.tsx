@@ -18,11 +18,15 @@ import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { RefurbPanel } from "@/components/RefurbPanel";
 import { RiskChips } from "@/components/RiskChips";
+import { NegotiationPanel } from "@/components/NegotiationPanel";
+import { ImageLibrary } from "@/components/ImageLibrary";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { enrichFromUrl } from "@/lib/enrich.functions";
+import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -37,6 +41,7 @@ function PropertyDetail() {
   const listP = useServerFn(listPersonas);
   const update = useServerFn(updateProperty);
   const enrich = useServerFn(enrichFromUrl);
+  const enrichJson = useServerFn(enrichFromPfJson);
 
   const prop = useQuery({ queryKey: ["property", id], queryFn: () => getProp({ data: { id } }) });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => listP({ data: {} } as any) });
@@ -59,6 +64,17 @@ function PropertyDetail() {
   const enrichMut = useMutation({
     mutationFn: (url: string) => enrich({ data: { propertyId: id, url } }),
     onSuccess: (r: any) => { toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.imageCount} images`); setEnrichUrl(""); qc.invalidateQueries({ queryKey: ["property", id] }); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const [pfJsonText, setPfJsonText] = useState("");
+  const [pfDialogOpen, setPfDialogOpen] = useState(false);
+  const enrichJsonMut = useMutation({
+    mutationFn: (json: string) => enrichJson({ data: { propertyId: id, json } }),
+    onSuccess: (r: any) => {
+      toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.totalImages} images`);
+      setPfJsonText(""); setPfDialogOpen(false);
+      qc.invalidateQueries({ queryKey: ["property", id] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
