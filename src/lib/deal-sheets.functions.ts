@@ -45,15 +45,17 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
 
     if (existing) {
       const { data: row, error } = await context.supabase.from("deal_sheets").update({
-        snapshot, redact: data.redact ?? true, is_public: data.is_public ?? true,
-      hero_photo_id: data.heroPhotoId ?? null, title: data.title ?? prop.address,
-      snapshot: snapshot as any,
+        snapshot: snapshot as any,
+        redact: data.redact ?? true,
+        is_public: data.is_public ?? true,
+        hero_photo_id: data.heroPhotoId ?? null,
+        title: data.title ?? prop.address,
       }).eq("id", existing.id).select("*").single();
       if (error) throw new Error(error.message);
       return row;
     }
     const { data: row, error } = await context.supabase.from("deal_sheets").insert({
-      user_id: context.userId, property_id: data.propertyId, snapshot,
+      user_id: context.userId, property_id: data.propertyId, snapshot: snapshot as any,
       redact: data.redact ?? true, is_public: data.is_public ?? true,
       hero_photo_id: data.heroPhotoId ?? null, title: data.title ?? prop.address,
     }).select("*").single();
