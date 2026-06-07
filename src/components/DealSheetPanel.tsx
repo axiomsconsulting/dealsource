@@ -17,9 +17,17 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
   const get = useServerFn(getMyDealSheet);
   const sheet = useQuery({ queryKey: ["dealsheet", propertyId], queryFn: () => get({ data: { propertyId } }) });
   const [redact, setRedact] = useState(true);
+  const [hideAddress, setHideAddress] = useState(false);
+  const [hidePhotos, setHidePhotos] = useState(false);
+  const [includeRefurb, setIncludeRefurb] = useState(true);
+  const [includeRisk, setIncludeRisk] = useState(true);
 
   const mut = useMutation({
-    mutationFn: () => create({ data: { propertyId, redact, is_public: true, overrides: overrides as any } }),
+    mutationFn: () => create({ data: {
+      propertyId, redact, is_public: true, overrides: overrides as any,
+      hide_address: hideAddress, hide_photos: hidePhotos,
+      include_refurb_breakdown: includeRefurb, include_risk_flags: includeRisk,
+    } }),
     onSuccess: () => { toast.success("Deal sheet ready"); qc.invalidateQueries({ queryKey: ["dealsheet", propertyId] }); },
     onError: (e: any) => toast.error(e.message),
   });
@@ -34,9 +42,13 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
         <CardTitle className="text-base">Deal sheet for investors</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Switch id="redact" checked={redact} onCheckedChange={setRedact} />
-          <Label htmlFor="redact" className="text-sm">Redact address & exterior photos</Label>
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Investor PDF privacy</p>
+          <Toggle id="hideAddress" label="Hide exact address (show area only)" v={hideAddress} on={setHideAddress} />
+          <Toggle id="hidePhotos" label="Hide all photos" v={hidePhotos} on={setHidePhotos} />
+          <Toggle id="redact" label="Mark exterior photos as redacted" v={redact} on={setRedact} />
+          <Toggle id="includeRefurb" label="Include refurb breakdown" v={includeRefurb} on={setIncludeRefurb} />
+          <Toggle id="includeRisk" label="Include risk flags" v={includeRisk} on={setIncludeRisk} />
         </div>
         <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
           {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
