@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       analyses: {
         Row: {
+          ai_notes: Json
+          ai_used_at: string | null
           created_at: string
           deal_score: number | null
           id: string
@@ -28,6 +30,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_notes?: Json
+          ai_used_at?: string | null
           created_at?: string
           deal_score?: number | null
           id?: string
@@ -40,6 +44,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_notes?: Json
+          ai_used_at?: string | null
           created_at?: string
           deal_score?: number | null
           id?: string
@@ -68,8 +74,66 @@ export type Database = {
           },
         ]
       }
+      deal_sheets: {
+        Row: {
+          created_at: string
+          hero_photo_id: string | null
+          id: string
+          is_public: boolean
+          property_id: string
+          redact: boolean
+          share_token: string
+          snapshot: Json
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hero_photo_id?: string | null
+          id?: string
+          is_public?: boolean
+          property_id: string
+          redact?: boolean
+          share_token?: string
+          snapshot?: Json
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hero_photo_id?: string | null
+          id?: string
+          is_public?: boolean
+          property_id?: string
+          redact?: boolean
+          share_token?: string
+          snapshot?: Json
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_sheets_hero_photo_id_fkey"
+            columns: ["hero_photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_sheets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personas: {
         Row: {
+          ai_default_enabled: boolean
           allow_epc_de_if_neighbours_c: boolean
           cash_available_gbp: number
           created_at: string
@@ -95,6 +159,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_default_enabled?: boolean
           allow_epc_de_if_neighbours_c?: boolean
           cash_available_gbp?: number
           created_at?: string
@@ -120,6 +185,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_default_enabled?: boolean
           allow_epc_de_if_neighbours_c?: boolean
           cash_available_gbp?: number
           created_at?: string
@@ -145,6 +211,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      photos: {
+        Row: {
+          ai_findings: Json
+          caption: string | null
+          created_at: string
+          id: string
+          is_exterior: boolean
+          property_id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          ai_findings?: Json
+          caption?: string | null
+          created_at?: string
+          id?: string
+          is_exterior?: boolean
+          property_id: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          ai_findings?: Json
+          caption?: string | null
+          created_at?: string
+          id?: string
+          is_exterior?: boolean
+          property_id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photos_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -238,6 +345,119 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      saved_searches: {
+        Row: {
+          city: string | null
+          created_at: string
+          frequency: string
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          max_beds: number | null
+          max_price: number | null
+          min_beds: number | null
+          min_deal_score: number
+          min_price: number | null
+          name: string
+          notify_email: string | null
+          persona_id: string | null
+          postcode_prefix: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          max_beds?: number | null
+          max_price?: number | null
+          min_beds?: number | null
+          min_deal_score?: number
+          min_price?: number | null
+          name: string
+          notify_email?: string | null
+          persona_id?: string | null
+          postcode_prefix?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          max_beds?: number | null
+          max_price?: number | null
+          min_beds?: number | null
+          min_deal_score?: number
+          min_price?: number | null
+          name?: string
+          notify_email?: string | null
+          persona_id?: string | null
+          postcode_prefix?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_searches_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      search_matches: {
+        Row: {
+          created_at: string
+          deal_score: number | null
+          id: string
+          notified_at: string | null
+          property_id: string
+          saved_search_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deal_score?: number | null
+          id?: string
+          notified_at?: string | null
+          property_id: string
+          saved_search_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deal_score?: number | null
+          id?: string
+          notified_at?: string | null
+          property_id?: string
+          saved_search_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "search_matches_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "search_matches_saved_search_id_fkey"
+            columns: ["saved_search_id"]
+            isOneToOne: false
+            referencedRelation: "saved_searches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

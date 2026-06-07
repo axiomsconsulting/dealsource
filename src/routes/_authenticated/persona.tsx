@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -32,6 +33,7 @@ function PersonaPage() {
   const update = useServerFn(updateDefaultPersona);
   const q = useQuery({ queryKey: ["persona-default"], queryFn: () => get({ data: {} } as any) });
   const [form, setForm] = useState<Record<string, number>>({});
+  const [aiDefault, setAiDefault] = useState(false);
 
   useEffect(() => {
     if (q.data) {
@@ -41,6 +43,7 @@ function PersonaPage() {
         f[field.key] = field.transform === "pct" ? Math.round(v * 10000) / 100 : v;
       });
       setForm(f);
+      setAiDefault(!!(q.data as any).ai_default_enabled);
     }
   }, [q.data]);
 
@@ -50,6 +53,7 @@ function PersonaPage() {
       FIELDS.forEach((field) => {
         payload[field.key] = field.transform === "pct" ? form[field.key] / 100 : form[field.key];
       });
+      payload.ai_default_enabled = aiDefault;
       return update({ data: payload });
     },
     onSuccess: () => { toast.success("Persona saved"); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
@@ -76,6 +80,13 @@ function PersonaPage() {
                 />
               </div>
             ))}
+          </div>
+          <div className="mt-6 flex items-center gap-3 rounded-md border bg-muted/30 p-4">
+            <Switch checked={aiDefault} onCheckedChange={setAiDefault} id="ai-default" />
+            <div className="flex-1">
+              <Label htmlFor="ai-default" className="font-medium">Auto-run AI analysis on new properties</Label>
+              <p className="text-xs text-muted-foreground">When on, the AI surveyor runs automatically each time a property is ingested (uses credits). Off by default — you can always run it manually per property.</p>
+            </div>
           </div>
           <div className="mt-6 flex items-center gap-3">
             <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save persona"}</Button>

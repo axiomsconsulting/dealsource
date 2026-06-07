@@ -35,6 +35,7 @@ const PersonaPatchSchema = z.object({
   stress_rate: z.number().min(0).max(0.3).optional(),
   ltv: z.number().min(0).max(0.95).optional(),
   refurb_buffer_gbp: z.number().min(0).max(500000).optional(),
+  ai_default_enabled: z.boolean().optional(),
 });
 
 export const updateDefaultPersona = createServerFn({ method: "POST" })
