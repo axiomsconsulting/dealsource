@@ -72,3 +72,12 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
     </Card>
   );
 }
+
+function Toggle({ id, label, v, on }: { id: string; label: string; v: boolean; on: (b: boolean) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Switch id={id} checked={v} onCheckedChange={on} />
+      <Label htmlFor={id} className="text-sm">{label}</Label>
+    </div>
+  );
+}
