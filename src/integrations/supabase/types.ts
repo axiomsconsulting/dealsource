@@ -14,7 +14,231 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analyses: {
+        Row: {
+          created_at: string
+          deal_score: number | null
+          id: string
+          negotiation: Json
+          overrides: Json
+          persona_id: string | null
+          property_id: string
+          results: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deal_score?: number | null
+          id?: string
+          negotiation?: Json
+          overrides?: Json
+          persona_id?: string | null
+          property_id: string
+          results?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deal_score?: number | null
+          id?: string
+          negotiation?: Json
+          overrides?: Json
+          persona_id?: string | null
+          property_id?: string
+          results?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analyses_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analyses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      personas: {
+        Row: {
+          allow_epc_de_if_neighbours_c: boolean
+          cash_available_gbp: number
+          created_at: string
+          id: string
+          ignore_eras: string[]
+          is_default: boolean
+          ltv: number
+          max_beds: number
+          max_offer_gbp: number
+          min_bed_size_ft: number
+          min_beds: number
+          min_epc: string
+          mortgage_rate: number
+          name: string
+          refurb_buffer_gbp: number
+          require_gas_boiler: boolean
+          require_parking: boolean
+          strategy: string
+          stress_rate: number
+          target_offer_gbp: number
+          target_rent_gbp: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allow_epc_de_if_neighbours_c?: boolean
+          cash_available_gbp?: number
+          created_at?: string
+          id?: string
+          ignore_eras?: string[]
+          is_default?: boolean
+          ltv?: number
+          max_beds?: number
+          max_offer_gbp?: number
+          min_bed_size_ft?: number
+          min_beds?: number
+          min_epc?: string
+          mortgage_rate?: number
+          name: string
+          refurb_buffer_gbp?: number
+          require_gas_boiler?: boolean
+          require_parking?: boolean
+          strategy?: string
+          stress_rate?: number
+          target_offer_gbp?: number
+          target_rent_gbp?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allow_epc_de_if_neighbours_c?: boolean
+          cash_available_gbp?: number
+          created_at?: string
+          id?: string
+          ignore_eras?: string[]
+          is_default?: boolean
+          ltv?: number
+          max_beds?: number
+          max_offer_gbp?: number
+          min_bed_size_ft?: number
+          min_beds?: number
+          min_epc?: string
+          mortgage_rate?: number
+          name?: string
+          refurb_buffer_gbp?: number
+          require_gas_boiler?: boolean
+          require_parking?: boolean
+          strategy?: string
+          stress_rate?: number
+          target_offer_gbp?: number
+          target_rent_gbp?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      properties: {
+        Row: {
+          address: string
+          agent_name: string | null
+          area_sqm: number | null
+          asking_price_gbp: number | null
+          baths: number | null
+          beds: number | null
+          city: string | null
+          created_at: string
+          csv_row: Json | null
+          epc_rate: string | null
+          hide_address: boolean
+          id: string
+          notes: string | null
+          pf_json: Json | null
+          postcode: string | null
+          property_type: string | null
+          source: string
+          source_link: string | null
+          tenure: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          agent_name?: string | null
+          area_sqm?: number | null
+          asking_price_gbp?: number | null
+          baths?: number | null
+          beds?: number | null
+          city?: string | null
+          created_at?: string
+          csv_row?: Json | null
+          epc_rate?: string | null
+          hide_address?: boolean
+          id?: string
+          notes?: string | null
+          pf_json?: Json | null
+          postcode?: string | null
+          property_type?: string | null
+          source?: string
+          source_link?: string | null
+          tenure?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          agent_name?: string | null
+          area_sqm?: number | null
+          asking_price_gbp?: number | null
+          baths?: number | null
+          beds?: number | null
+          city?: string | null
+          created_at?: string
+          csv_row?: Json | null
+          epc_rate?: string | null
+          hide_address?: boolean
+          id?: string
+          notes?: string | null
+          pf_json?: Json | null
+          postcode?: string | null
+          property_type?: string | null
+          source?: string
+          source_link?: string | null
+          tenure?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
