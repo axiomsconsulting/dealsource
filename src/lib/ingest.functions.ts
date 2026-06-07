@@ -44,7 +44,8 @@ export const bulkIngestProperties = createServerFn({ method: "POST" })
         risk_flags: { flags: risks, computed_at: new Date().toISOString() },
         article4_status: a4.status,
         article4_source: a4.status !== "unknown" ? "cache" : null,
-        refurb_estimate: refurb,
+        refurb_estimate: refurb as any,
+        risk_flags: { flags: risks, computed_at: new Date().toISOString() } as any,
       };
     }));
     const { data: inserted, error } = await context.supabase
