@@ -1,14 +1,27 @@
-import type { PersonaInput, PropertyInput, NegotiationPoint, AnalysisOutput } from "./types";
+import type { PersonaInput, PropertyInput, NegotiationPoint } from "./types";
 
+export interface NegotiationResult {
+  points: NegotiationPoint[];
+  /** Algorithmic recommended opening offer — asking less justifiable, evidenced leverage. Drives
+   *  the strategy-comparison baseline; deliberately independent of any persona's target/max budget
+   *  so the recommendation stays grounded in the property itself, not a generic client preference. */
+  suggestedOffer: number;
+}
+
+// Anchoring far below this reads as not understanding the property — agents/sellers dismiss it
+// outright rather than negotiate. Even a property riddled with justifiable leverage rarely moves
+// further than this in one step; bigger gaps get closed over multiple rounds, not the opener.
+const REALISTIC_OFFER_FLOOR_PCT = 0.75;
+
+/** Pure, persona-independent negotiation playbook: what the numbers themselves justify offering. */
 export function buildNegotiation(
   prop: PropertyInput,
-  persona: PersonaInput,
-  eff: AnalysisOutput["effectiveInputs"],
-): NegotiationPoint[] {
+  refurbCost: number,
+): NegotiationResult {
   const points: NegotiationPoint[] = [];
   const pf = prop.pf_json?.propertyLight ?? {};
   const pd = prop.pf_json?.propertyDetail ?? {};
-  const asking = prop.asking_price_gbp ?? eff.offer_price;
+  const asking = prop.asking_price_gbp ?? 0;
 
   // Market signals
   if (pf.multipleReduce && pf.multipleReduce > 1) {
@@ -97,21 +110,27 @@ export function buildNegotiation(
   points.push({
     category: "improvement_gap",
     title: "Refurb capex offsetting",
-    description: `Your refurb budget is £${eff.refurb_cost.toLocaleString()}. Frame your offer as "asking − refurb − margin" so the seller sees the maths, not just a lowball number.`,
-    gbp_impact: Math.round(eff.refurb_cost * 0.6),
+    description: `Your refurb budget is £${refurbCost.toLocaleString()}. Frame your offer as "asking − refurb − margin" so the seller sees the maths, not just a lowball number.`,
+    gbp_impact: Math.round(refurbCost * 0.6),
     confidence: "high",
   });
 
-  // Always include "your number" anchor
+  // Always include "your number" anchor — purely algorithmic: asking less the justified leverage
+  // above, floored so the opener stays credible. No persona target/max feeds into this; an
+  // investor's personal budget says nothing about what THIS seller will realistically accept.
   const totalLeverage = points.reduce((s, p) => s + p.gbp_impact, 0);
-  const suggestedOffer = Math.max(persona.target_offer_gbp, asking - totalLeverage);
+  const realisticFloor = Math.round(asking * REALISTIC_OFFER_FLOOR_PCT);
+  const suggestedOffer = Math.max(realisticFloor, Math.round(asking - totalLeverage));
+  const cappedAt = suggestedOffer === realisticFloor && asking - totalLeverage < realisticFloor;
   points.unshift({
     category: "leverage",
     title: `Suggested opening offer: £${Math.round(suggestedOffer).toLocaleString()}`,
-    description: `Asking £${asking.toLocaleString()} less the £${totalLeverage.toLocaleString()} of justifiable adjustments below. Open ~5% lower than this to leave negotiation room — target £${Math.round(suggestedOffer * 0.95).toLocaleString()}.`,
+    description: cappedAt
+      ? `The justifiable adjustments below total £${totalLeverage.toLocaleString()} — more than asking minus a credible opener. Anchored at ${Math.round(REALISTIC_OFFER_FLOOR_PCT * 100)}% of asking instead; going lower risks the agent or seller writing you off as not understanding the property. Build the rest of your case for follow-up rounds.`
+      : `Asking £${asking.toLocaleString()} less the £${totalLeverage.toLocaleString()} of justifiable adjustments below. Open ~5% lower than this to leave negotiation room — target £${Math.round(suggestedOffer * 0.95).toLocaleString()}.`,
     gbp_impact: asking - suggestedOffer,
     confidence: "high",
   });
 
-  return points;
+  return { points, suggestedOffer };
 }

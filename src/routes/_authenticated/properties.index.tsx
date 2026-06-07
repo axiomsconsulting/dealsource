@@ -17,9 +17,10 @@ import { Card } from "@/components/ui/card";
 import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { BatchAIDialog } from "@/components/BatchAIDialog";
 import { rowsToCSV, downloadCSV, type ExportRow } from "@/lib/export";
@@ -30,6 +31,26 @@ export const Route = createFileRoute("/_authenticated/properties/")({
   component: PropertiesPage,
 });
 
+const STRATEGY_FILTERS = [
+  { key: "BTL", label: "Buy-to-Let" },
+  { key: "BRRR", label: "Buy-Refurb-Refinance-Rent" },
+  { key: "SA", label: "Serviced Accommodation" },
+  { key: "HMO", label: "HMO" },
+  { key: "FLIP", label: "Flip" },
+  { key: "TITLE_SPLIT", label: "Title Split" },
+] as const;
+type StrategyFilterKey = typeof STRATEGY_FILTERS[number]["key"];
+
+/** Buckets the many raw article4_status spellings down to what the filter actually offers. */
+function article4Bucket(status: string | null | undefined): "inside" | "outside" | "partial" | "unknown" {
+  const s = (status || "").toLowerCase();
+  if (!s) return "unknown";
+  if (s === "partial") return "partial";
+  if (s === "inside" || s === "in" || s === "yes" || s === "true") return "inside";
+  if (s === "outside" || s === "out" || s === "no" || s === "false") return "outside";
+  return "unknown";
+}
+
 function PropertiesPage() {
   const qc = useQueryClient();
   const list = useServerFn(listProperties);
@@ -37,7 +58,7 @@ function PropertiesPage() {
   const del = useServerFn(deleteProperty);
   const props = useQuery({ queryKey: ["properties"], queryFn: () => list() });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => personasFn({ data: {} } as any) });
-  const personas = (personasQ.data ?? []) as any[];
+  const personas = useMemo(() => (personasQ.data ?? []) as any[], [personasQ.data]);
   const activePersona = personas.find((p) => p.is_default) ?? personas[0];
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<"score" | "yield" | "price_asc" | "price_desc" | "risk">("score");
@@ -45,6 +66,34 @@ function PropertiesPage() {
   const ALL_FLAGS = ["shared_ownership","auction","developer_invitation","land_only","planning_only","fake_or_underpriced","listed_building","retirement_only","leasehold_short"] as const;
   type FlagKey = typeof ALL_FLAGS[number];
   const [hiddenFlags, setHiddenFlags] = useState<Set<FlagKey>>(new Set());
+
+  // Refinement filters — narrow the list down to the properties worth a closer look
+  const [search, setSearch] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [bedsMin, setBedsMin] = useState("");
+  const [bedsMax, setBedsMax] = useState("");
+  const [propertyTypes, setPropertyTypes] = useState<Set<string>>(new Set());
+  const [article4Filter, setArticle4Filter] = useState<"any" | "inside" | "outside" | "partial" | "unknown">("any");
+  const [strategyFilter, setStrategyFilter] = useState<Set<StrategyFilterKey>>(new Set());
+  const [personaFitOnly, setPersonaFitOnly] = useState(false);
+
+  const activeFilterCount =
+    (search.trim() ? 1 : 0) +
+    (priceMin || priceMax ? 1 : 0) +
+    (bedsMin || bedsMax ? 1 : 0) +
+    propertyTypes.size +
+    (article4Filter !== "any" ? 1 : 0) +
+    strategyFilter.size +
+    (personaFitOnly ? 1 : 0) +
+    (minScore > 0 ? 1 : 0) +
+    hiddenFlags.size;
+
+  const resetFilters = () => {
+    setSearch(""); setPriceMin(""); setPriceMax(""); setBedsMin(""); setBedsMax("");
+    setPropertyTypes(new Set()); setArticle4Filter("any"); setStrategyFilter(new Set());
+    setPersonaFitOnly(false); setMinScore(0); setHiddenFlags(new Set());
+  };
 
   const delMut = useMutation({
     mutationFn: (id: string) => del({ data: { id } }),
@@ -56,17 +105,48 @@ function PropertiesPage() {
     return data.map((p) => {
       const a = activePersona ? analyseProperty(p, activePersona as any) : null;
       const sev = maxRiskSeverity(a?.riskFlags as any);
-      return { p, a, sev };
+      // Best-fit persona = highest-scoring persona this property actually passes the match for —
+      // the deal sourcer's job is finding properties THEN matching them to the right client.
+      let bestFit: { name: string; score: number; strategy: string } | null = null;
+      for (const per of personas) {
+        const an = analyseProperty(p, per as any);
+        if (!an.personaMatch.pass) continue;
+        if (!bestFit || an.overallScore > bestFit.score) {
+          bestFit = { name: per.name, score: an.overallScore, strategy: per.strategy };
+        }
+      }
+      return { p, a, sev, bestFit };
     });
-  }, [props.data, activePersona]);
+  }, [props.data, activePersona, personas]);
 
   const analysedCount = useMemo(() => allRows.filter((r) => (r.p as any).ai_payload || (r.p as any).analyses?.ai_payload).length, [allRows]);
 
+  const availablePropertyTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const { p } of allRows) if ((p as any).property_type) set.add((p as any).property_type);
+    return Array.from(set).sort();
+  }, [allRows]);
+
   const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const pMin = priceMin ? Number(priceMin) : null;
+    const pMax = priceMax ? Number(priceMax) : null;
+    const bMin = bedsMin ? Number(bedsMin) : null;
+    const bMax = bedsMax ? Number(bedsMax) : null;
     const filtered = allRows.filter((r) => {
+      const p = r.p as any;
       const flags = (r.a?.riskFlags ?? []) as any[];
       if (flags.some((f) => hiddenFlags.has(f.key))) return false;
       if ((r.a?.overallScore ?? 0) < minScore) return false;
+      if (q && !`${p.address ?? ""} ${p.postcode ?? ""}`.toLowerCase().includes(q)) return false;
+      if (pMin != null && (p.asking_price_gbp ?? 0) < pMin) return false;
+      if (pMax != null && (p.asking_price_gbp ?? Infinity) > pMax) return false;
+      if (bMin != null && (p.beds ?? 0) < bMin) return false;
+      if (bMax != null && (p.beds ?? Infinity) > bMax) return false;
+      if (propertyTypes.size && !propertyTypes.has(p.property_type ?? "")) return false;
+      if (article4Filter !== "any" && article4Bucket(p.article4_status) !== article4Filter) return false;
+      if (strategyFilter.size && !(r.a && strategyFilter.has(r.a.bestStrategy as StrategyFilterKey))) return false;
+      if (personaFitOnly && !r.bestFit) return false;
       return true;
     });
     const sevOrder: any = { none: 0, amber: 1, red: 2 };
@@ -85,7 +165,7 @@ function PropertiesPage() {
       // default: deal score
       return (y.a?.overallScore ?? 0) - (x.a?.overallScore ?? 0);
     });
-  }, [allRows, hiddenFlags, minScore, sortBy]);
+  }, [allRows, hiddenFlags, minScore, sortBy, search, priceMin, priceMax, bedsMin, bedsMax, propertyTypes, article4Filter, strategyFilter, personaFitOnly]);
 
   const toggleSel = (id: string) => {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -166,29 +246,105 @@ function PropertiesPage() {
             <SelectItem value="risk">Risk (clean first)</SelectItem>
           </SelectContent>
         </Select>
-        <Popover>
-          <PopoverTrigger asChild>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search address or postcode…"
+          className="h-9 w-[220px]"
+        />
+        <Sheet>
+          <SheetTrigger asChild>
             <Button variant="outline" size="sm" className="h-9">
-              <FilterIcon className="mr-2 h-4 w-4" /> Filters {hiddenFlags.size > 0 && <Badge variant="secondary" className="ml-2">{hiddenFlags.size}</Badge>}
+              <FilterIcon className="mr-2 h-4 w-4" /> Filters {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 space-y-3">
-            <div>
-              <Label className="text-xs">Minimum deal score: {minScore}</Label>
-              <Slider value={[minScore]} onValueChange={(v) => setMinScore(v[0])} min={0} max={100} step={5} />
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hide listings flagged as</p>
-              {ALL_FLAGS.map((f) => (
-                <label key={f} className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox checked={hiddenFlags.has(f)} onCheckedChange={(b) => setHiddenFlags((s) => { const n = new Set(s); b ? n.add(f) : n.delete(f); return n; })} />
-                  {f.replace(/_/g, " ")}
+          </SheetTrigger>
+          <SheetContent className="w-[380px] overflow-y-auto sm:w-[420px]">
+            <SheetHeader>
+              <SheetTitle>Refine properties</SheetTitle>
+            </SheetHeader>
+            <div className="mt-4 space-y-5 pb-8">
+              <div>
+                <Label className="text-xs">Minimum deal score: {minScore}</Label>
+                <Slider value={[minScore]} onValueChange={(v) => setMinScore(v[0])} min={0} max={100} step={5} className="mt-2" />
+              </div>
+
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Asking price</p>
+                <div className="flex items-center gap-2">
+                  <Input type="number" inputMode="numeric" placeholder="Min £" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} className="h-8" />
+                  <span className="text-muted-foreground">–</span>
+                  <Input type="number" inputMode="numeric" placeholder="Max £" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className="h-8" />
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bedrooms</p>
+                <div className="flex items-center gap-2">
+                  <Input type="number" inputMode="numeric" placeholder="Min" value={bedsMin} onChange={(e) => setBedsMin(e.target.value)} className="h-8" />
+                  <span className="text-muted-foreground">–</span>
+                  <Input type="number" inputMode="numeric" placeholder="Max" value={bedsMax} onChange={(e) => setBedsMax(e.target.value)} className="h-8" />
+                </div>
+              </div>
+
+              {availablePropertyTypes.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Property type</p>
+                  {availablePropertyTypes.map((t) => (
+                    <label key={t} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox checked={propertyTypes.has(t)} onCheckedChange={(b) => setPropertyTypes((s) => { const n = new Set(s); b ? n.add(t) : n.delete(t); return n; })} />
+                      {t}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Article 4 status</p>
+                <Select value={article4Filter} onValueChange={(v) => setArticle4Filter(v as any)}>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="outside">Outside (HMO permitted)</SelectItem>
+                    <SelectItem value="inside">Inside (HMO restricted)</SelectItem>
+                    <SelectItem value="partial">Partial — verify street</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Best strategy</p>
+                {STRATEGY_FILTERS.map((s) => (
+                  <label key={s.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox checked={strategyFilter.has(s.key)} onCheckedChange={(b) => setStrategyFilter((set) => { const n = new Set(set); b ? n.add(s.key) : n.delete(s.key); return n; })} />
+                    {s.label}
+                  </label>
+                ))}
+              </div>
+
+              {personas.length > 0 && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={personaFitOnly} onCheckedChange={(b) => setPersonaFitOnly(!!b)} />
+                  Only properties that fit at least one client persona
                 </label>
-              ))}
-              <Button variant="ghost" size="sm" className="w-full" onClick={() => setHiddenFlags(new Set())}>Clear filters</Button>
+              )}
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hide listings flagged as</p>
+                {ALL_FLAGS.map((f) => (
+                  <label key={f} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox checked={hiddenFlags.has(f)} onCheckedChange={(b) => setHiddenFlags((s) => { const n = new Set(s); b ? n.add(f) : n.delete(f); return n; })} />
+                    {f.replace(/_/g, " ")}
+                  </label>
+                ))}
+              </div>
+
+              <Button variant="ghost" size="sm" className="w-full" onClick={resetFilters} disabled={activeFilterCount === 0}>
+                Reset all filters
+              </Button>
             </div>
-          </PopoverContent>
-        </Popover>
+          </SheetContent>
+        </Sheet>
         <div className="flex-1" />
         {selected.size > 0 && (
           <span className="text-sm text-muted-foreground">{selected.size} selected · <button className="underline" onClick={clearSel}>clear</button></span>
@@ -219,20 +375,9 @@ function PropertiesPage() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {rows.map(({ p, a }) => {
+          {rows.map(({ p, a, bestFit }) => {
             const best = a?.strategies.find((s) => s.key === a.bestStrategy);
             const hero = (p.image_urls?.[0]) ?? null;
-            // best-fit persona = highest-score persona where persona match passes
-            let bestFit: { name: string; score: number; strategy: string } | null = null;
-            if (personas.length) {
-              for (const per of personas) {
-                const an = analyseProperty(p, per as any);
-                if (!an.personaMatch.pass) continue;
-                if (!bestFit || an.overallScore > bestFit.score) {
-                  bestFit = { name: per.name, score: an.overallScore, strategy: per.strategy };
-                }
-              }
-            }
             return (
               <Card key={p.id} className="overflow-hidden p-0">
                 <div className="flex items-stretch gap-4">

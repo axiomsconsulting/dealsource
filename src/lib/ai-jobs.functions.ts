@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const startLibraryAIJob = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) =>
+  .validator((i: unknown) =>
     z.object({ force: z.boolean().default(false), limit: z.number().int().min(1).max(200).default(100) }).parse(i),
   )
   .handler(async ({ data, context }) => {
@@ -63,7 +63,7 @@ async function getCount(ctx: any, jobId: string, field: "completed" | "errors"):
 
 export const getAIJob = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ jobId: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ jobId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("ai_jobs").select("*").eq("id", data.jobId).eq("user_id", context.userId).maybeSingle();
@@ -72,7 +72,7 @@ export const getAIJob = createServerFn({ method: "GET" })
 
 export const cancelAIJob = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ jobId: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ jobId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await context.supabase.from("ai_jobs")
       .update({ status: "cancelled" })

@@ -6,27 +6,27 @@ const PRESETS: Array<{ name: string; strategy: string; patch: Record<string, any
   {
     name: "Cashflow BTL — £60k",
     strategy: "BTL",
-    patch: { cash_available_gbp: 60000, target_rent_gbp: 1200, target_offer_gbp: 150000, max_offer_gbp: 180000, ltv: 0.75, mortgage_rate: 0.055, refurb_buffer_gbp: 12000, min_beds: 3, max_beds: 4 },
+    patch: { cash_available_gbp: 60000, target_rent_gbp: 1200, target_offer_gbp: 150000, max_offer_gbp: 180000, investor_type: "individual", refurb_buffer_gbp: 12000, min_beds: 3, max_beds: 4 },
   },
   {
     name: "BRRR Recycler — £80k",
     strategy: "BRRR",
-    patch: { cash_available_gbp: 80000, target_rent_gbp: 1100, target_offer_gbp: 120000, max_offer_gbp: 160000, ltv: 0.75, mortgage_rate: 0.058, refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
+    patch: { cash_available_gbp: 80000, target_rent_gbp: 1100, target_offer_gbp: 120000, max_offer_gbp: 160000, investor_type: "ltd_company", refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
   },
   {
     name: "SA Operator — city centre",
     strategy: "SA",
-    patch: { cash_available_gbp: 100000, target_rent_gbp: 1600, target_offer_gbp: 180000, max_offer_gbp: 230000, ltv: 0.70, mortgage_rate: 0.065, refurb_buffer_gbp: 25000, min_beds: 1, max_beds: 3, require_parking: false },
+    patch: { cash_available_gbp: 100000, target_rent_gbp: 1600, target_offer_gbp: 180000, max_offer_gbp: 230000, investor_type: "ltd_company", refurb_buffer_gbp: 25000, min_beds: 1, max_beds: 3, require_parking: false },
   },
   {
     name: "HMO Operator — 5–6 bed",
     strategy: "HMO",
-    patch: { cash_available_gbp: 120000, target_rent_gbp: 2800, target_offer_gbp: 200000, max_offer_gbp: 260000, ltv: 0.75, mortgage_rate: 0.065, refurb_buffer_gbp: 30000, min_beds: 4, max_beds: 6 },
+    patch: { cash_available_gbp: 120000, target_rent_gbp: 2800, target_offer_gbp: 200000, max_offer_gbp: 260000, investor_type: "portfolio_landlord", refurb_buffer_gbp: 30000, min_beds: 4, max_beds: 6 },
   },
   {
     name: "Flipper — 20% margin",
     strategy: "FLIP",
-    patch: { cash_available_gbp: 90000, target_rent_gbp: 1000, target_offer_gbp: 130000, max_offer_gbp: 170000, ltv: 0.0, mortgage_rate: 0.10, refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
+    patch: { cash_available_gbp: 90000, target_rent_gbp: 1000, target_offer_gbp: 130000, max_offer_gbp: 170000, investor_type: "individual", refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
   },
 ];
 
@@ -89,7 +89,7 @@ const StrategyEnum = z.enum(["BTL", "BRRR", "SA", "HMO", "FLIP", "TITLE_SPLIT", 
 
 export const createPersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({
+  .validator((i: unknown) => z.object({
     name: z.string().min(1).max(120),
     strategy: StrategyEnum.default("BTL"),
     copyFromId: z.string().uuid().optional(),
@@ -110,7 +110,7 @@ export const createPersona = createServerFn({ method: "POST" })
 
 export const deletePersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase.from("personas").select("is_default").eq("id", data.id).eq("user_id", context.userId).maybeSingle();
     const { error } = await context.supabase.from("personas").delete().eq("id", data.id).eq("user_id", context.userId);
@@ -124,13 +124,15 @@ export const deletePersona = createServerFn({ method: "POST" })
 
 export const setActivePersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await context.supabase.from("personas").update({ is_default: false }).eq("user_id", context.userId).eq("is_default", true);
     const { error } = await context.supabase.from("personas").update({ is_default: true }).eq("id", data.id).eq("user_id", context.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+const InvestorTypeEnum = z.enum(["individual", "ltd_company", "group_holding", "portfolio_landlord", "first_time_landlord"]);
 
 const PersonaPatchSchema = z.object({
   id: z.string().uuid().optional(),
@@ -140,9 +142,7 @@ const PersonaPatchSchema = z.object({
   target_rent_gbp: z.number().min(0).max(20000).optional(),
   max_offer_gbp: z.number().min(0).max(10_000_000).optional(),
   target_offer_gbp: z.number().min(0).max(10_000_000).optional(),
-  mortgage_rate: z.number().min(0).max(0.3).optional(),
-  stress_rate: z.number().min(0).max(0.3).optional(),
-  ltv: z.number().min(0).max(0.95).optional(),
+  investor_type: InvestorTypeEnum.optional(),
   refurb_buffer_gbp: z.number().min(0).max(500000).optional(),
   ai_default_enabled: z.boolean().optional(),
   min_beds: z.number().int().min(0).max(20).optional(),
@@ -155,7 +155,7 @@ const PersonaPatchSchema = z.object({
 
 export const updateDefaultPersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => PersonaPatchSchema.parse(input))
+  .validator((input: unknown) => PersonaPatchSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { id, ...patch } = data;
     const q = context.supabase.from("personas").update(patch).eq("user_id", context.userId);

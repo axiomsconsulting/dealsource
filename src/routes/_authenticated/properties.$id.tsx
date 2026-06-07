@@ -6,14 +6,15 @@ import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
-import type { SliderOverrides, StrategyResult } from "@/lib/analysis/types";
+import type { OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { SliderInput } from "@/components/SliderInput";
+import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { RefurbPanel } from "@/components/RefurbPanel";
@@ -26,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson } from "lucide-react";
+import { partitionImageUrls } from "@/lib/images";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -50,6 +52,9 @@ function PropertyDetail() {
   const persona = useMemo(() => personas.find((p) => p.id === personaId) ?? personas.find((p) => p.is_default) ?? personas[0], [personas, personaId]);
 
   const [over, setOver] = useState<SliderOverrides>({});
+  const tune = (key: OverrideKey, value: number) => setOver((o) => ({ ...o, [key]: value }));
+  const resetOne = (key: OverrideKey) => setOver((o) => { const { [key]: _drop, ...rest } = o; return rest; });
+  const resetAll = () => setOver({});
 
   const analysis = useMemo(() => {
     if (!prop.data || !persona) return null;
@@ -84,7 +89,8 @@ function PropertyDetail() {
   const p = prop.data as any;
   const eff = analysis.effectiveInputs;
   const best = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
-  const heroImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
+  const allImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
+  const { photos: heroImages, floorPlans } = partitionImageUrls(allImages);
 
   return (
     <AppShell>
@@ -154,6 +160,23 @@ function PropertyDetail() {
         </Card>
       )}
 
+      {floorPlans.length > 0 && (
+        <Card className="mb-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Floor plan{floorPlans.length > 1 ? "s" : ""}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={cn("grid gap-3", floorPlans.length > 1 ? "sm:grid-cols-2" : "")}>
+              {floorPlans.map((u, i) => (
+                <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
+                  <img src={u} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center gap-2 py-3">
           <Link2 className="h-4 w-4 text-muted-foreground" />
@@ -200,116 +223,105 @@ function PropertyDetail() {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Tune the deal</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Best strategy: {best.name}</span>
+              <Badge className="bg-primary">{best.dealScore}/100</Badge>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{best.summary}</p>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <SliderInput label="Offer price" value={Math.round(eff.offer_price)} onChange={(n) => setOver({ ...over, offer_price: n })} min={50000} max={500000} step={500} prefix="£" />
-            <SliderInput label="Monthly rent" value={Math.round(eff.monthly_rent)} onChange={(n) => setOver({ ...over, monthly_rent: n })} min={400} max={5000} step={25} prefix="£" />
-            <SliderInput label="Refurb cost" value={Math.round(eff.refurb_cost)} onChange={(n) => setOver({ ...over, refurb_cost: n })} min={0} max={100000} step={500} prefix="£" />
-            <SliderInput label="ARV (after refurb)" value={Math.round(eff.arv)} onChange={(n) => setOver({ ...over, arv: n })} min={50000} max={600000} step={1000} prefix="£" />
-            <SliderInput label="Mortgage rate" value={parseFloat((eff.mortgage_rate * 100).toFixed(2))} onChange={(n) => setOver({ ...over, mortgage_rate: n / 100 })} min={2} max={12} step={0.05} suffix="%" />
-            <SliderInput label="LTV" value={Math.round(eff.ltv * 100)} onChange={(n) => setOver({ ...over, ltv: n / 100 })} min={50} max={85} step={1} suffix="%" />
-            <div className="space-y-2 rounded-md bg-muted/50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">HMO / SA tuning</p>
-              <SliderInput label="HMO rooms" value={over.room_count ?? (p.beds ? p.beds + 1 : 4)} onChange={(n) => setOver({ ...over, room_count: n })} min={2} max={8} step={1} />
-              <SliderInput label="HMO £/room" value={over.rent_per_room ?? 525} onChange={(n) => setOver({ ...over, rent_per_room: n })} min={300} max={900} step={5} prefix="£" />
-              <SliderInput label="SA nightly" value={over.sa_nightly ?? 95} onChange={(n) => setOver({ ...over, sa_nightly: n })} min={50} max={300} step={5} prefix="£" />
-              <SliderInput label="SA occupancy" value={Math.round((over.sa_occupancy ?? 0.65) * 100)} onChange={(n) => setOver({ ...over, sa_occupancy: n / 100 })} min={30} max={95} step={1} suffix="%" />
-            </div>
-            <Button variant="outline" className="w-full" onClick={() => setOver({})}>Reset to persona defaults</Button>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-accent" /> Negotiation playbook</CardTitle>
+            <p className="text-sm text-muted-foreground">Justified leverage points to take to the agent — the strategy numbers below start from these.</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {analysis.negotiation.map((n, i) => (
+              <div key={i} className="rounded-md border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] capitalize">{n.category.replace("_", " ")}</Badge>
+                      <p className="font-medium">{n.title}</p>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
+                    <div className="text-[10px] uppercase text-muted-foreground">{n.confidence}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>Best strategy: {best.name}</span>
-                <Badge className="bg-primary">{best.dealScore}/100</Badge>
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">{best.summary}</p>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Strategy comparison</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue={best.key}>
-                <TabsList className="flex w-full flex-wrap">
-                  {analysis.strategies.map((s) => (
-                    <TabsTrigger key={s.key} value={s.key} className="flex-1">
-                      {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Strategy comparison</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator — drag any tunable
+                  cell's slider to flex it and watch the rest ripple through.
+                </p>
+              </div>
+              {Object.keys(over).length > 0 && (
+                <Button variant="outline" size="sm" onClick={resetAll}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue={best.key}>
+              <TabsList className="flex w-full flex-wrap">
                 {analysis.strategies.map((s) => (
-                  <TabsContent key={s.key} value={s.key} className="pt-4">
-                    <StrategyView s={s} />
-                  </TabsContent>
+                  <TabsTrigger key={s.key} value={s.key} className="flex-1">
+                    {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
+                  </TabsTrigger>
                 ))}
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-accent" /> Negotiation playbook</CardTitle>
-              <p className="text-sm text-muted-foreground">Justified leverage points to take to the agent.</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {analysis.negotiation.map((n, i) => (
-                <div key={i} className="rounded-md border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] capitalize">{n.category.replace("_", " ")}</Badge>
-                        <p className="font-medium">{n.title}</p>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
-                      <div className="text-[10px] uppercase text-muted-foreground">{n.confidence}</div>
-                    </div>
-                  </div>
-                </div>
+              </TabsList>
+              {analysis.strategies.map((s) => (
+                <TabsContent key={s.key} value={s.key} className="pt-4">
+                  <StrategyView s={s} onTune={tune} onReset={resetOne} />
+                </TabsContent>
               ))}
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {p.pf_json && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Property Filter signals</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                {p.pf_json.propertyLight?.lastSold && (
+                  <Stat label="Last sold" v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`} />
+                )}
+                {p.pf_json.propertyLight?.equity != null && <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />}
+                {p.pf_json.propertyLight?.article4Status && <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />}
+                {p.pf_json.propertyLight?.councilTax && <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />}
+                {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
+                {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
+              </div>
             </CardContent>
           </Card>
+        )}
 
-          {p.pf_json && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">Property Filter signals</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                  {p.pf_json.propertyLight?.lastSold && (
-                    <Stat label="Last sold" v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`} />
-                  )}
-                  {p.pf_json.propertyLight?.equity != null && <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />}
-                  {p.pf_json.propertyLight?.article4Status && <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />}
-                  {p.pf_json.propertyLight?.councilTax && <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />}
-                  {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
-                  {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <PhotosPanel propertyId={id} />
-          <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
-          <ImageLibrary urls={heroImages} />
-          <NegotiationPanel
-            property={p}
-            refurbTotal={analysis.effectiveInputs.refurb_cost}
-            onApplyOffer={(gbp) => { setOver({ ...over, offer_price: gbp }); toast.success(`Offer set to ${fmtGBP(gbp)}`); }}
-          />
-          <DealSheetPanel propertyId={id} overrides={over} />
-        </div>
+        <PhotosPanel propertyId={id} />
+        <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
+        <ImageLibrary urls={heroImages} />
+        <NegotiationPanel
+          property={p}
+          refurbTotal={analysis.effectiveInputs.refurb_cost}
+          onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Offer set to ${fmtGBP(gbp)}`); }}
+        />
+        <DealSheetPanel propertyId={id} overrides={over} />
       </div>
     </AppShell>
   );
@@ -324,7 +336,25 @@ function Stat({ label, v }: { label: string; v: string }) {
   );
 }
 
-function StrategyView({ s }: { s: StrategyResult }) {
+function fmtNumber(n: StrategyNumber) {
+  return n.format === "gbp" ? fmtGBP(n.value)
+    : n.format === "pct" ? fmtPct(n.value)
+    : n.format === "months" ? `${fmtNum(n.value)} mo`
+    : fmtNum(n.value, 2);
+}
+
+// Reasons that stem from the *numbers* (cash needed, DSCR, margin, ARV headroom) — i.e. the kind a
+// slider tweak can cause or cure. Structural blockers (Article 4, licensing, leasehold, risk flags,
+// title-split eligibility) are not "fixable" by nudging a slider back, so they're excluded.
+const TUNABLE_CONSTRAINT_RE = /cash in|dscr|margin|profit|arv \(|exceed/i;
+
+function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void }) {
+  const overridden = s.numbers.filter((n) => n.overrideKey && n.overridden);
+  const overriddenKeys = Array.from(new Set(overridden.map((n) => n.overrideKey as OverrideKey)));
+  const overriddenLabels = Array.from(new Set(overridden.map((n) => n.label)));
+  const breakingReasons = (s.reasons ?? []).filter((r) => TUNABLE_CONSTRAINT_RE.test(r));
+  const brokenByTuning = !s.feasible && overriddenKeys.length > 0 && breakingReasons.length > 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -341,20 +371,78 @@ function StrategyView({ s }: { s: StrategyResult }) {
           </ul>
         </div>
       )}
+      {brokenByTuning && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-medium text-destructive">That combination isn't realistic</p>
+                <p className="mt-0.5 text-xs text-destructive/80">
+                  You've moved <span className="font-medium">{overriddenLabels.join(", ")}</span> away from what the
+                  negotiation playbook, AI surveyor and refurb estimator computed — and at these settings the maths
+                  below say this strategy no longer stacks up:
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="destructive" className="shrink-0" onClick={() => overriddenKeys.forEach(onReset)}>
+              <Wrench className="mr-1.5 h-3.5 w-3.5" /> Fix
+            </Button>
+          </div>
+          <ul className="mt-2 list-inside list-disc pl-6 text-xs text-destructive/80">
+            {breakingReasons.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+          <p className="mt-2 pl-6 text-[11px] text-destructive/70">
+            "Fix" snaps the tuned levers back to the computed values that made this strategy feasible.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         {s.numbers.map((n, i) => (
-          <div key={i} className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">{n.label}</p>
-            <p className="text-lg font-semibold">
-              {n.format === "gbp" ? fmtGBP(n.value) :
-               n.format === "pct" ? fmtPct(n.value) :
-               n.format === "months" ? `${fmtNum(n.value)} mo` :
-               fmtNum(n.value, 2)}
-            </p>
-            {n.hint && <p className="mt-1 text-[10px] text-muted-foreground">{n.hint}</p>}
-          </div>
+          <TunableNumberCell key={i} n={n} onTune={onTune} onReset={onReset} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function TunableNumberCell({ n, onTune, onReset }: { n: StrategyNumber; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void }) {
+  const isPct = n.format === "pct";
+  const scale = isPct ? 100 : 1;
+
+  return (
+    <div className={cn("rounded-md border p-3", n.overridden && "border-primary/40 bg-primary/[0.04]")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">{n.label}</p>
+        {n.overridden && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+            <PencilLine className="h-2.5 w-2.5" /> Overridden
+          </span>
+        )}
+      </div>
+      <p className="text-lg font-semibold">{fmtNumber(n)}</p>
+      {n.hint && <p className="mt-1 text-[10px] text-muted-foreground">{n.hint}</p>}
+      {n.overrideKey && n.min != null && n.max != null && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <Slider
+            value={[n.value * scale]}
+            min={n.min}
+            max={n.max}
+            step={n.step ?? 1}
+            onValueChange={([v]) => onTune(n.overrideKey as OverrideKey, v / scale)}
+            className="flex-1"
+          />
+          <button
+            type="button"
+            onClick={() => onReset(n.overrideKey as OverrideKey)}
+            disabled={!n.overridden}
+            title={n.overridden ? `Reset to computed value (${n.baseline != null ? fmtNumber({ ...n, value: n.baseline }) : "default"})` : "Already at the computed value"}
+            className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

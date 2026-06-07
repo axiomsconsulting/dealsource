@@ -5,7 +5,7 @@ import { analyseProperty } from "@/lib/analysis/engine";
 
 export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({
+  .validator((i: unknown) => z.object({
     propertyId: z.string().uuid(),
     redact: z.boolean().optional(),
     is_public: z.boolean().optional(),
@@ -77,7 +77,7 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
 
 export const getMyDealSheet = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("deal_sheets").select("*").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -85,7 +85,7 @@ export const getMyDealSheet = createServerFn({ method: "GET" })
   });
 
 export const getPublicDealSheet = createServerFn({ method: "GET" })
-  .inputValidator((i: unknown) => z.object({ token: z.string().min(8).max(200) }).parse(i))
+  .validator((i: unknown) => z.object({ token: z.string().min(8).max(200) }).parse(i))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
@@ -93,12 +93,13 @@ export const getPublicDealSheet = createServerFn({ method: "GET" })
     if (error || !row) return null;
     // signed urls for any photos in snapshot
     const ids: string[] = ((row.snapshot as any)?.photoIds ?? []).slice(0, 12);
-    let photos: { id: string; url: string; is_exterior: boolean }[] = [];
+    let photos: { id: string; url: string; is_exterior: boolean; is_floor_plan: boolean }[] = [];
     if (ids.length) {
-      const { data: ph } = await supabaseAdmin.from("photos").select("id, storage_path, is_exterior").in("id", ids);
+      const { isFloorPlan } = await import("@/lib/images");
+      const { data: ph } = await supabaseAdmin.from("photos").select("id, storage_path, caption, is_exterior").in("id", ids);
       photos = await Promise.all((ph ?? []).map(async (p) => {
         const { data: signed } = await supabaseAdmin.storage.from("property-photos").createSignedUrl(p.storage_path, 60 * 60 * 24);
-        return { id: p.id, url: signed?.signedUrl ?? "", is_exterior: p.is_exterior };
+        return { id: p.id, url: signed?.signedUrl ?? "", is_exterior: p.is_exterior, is_floor_plan: isFloorPlan(p.caption, p.storage_path) };
       }));
     }
     return { ...row, photos };

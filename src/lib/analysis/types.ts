@@ -1,3 +1,6 @@
+import type { InvestorType } from "./lender-criteria";
+export type { InvestorType } from "./lender-criteria";
+
 export type StrategyKey = "BTL" | "BRRR" | "SA" | "HMO" | "FLIP" | "TITLE_SPLIT";
 
 export interface PersonaInput {
@@ -5,9 +8,9 @@ export interface PersonaInput {
   target_rent_gbp: number;
   target_offer_gbp: number;
   max_offer_gbp: number;
-  mortgage_rate: number;
-  stress_rate: number;
-  ltv: number;
+  /** How this investor borrows — determines lender criteria (rate/LTV/stress test), not a number
+   *  the investor sets directly. See `deriveLenderCriteria` in ./lender-criteria. */
+  investor_type: InvestorType;
   refurb_buffer_gbp: number;
   min_beds: number;
   max_beds: number;
@@ -50,12 +53,46 @@ export interface SliderOverrides {
   sa_occupancy?: number;
 }
 
+export type OverrideKey = keyof SliderOverrides;
+
+// Slider bounds in DISPLAY units (i.e. the same scale the value is rendered at —
+// percentages for "pct"-formatted numbers, raw £/counts otherwise).
+export const OVERRIDE_BOUNDS: Record<OverrideKey, { min: number; max: number; step: number }> = {
+  offer_price: { min: 50000, max: 500000, step: 500 },
+  monthly_rent: { min: 400, max: 5000, step: 25 },
+  refurb_cost: { min: 0, max: 100000, step: 500 },
+  arv: { min: 50000, max: 600000, step: 1000 },
+  mortgage_rate: { min: 2, max: 12, step: 0.05 },
+  ltv: { min: 50, max: 85, step: 1 },
+  room_count: { min: 2, max: 8, step: 1 },
+  rent_per_room: { min: 300, max: 900, step: 5 },
+  sa_nightly: { min: 50, max: 300, step: 5 },
+  sa_occupancy: { min: 30, max: 95, step: 1 },
+};
+
+export interface StrategyNumber {
+  label: string;
+  value: number;
+  format: "gbp" | "pct" | "num" | "months";
+  hint?: string;
+  /** Present when this cell is directly tunable via an inline slider. */
+  overrideKey?: OverrideKey;
+  /** Slider bounds, in display units (matches `format` scaling). */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** What this value would be without any override — the "reset" target. */
+  baseline?: number;
+  /** True when the user (or another tuned input) has overridden this lever. */
+  overridden?: boolean;
+}
+
 export interface StrategyResult {
   key: StrategyKey;
   name: string;
   feasible: boolean;
   reasons?: string[];
-  numbers: { label: string; value: number; format: "gbp" | "pct" | "num" | "months"; hint?: string }[];
+  numbers: StrategyNumber[];
   cashLeftIn?: number;
   monthlyCashflow?: number;
   annualROI?: number;
@@ -79,10 +116,14 @@ export interface AnalysisOutput {
     refurb_cost: number;
     mortgage_rate: number;
     ltv: number;
+    stress_rate: number;
     arv: number;
     rent_source?: string;
     rent_trustworthy?: boolean;
+    rent_range?: { low: number; mid: number; high: number; basis: string; evidence?: string[] } | null;
     refurb_source?: "algo" | "ai" | "persona_buffer" | "override";
+    /** The lender criteria (rate/LTV/stress) derived from the persona's investor type — see ./lender-criteria. */
+    lender_criteria?: { mortgage_rate: number; ltv: number; stress_rate: number; label: string; description: string };
   };
   strategies: StrategyResult[];
   negotiation: NegotiationPoint[];

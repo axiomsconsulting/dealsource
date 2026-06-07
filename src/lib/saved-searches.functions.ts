@@ -26,7 +26,7 @@ export const listSavedSearches = createServerFn({ method: "GET" })
 
 export const createSavedSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => Schema.parse(i))
+  .validator((i: unknown) => Schema.parse(i))
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase
       .from("saved_searches").insert({ ...data, user_id: context.userId }).select("*").single();
@@ -36,7 +36,7 @@ export const createSavedSearch = createServerFn({ method: "POST" })
 
 export const updateSavedSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), patch: Schema.partial() }).parse(i))
+  .validator((i: unknown) => z.object({ id: z.string().uuid(), patch: Schema.partial() }).parse(i))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("saved_searches").update(data.patch).eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -45,7 +45,7 @@ export const updateSavedSearch = createServerFn({ method: "POST" })
 
 export const deleteSavedSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("saved_searches").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -54,7 +54,7 @@ export const deleteSavedSearch = createServerFn({ method: "POST" })
 
 export const runSavedSearchPreview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: s } = await context.supabase.from("saved_searches").select("*").eq("id", data.id).maybeSingle();
     if (!s) throw new Error("Search not found");

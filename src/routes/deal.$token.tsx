@@ -33,10 +33,13 @@ function DealSheetPage() {
   const prop = snap.property;
   const a = snap.analysis;
   const ai = snap.ai;
-  const photos = (sheet as any).photos ?? [];
+  const allPhotos = (sheet as any).photos ?? [];
   const redact = sheet.redact;
+  const visiblePhotos = allPhotos.filter((p: any) => redact ? !p.is_exterior : true);
+  const photos = visiblePhotos.filter((p: any) => !p.is_floor_plan);
+  const floorPlans = visiblePhotos.filter((p: any) => p.is_floor_plan);
   const best = a.strategies.find((s: any) => s.key === a.bestStrategy);
-  const hero = photos.find((p: any) => redact ? !p.is_exterior : true) ?? photos[0];
+  const hero = photos[0];
   const displayAddress = redact
     ? `${prop.postcode?.split(" ")[0] ?? prop.city ?? "Location"} · ${prop.property_type ?? ""}`
     : prop.address;
@@ -160,8 +163,23 @@ function DealSheetPage() {
             <CardContent className="pt-6">
               <h2 className="text-xl font-semibold">Photos</h2>
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {photos.filter((p: any) => redact ? !p.is_exterior : true).map((p: any) => (
+                {photos.slice(1).map((p: any) => (
                   <img key={p.id} src={p.url} alt="" className="h-40 w-full rounded-md object-cover" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {floorPlans.length > 0 && (
+          <Card className="mt-6">
+            <CardContent className="pt-6">
+              <h2 className="text-xl font-semibold">Floor plan{floorPlans.length > 1 ? "s" : ""}</h2>
+              <div className={`mt-4 grid gap-3 ${floorPlans.length > 1 ? "sm:grid-cols-2" : ""}`}>
+                {floorPlans.map((p: any) => (
+                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
+                    <img src={p.url} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
+                  </a>
                 ))}
               </div>
             </CardContent>

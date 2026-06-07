@@ -7,7 +7,7 @@ const RIGHTMOVE_HOSTS = /rightmove\.co\.uk|zoopla\.co\.uk|onthemarket\.com|boomi
 
 export const enrichFromUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid(), url: z.string().url() }).parse(i))
+  .validator((i: unknown) => z.object({ propertyId: z.string().uuid(), url: z.string().url() }).parse(i))
   .handler(async ({ data, context }) => {
     if (!RIGHTMOVE_HOSTS.test(data.url)) throw new Error("URL must be a Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation listing.");
     const key = process.env.FIRECRAWL_API_KEY;
@@ -67,7 +67,7 @@ function collectImages(root: any, j: any): string[] {
 
 export const enrichFromPfJson = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid(), json: z.string().min(2).max(500_000) }).parse(i))
+  .validator((i: unknown) => z.object({ propertyId: z.string().uuid(), json: z.string().min(2).max(500_000) }).parse(i))
   .handler(async ({ data, context }) => {
     const parsed = parsePropertyFilterJson(data.json);
     if (!parsed) throw new Error("Could not parse Property Filter JSON.");

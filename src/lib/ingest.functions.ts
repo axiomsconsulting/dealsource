@@ -29,7 +29,7 @@ const PropertyInputSchema = z.object({
 
 export const bulkIngestProperties = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ items: z.array(PropertyInputSchema).max(500) }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -57,7 +57,7 @@ export const bulkIngestProperties = createServerFn({ method: "POST" })
 
 export const mergeJsonIntoProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ propertyId: z.string().uuid(), pf_json: z.any() }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -82,7 +82,7 @@ export const listProperties = createServerFn({ method: "GET" })
 
 export const getProperty = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ id: z.string().uuid() }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -98,7 +98,7 @@ export const getProperty = createServerFn({ method: "GET" })
 
 export const updateProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({
       id: z.string().uuid(),
       patch: z.object({
@@ -122,7 +122,7 @@ export const updateProperty = createServerFn({ method: "POST" })
 
 export const deleteProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z.object({ id: z.string().uuid() }).parse(input),
   )
   .handler(async ({ data, context }) => {

@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { LENDER_CRITERIA, INVESTOR_TYPES, deriveLenderCriteria, type InvestorType } from "@/lib/analysis/lender-criteria";
+import { fmtPct } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/persona")({
   head: () => ({ meta: [{ title: "Personas — Deal Sourcer" }] }),
@@ -26,9 +28,6 @@ const FIELDS: { key: string; label: string; suffix?: string; step?: number; tran
   { key: "target_rent_gbp", label: "Target monthly rent (£)", step: 25 },
   { key: "target_offer_gbp", label: "Target offer (£)", step: 1000 },
   { key: "max_offer_gbp", label: "Max offer (£)", step: 1000 },
-  { key: "mortgage_rate", label: "Mortgage rate (%)", step: 0.05, transform: "pct" },
-  { key: "stress_rate", label: "Stress rate (%)", step: 0.05, transform: "pct" },
-  { key: "ltv", label: "LTV (%)", step: 1, transform: "pct" },
   { key: "refurb_buffer_gbp", label: "Refurb buffer (£)", step: 500 },
   { key: "min_beds", label: "Min beds", step: 1 },
   { key: "max_beds", label: "Max beds", step: 1 },
@@ -51,6 +50,7 @@ function PersonaPage() {
   const [aiDefault, setAiDefault] = useState(false);
   const [name, setName] = useState("");
   const [strategy, setStrategy] = useState<string>("BTL");
+  const [investorType, setInvestorType] = useState<InvestorType>("individual");
   const [newName, setNewName] = useState("");
   const [newStrategy, setNewStrategy] = useState<string>("BTL");
 
@@ -65,6 +65,7 @@ function PersonaPage() {
       setAiDefault(!!selected.ai_default_enabled);
       setName(selected.name);
       setStrategy(selected.strategy);
+      setInvestorType((selected.investor_type as InvestorType) ?? "individual");
     }
   }, [selected?.id]);
 
@@ -77,6 +78,7 @@ function PersonaPage() {
       payload.ai_default_enabled = aiDefault;
       payload.name = name;
       payload.strategy = strategy;
+      payload.investor_type = investorType;
       payload.id = selected!.id;
       return update({ data: payload });
     },
@@ -176,6 +178,33 @@ function PersonaPage() {
                 />
               </div>
             ))}
+          </div>
+          <div className="mt-6 space-y-1.5">
+            <Label>How does this investor borrow?</Label>
+            <p className="text-xs text-muted-foreground">
+              This is what actually changes a lender's appetite — the rate, max LTV and stress test they'll
+              offer follow from the structure, not from a number you'd otherwise have to guess. The deal
+              sheet still lets you tune the rate/LTV per-property if you know better terms are on the table.
+            </p>
+            <Select value={investorType} onValueChange={(v) => setInvestorType(v as InvestorType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {INVESTOR_TYPES.map((t) => <SelectItem key={t} value={t}>{LENDER_CRITERIA[t].label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(() => {
+              const c = deriveLenderCriteria(investorType);
+              return (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs">
+                  <div className="mb-1 flex flex-wrap gap-x-4 gap-y-1 font-medium">
+                    <span>Typical rate: {fmtPct(c.mortgage_rate, 2)}</span>
+                    <span>Max LTV: {fmtPct(c.ltv, 0)}</span>
+                    <span>Stress test: {fmtPct(c.stress_rate, 2)}</span>
+                  </div>
+                  <p className="text-muted-foreground">{c.description}</p>
+                </div>
+              );
+            })()}
           </div>
           <div className="mt-6 flex items-center gap-3 rounded-md border bg-muted/30 p-4">
             <Switch checked={aiDefault} onCheckedChange={setAiDefault} id="ai-default" />
