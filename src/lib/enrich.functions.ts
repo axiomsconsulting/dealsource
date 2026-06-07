@@ -64,3 +64,42 @@ function collectImages(root: any, j: any): string[] {
   while ((m = re.exec(md))) out.add(m[1]);
   return Array.from(out).slice(0, 30);
 }
+
+export const enrichFromPfJson = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid(), json: z.string().min(2).max(500_000) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const parsed = parsePropertyFilterJson(data.json);
+    if (!parsed) throw new Error("Could not parse Property Filter JSON.");
+
+    const { data: existing, error: ge } = await context.supabase
+      .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (ge || !existing) throw new Error("Property not found");
+
+    const patch: any = {};
+    const setIfMissing = (field: string, value: any) => {
+      if (value == null || value === "") return;
+      if (existing[field] == null || existing[field] === "") patch[field] = value;
+    };
+    setIfMissing("address", parsed.address);
+    setIfMissing("postcode", parsed.postcode);
+    setIfMissing("beds", parsed.beds);
+    setIfMissing("baths", parsed.baths);
+    setIfMissing("property_type", parsed.property_type);
+    setIfMissing("epc_rate", parsed.epc_rate);
+    setIfMissing("tenure", parsed.tenure);
+    setIfMissing("area_sqm", parsed.area_sqm);
+    setIfMissing("asking_price_gbp", parsed.asking_price_gbp);
+    setIfMissing("estimated_rent_pcm", parsed.estimated_rent_pcm);
+    if (parsed.estimated_rent_pcm) patch.rent_source = "pf_json";
+    if (parsed.lease_years_remaining != null) setIfMissing("lease_years_remaining", parsed.lease_years_remaining);
+    // Merge images
+    const oldImgs: string[] = Array.isArray(existing.image_urls) ? existing.image_urls : [];
+    const merged = Array.from(new Set([...oldImgs, ...parsed.image_urls])).slice(0, 60);
+    if (merged.length !== oldImgs.length) patch.image_urls = merged;
+    patch.pf_json = parsed.pf_json;
+
+    const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true, fieldsUpdated: Object.keys(patch).filter((k) => k !== "pf_json"), imageCount: parsed.image_urls.length, totalImages: merged.length };
+  });
