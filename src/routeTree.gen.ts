@@ -12,9 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DealTokenRouteImport } from './routes/deal.$token'
 import { Route as AuthenticatedPropertiesRouteImport } from './routes/_authenticated/properties'
 import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
+import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
 
 const AuthRoute = AuthRouteImport.update({
@@ -29,6 +32,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DealTokenRoute = DealTokenRouteImport.update({
+  id: '/deal/$token',
+  path: '/deal/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedPropertiesRoute = AuthenticatedPropertiesRouteImport.update({
@@ -46,6 +54,17 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicRunSearchAlertsRoute =
+  ApiPublicRunSearchAlertsRouteImport.update({
+    id: '/api/public/run-search-alerts',
+    path: '/api/public/run-search-alerts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDealPdfTokenRoute = ApiDealPdfTokenRouteImport.update({
+  id: '/api/deal-pdf/$token',
+  path: '/api/deal-pdf/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedPropertiesIdRoute =
   AuthenticatedPropertiesIdRouteImport.update({
     id: '/$id',
@@ -59,7 +78,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/deal/$token': typeof DealTokenRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
+  '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
+  '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,7 +89,10 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/deal/$token': typeof DealTokenRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
+  '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
+  '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,7 +102,10 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
   '/_authenticated/properties': typeof AuthenticatedPropertiesRouteWithChildren
+  '/deal/$token': typeof DealTokenRoute
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
+  '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
+  '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,7 +115,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/persona'
     | '/properties'
+    | '/deal/$token'
     | '/properties/$id'
+    | '/api/deal-pdf/$token'
+    | '/api/public/run-search-alerts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -95,7 +126,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/persona'
     | '/properties'
+    | '/deal/$token'
     | '/properties/$id'
+    | '/api/deal-pdf/$token'
+    | '/api/public/run-search-alerts'
   id:
     | '__root__'
     | '/'
@@ -104,13 +138,19 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
     | '/_authenticated/properties'
+    | '/deal/$token'
     | '/_authenticated/properties/$id'
+    | '/api/deal-pdf/$token'
+    | '/api/public/run-search-alerts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DealTokenRoute: typeof DealTokenRoute
+  ApiDealPdfTokenRoute: typeof ApiDealPdfTokenRoute
+  ApiPublicRunSearchAlertsRoute: typeof ApiPublicRunSearchAlertsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -136,6 +176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/deal/$token': {
+      id: '/deal/$token'
+      path: '/deal/$token'
+      fullPath: '/deal/$token'
+      preLoaderRoute: typeof DealTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/properties': {
       id: '/_authenticated/properties'
       path: '/properties'
@@ -156,6 +203,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/run-search-alerts': {
+      id: '/api/public/run-search-alerts'
+      path: '/api/public/run-search-alerts'
+      fullPath: '/api/public/run-search-alerts'
+      preLoaderRoute: typeof ApiPublicRunSearchAlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/deal-pdf/$token': {
+      id: '/api/deal-pdf/$token'
+      path: '/api/deal-pdf/$token'
+      fullPath: '/api/deal-pdf/$token'
+      preLoaderRoute: typeof ApiDealPdfTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/properties/$id': {
       id: '/_authenticated/properties/$id'
@@ -200,7 +261,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DealTokenRoute: DealTokenRoute,
+  ApiDealPdfTokenRoute: ApiDealPdfTokenRoute,
+  ApiPublicRunSearchAlertsRoute: ApiPublicRunSearchAlertsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
