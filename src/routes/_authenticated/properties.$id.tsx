@@ -301,7 +301,13 @@ function PropertyDetail() {
           )}
 
           <PhotosPanel propertyId={id} />
-          <RefurbPanel property={p} />
+          <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
+          <ImageLibrary urls={heroImages} />
+          <NegotiationPanel
+            property={p}
+            refurbTotal={analysis.effectiveInputs.refurb_cost}
+            onApplyOffer={(gbp) => { setOver({ ...over, offer_price: gbp }); toast.success(`Offer set to ${fmtGBP(gbp)}`); }}
+          />
           <DealSheetPanel propertyId={id} overrides={over} />
         </div>
       </div>
