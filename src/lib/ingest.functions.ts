@@ -105,6 +105,9 @@ export const updateProperty = createServerFn({ method: "POST" })
         hide_address: z.boolean().optional(),
         notes: z.string().max(5000).optional(),
         asking_price_gbp: z.number().nullable().optional(),
+        seller_context: z.any().optional(),
+        refurb_estimate: z.any().optional(),
+        estimated_rent_pcm: z.number().nullable().optional(),
       }),
     }).parse(input),
   )
