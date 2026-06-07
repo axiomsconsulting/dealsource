@@ -46,7 +46,8 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
     if (existing) {
       const { data: row, error } = await context.supabase.from("deal_sheets").update({
         snapshot, redact: data.redact ?? true, is_public: data.is_public ?? true,
-        hero_photo_id: data.heroPhotoId ?? null, title: data.title ?? prop.address,
+      hero_photo_id: data.heroPhotoId ?? null, title: data.title ?? prop.address,
+      snapshot: snapshot as any,
       }).eq("id", existing.id).select("*").single();
       if (error) throw new Error(error.message);
       return row;
