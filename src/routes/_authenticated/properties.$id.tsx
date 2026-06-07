@@ -16,9 +16,13 @@ import { Label } from "@/components/ui/label";
 import { SliderInput } from "@/components/SliderInput";
 import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
+import { RefurbPanel } from "@/components/RefurbPanel";
+import { RiskChips } from "@/components/RiskChips";
+import { Input } from "@/components/ui/input";
+import { enrichFromUrl } from "@/lib/enrich.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -32,6 +36,7 @@ function PropertyDetail() {
   const getProp = useServerFn(getProperty);
   const listP = useServerFn(listPersonas);
   const update = useServerFn(updateProperty);
+  const enrich = useServerFn(enrichFromUrl);
 
   const prop = useQuery({ queryKey: ["property", id], queryFn: () => getProp({ data: { id } }) });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => listP({ data: {} } as any) });
@@ -50,6 +55,12 @@ function PropertyDetail() {
     mutationFn: (patch: any) => update({ data: { id, patch } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["property", id] }),
   });
+  const [enrichUrl, setEnrichUrl] = useState("");
+  const enrichMut = useMutation({
+    mutationFn: (url: string) => enrich({ data: { propertyId: id, url } }),
+    onSuccess: (r: any) => { toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.imageCount} images`); setEnrichUrl(""); qc.invalidateQueries({ queryKey: ["property", id] }); },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   if (prop.isLoading || personasQ.isLoading) return <AppShell><p className="text-muted-foreground">Loading…</p></AppShell>;
   if (!prop.data || !persona || !analysis) return <AppShell><p>Not found</p></AppShell>;
@@ -57,6 +68,7 @@ function PropertyDetail() {
   const p = prop.data as any;
   const eff = analysis.effectiveInputs;
   const best = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
+  const heroImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
 
   return (
     <AppShell>
@@ -74,12 +86,17 @@ function PropertyDetail() {
             {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
             {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
             <Badge>Asking {fmtGBP(p.asking_price_gbp)}</Badge>
+            {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — inside</Badge>}
+            {p.article4_status === "partial" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — partial</Badge>}
             {p.source_link && (
               <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                 <ExternalLink className="h-3 w-3" /> View listing
               </a>
             )}
           </div>
+          {analysis.riskFlags && analysis.riskFlags.length > 0 && (
+            <div className="mt-2"><RiskChips flags={analysis.riskFlags as any} /></div>
+          )}
         </div>
         <div className="text-right">
           <div className="text-5xl font-bold text-primary">{analysis.overallScore}</div>
@@ -106,6 +123,38 @@ function PropertyDetail() {
           </div>
         </div>
       </div>
+
+      {heroImages.length > 0 && (
+        <Card className="mb-4 overflow-hidden p-0">
+          <div className="grid grid-cols-4 gap-1">
+            <div className="col-span-4 sm:col-span-2 sm:row-span-2">
+              <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover" />
+            </div>
+            {heroImages.slice(1, 5).map((u, i) => (
+              <img key={i} src={u} alt="" className="h-32 w-full object-cover sm:h-[178px]" loading="lazy" />
+            ))}
+          </div>
+          {heroImages.length > 5 && <p className="px-3 py-2 text-xs text-muted-foreground">+{heroImages.length - 5} more in listing</p>}
+        </Card>
+      )}
+
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center gap-2 py-3">
+          <Link2 className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Enrich from listing URL</span>
+          <Input
+            placeholder="https://www.rightmove.co.uk/properties/..."
+            value={enrichUrl}
+            onChange={(e) => setEnrichUrl(e.target.value)}
+            className="h-8 flex-1 min-w-[260px]"
+          />
+          <Button size="sm" disabled={!enrichUrl || enrichMut.isPending} onClick={() => enrichMut.mutate(enrichUrl)}>
+            {enrichMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Home className="mr-2 h-4 w-4" />}
+            Pull details + images
+          </Button>
+          <p className="basis-full text-xs text-muted-foreground">Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in Connectors.</p>
+        </CardContent>
+      </Card>
 
       {!analysis.personaMatch.pass && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
@@ -222,6 +271,7 @@ function PropertyDetail() {
           )}
 
           <PhotosPanel propertyId={id} />
+          <RefurbPanel property={p} />
           <DealSheetPanel propertyId={id} overrides={over} />
         </div>
       </div>
