@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useServerFn } from "@tanstack/react-start";
 import { listProperties, deleteProperty } from "@/lib/ingest.functions";
-import { getOrCreateDefaultPersona } from "@/lib/personas.functions";
+import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { analyseProperty } from "@/lib/analysis/engine";
 import { fmtGBP } from "@/lib/format";
@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/properties")({
+export const Route = createFileRoute("/_authenticated/properties/")({
   head: () => ({ meta: [{ title: "Properties — Deal Sourcer" }] }),
   component: PropertiesPage,
 });
@@ -20,10 +20,12 @@ export const Route = createFileRoute("/_authenticated/properties")({
 function PropertiesPage() {
   const qc = useQueryClient();
   const list = useServerFn(listProperties);
-  const persona = useServerFn(getOrCreateDefaultPersona);
+  const personasFn = useServerFn(listPersonas);
   const del = useServerFn(deleteProperty);
   const props = useQuery({ queryKey: ["properties"], queryFn: () => list() });
-  const per = useQuery({ queryKey: ["persona-default"], queryFn: () => persona({ data: {} } as any) });
+  const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => personasFn({ data: {} } as any) });
+  const personas = (personasQ.data ?? []) as any[];
+  const activePersona = personas.find((p) => p.is_default) ?? personas[0];
 
   const delMut = useMutation({
     mutationFn: (id: string) => del({ data: { id } }),
@@ -39,8 +41,19 @@ function PropertiesPage() {
       ) : (
         <div className="grid gap-4">
           {props.data.map((p: any) => {
-            const a = per.data ? analyseProperty(p, per.data as any) : null;
+            const a = activePersona ? analyseProperty(p, activePersona as any) : null;
             const best = a?.strategies.find((s) => s.key === a.bestStrategy);
+            // best-fit persona = highest-score persona where persona match passes
+            let bestFit: { name: string; score: number; strategy: string } | null = null;
+            if (personas.length) {
+              for (const per of personas) {
+                const an = analyseProperty(p, per as any);
+                if (!an.personaMatch.pass) continue;
+                if (!bestFit || an.overallScore > bestFit.score) {
+                  bestFit = { name: per.name, score: an.overallScore, strategy: per.strategy };
+                }
+              }
+            }
             return (
               <Card key={p.id} className="p-4">
                 <div className="flex items-start justify-between gap-4">
@@ -52,6 +65,13 @@ function PropertiesPage() {
                       {p.epc_rate && <Badge variant="outline">EPC {p.epc_rate}</Badge>}
                       {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
                       {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
+                      {bestFit ? (
+                        <Badge className="bg-accent text-accent-foreground" title={`Best fit: ${bestFit.name} (${bestFit.score}/100)`}>
+                          ◆ {bestFit.name}
+                        </Badge>
+                      ) : personas.length > 0 ? (
+                        <Badge variant="outline" className="text-amber-700">No persona fit</Badge>
+                      ) : null}
                       {p.source_link && (
                         <a href={p.source_link} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground">
                           <ExternalLink className="inline h-3 w-3" />

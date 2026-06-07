@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useServerFn } from "@tanstack/react-start";
 import { getProperty, updateProperty } from "@/lib/ingest.functions";
-import { getOrCreateDefaultPersona } from "@/lib/personas.functions";
+import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { SliderInput } from "@/components/SliderInput";
 import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -29,29 +30,31 @@ function PropertyDetail() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const getProp = useServerFn(getProperty);
-  const getPersona = useServerFn(getOrCreateDefaultPersona);
+  const listP = useServerFn(listPersonas);
   const update = useServerFn(updateProperty);
 
   const prop = useQuery({ queryKey: ["property", id], queryFn: () => getProp({ data: { id } }) });
-  const persona = useQuery({ queryKey: ["persona-default"], queryFn: () => getPersona({ data: {} } as any) });
+  const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => listP({ data: {} } as any) });
+  const personas = (personasQ.data ?? []) as any[];
+  const [personaId, setPersonaId] = useState<string | null>(null);
+  const persona = useMemo(() => personas.find((p) => p.id === personaId) ?? personas.find((p) => p.is_default) ?? personas[0], [personas, personaId]);
 
   const [over, setOver] = useState<SliderOverrides>({});
 
   const analysis = useMemo(() => {
-    if (!prop.data || !persona.data) return null;
-    return analyseProperty(prop.data as any, persona.data as any, over);
-  }, [prop.data, persona.data, over]);
+    if (!prop.data || !persona) return null;
+    return analyseProperty(prop.data as any, persona as any, over);
+  }, [prop.data, persona, over]);
 
   const updateMut = useMutation({
     mutationFn: (patch: any) => update({ data: { id, patch } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["property", id] }),
   });
 
-  if (prop.isLoading || persona.isLoading) return <AppShell><p className="text-muted-foreground">Loading…</p></AppShell>;
-  if (!prop.data || !persona.data || !analysis) return <AppShell><p>Not found</p></AppShell>;
+  if (prop.isLoading || personasQ.isLoading) return <AppShell><p className="text-muted-foreground">Loading…</p></AppShell>;
+  if (!prop.data || !persona || !analysis) return <AppShell><p>Not found</p></AppShell>;
 
   const p = prop.data as any;
-  const per = persona.data as any;
   const eff = analysis.effectiveInputs;
   const best = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
 
@@ -81,6 +84,18 @@ function PropertyDetail() {
         <div className="text-right">
           <div className="text-5xl font-bold text-primary">{analysis.overallScore}</div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Deal score</div>
+          <div className="mt-2">
+            <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
+              <SelectTrigger className="h-8 w-[220px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {personas.map((pp) => (
+                  <SelectItem key={pp.id} value={pp.id}>
+                    {pp.name} {pp.is_default ? "★" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <Label htmlFor="hide" className="text-xs"><EyeOff className="inline h-3 w-3" /> Redact</Label>
             <Switch

@@ -1,18 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useServerFn } from "@tanstack/react-start";
-import { getOrCreateDefaultPersona, updateDefaultPersona } from "@/lib/personas.functions";
+import {
+  listPersonas, updateDefaultPersona, createPersona, deletePersona, setActivePersona,
+} from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/persona")({
-  head: () => ({ meta: [{ title: "Persona — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Personas — Deal Sourcer" }] }),
   component: PersonaPage,
 });
 
@@ -25,27 +30,43 @@ const FIELDS: { key: string; label: string; suffix?: string; step?: number; tran
   { key: "stress_rate", label: "Stress rate (%)", step: 0.05, transform: "pct" },
   { key: "ltv", label: "LTV (%)", step: 1, transform: "pct" },
   { key: "refurb_buffer_gbp", label: "Refurb buffer (£)", step: 500 },
+  { key: "min_beds", label: "Min beds", step: 1 },
+  { key: "max_beds", label: "Max beds", step: 1 },
 ];
+
+const STRATEGIES = ["BTL", "BRRR", "SA", "HMO", "FLIP", "TITLE_SPLIT", "CUSTOM"] as const;
 
 function PersonaPage() {
   const qc = useQueryClient();
-  const get = useServerFn(getOrCreateDefaultPersona);
+  const list = useServerFn(listPersonas);
   const update = useServerFn(updateDefaultPersona);
-  const q = useQuery({ queryKey: ["persona-default"], queryFn: () => get({ data: {} } as any) });
+  const create = useServerFn(createPersona);
+  const del = useServerFn(deletePersona);
+  const setActive = useServerFn(setActivePersona);
+  const q = useQuery({ queryKey: ["personas"], queryFn: () => list({ data: {} } as any) });
+  const personas = (q.data ?? []) as any[];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(() => personas.find((p) => p.id === selectedId) ?? personas.find((p) => p.is_default) ?? personas[0], [personas, selectedId]);
   const [form, setForm] = useState<Record<string, number>>({});
   const [aiDefault, setAiDefault] = useState(false);
+  const [name, setName] = useState("");
+  const [strategy, setStrategy] = useState<string>("BTL");
+  const [newName, setNewName] = useState("");
+  const [newStrategy, setNewStrategy] = useState<string>("BTL");
 
   useEffect(() => {
-    if (q.data) {
+    if (selected) {
       const f: Record<string, number> = {};
       FIELDS.forEach((field) => {
-        const v = (q.data as any)[field.key];
+        const v = (selected as any)[field.key];
         f[field.key] = field.transform === "pct" ? Math.round(v * 10000) / 100 : v;
       });
       setForm(f);
-      setAiDefault(!!(q.data as any).ai_default_enabled);
+      setAiDefault(!!selected.ai_default_enabled);
+      setName(selected.name);
+      setStrategy(selected.strategy);
     }
-  }, [q.data]);
+  }, [selected?.id]);
 
   const mut = useMutation({
     mutationFn: () => {
@@ -54,20 +75,95 @@ function PersonaPage() {
         payload[field.key] = field.transform === "pct" ? form[field.key] / 100 : form[field.key];
       });
       payload.ai_default_enabled = aiDefault;
+      payload.name = name;
+      payload.strategy = strategy;
+      payload.id = selected!.id;
       return update({ data: payload });
     },
-    onSuccess: () => { toast.success("Persona saved"); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
+    onSuccess: () => { toast.success("Persona saved"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
     onError: (e: any) => toast.error(e.message),
   });
 
+  const createMut = useMutation({
+    mutationFn: () => create({ data: { name: newName, strategy: newStrategy as any, copyFromId: selected?.id } }),
+    onSuccess: (row: any) => {
+      toast.success("Persona created"); setNewName(""); setSelectedId(row.id);
+      qc.invalidateQueries({ queryKey: ["personas"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const delMut = useMutation({
+    mutationFn: (id: string) => del({ data: { id } }),
+    onSuccess: () => { toast.success("Deleted"); setSelectedId(null); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
+  });
+  const activeMut = useMutation({
+    mutationFn: (id: string) => setActive({ data: { id } }),
+    onSuccess: () => { toast.success("Active persona updated"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); qc.invalidateQueries({ queryKey: ["properties"] }); },
+  });
+
   return (
-    <AppShell title="Investor persona">
-      <Card className="max-w-3xl">
+    <AppShell title="Investor personas">
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Personas</CardTitle>
+            <CardDescription>Switch active profile — the active one drives all analysis.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {personas.map((p) => (
+              <div key={p.id} className={`group flex items-center gap-2 rounded-md border p-2 ${selected?.id === p.id ? "border-primary bg-muted/50" : ""}`}>
+                <button onClick={() => setSelectedId(p.id)} className="flex-1 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{p.name}</span>
+                    {p.is_default && <Badge className="h-5 text-[10px]">active</Badge>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{p.strategy}</div>
+                </button>
+                {!p.is_default && (
+                  <Button size="icon" variant="ghost" title="Set active" onClick={() => activeMut.mutate(p.id)}>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button size="icon" variant="ghost" title="Delete" onClick={() => { if (confirm("Delete persona?")) delMut.mutate(p.id); }}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <div className="mt-3 space-y-2 rounded-md border border-dashed p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">New persona</p>
+              <Input placeholder="e.g. Sarah Johnson, or HMO £100k" value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <Select value={newStrategy} onValueChange={setNewStrategy}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STRATEGIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button size="sm" className="w-full" disabled={!newName || createMut.isPending} onClick={() => createMut.mutate()}>
+                <Plus className="mr-1 h-4 w-4" /> Add persona{selected ? " (copy of selected)" : ""}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        {selected && (
+        <Card>
         <CardHeader>
-          <CardTitle>BTL Investor — default profile</CardTitle>
-          <CardDescription>These criteria drive persona-match warnings and the default slider values on every property analysis.</CardDescription>
+          <CardTitle>Edit persona</CardTitle>
+          <CardDescription>Criteria drive persona-match warnings and default slider values on every property analysis.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid gap-4 sm:grid-cols-[1fr_180px]">
+            <div className="space-y-1.5">
+              <Label>Persona name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Johnson — HMO" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Primary strategy</Label>
+              <Select value={strategy} onValueChange={setStrategy}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{STRATEGIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {FIELDS.map((f) => (
               <div key={f.key} className="space-y-1.5">
@@ -90,12 +186,14 @@ function PersonaPage() {
           </div>
           <div className="mt-6 flex items-center gap-3">
             <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save persona"}</Button>
-            <p className="text-xs text-muted-foreground">
-              Hard-coded criteria: 3–4 bed, EPC C (D/E allowed if neighbours C), parking + gas boiler required, ignore Victorian/Edwardian. (Editor coming in v2.)
-            </p>
+            {!selected.is_default && (
+              <Button variant="outline" onClick={() => activeMut.mutate(selected.id)}>Make active</Button>
+            )}
           </div>
         </CardContent>
-      </Card>
+        </Card>
+        )}
+      </div>
     </AppShell>
   );
 }
