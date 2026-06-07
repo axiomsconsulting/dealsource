@@ -4,17 +4,63 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
-const FindingsSchema = z.object({
-  conditionScore: z.number().min(0).max(10).optional(),
-  items: z.array(z.object({
-    area: z.string(),
-    issue: z.string(),
-    severity: z.enum(["low", "medium", "high"]),
-    estimateGbp: z.number().min(0).max(50000),
-  })).max(20),
-  summary: z.string().max(800),
-  negotiationAngles: z.array(z.string()).max(8),
+const PayloadSchema = z.object({
+  condition: z.object({
+    score: z.number().min(0).max(10).optional(),
+    summary: z.string().max(800).optional(),
+    items: z.array(z.object({
+      area: z.string(),
+      issue: z.string(),
+      severity: z.enum(["low", "medium", "high"]),
+      estimateGbp: z.number().min(0).max(80000),
+      category: z.string().optional(),
+    })).max(25).optional(),
+  }).optional(),
+  refurb: z.object({
+    totalLow: z.number().optional(),
+    totalMid: z.number().optional(),
+    totalHigh: z.number().optional(),
+    items: z.array(z.object({
+      category: z.string(),
+      issue: z.string().optional(),
+      estimateGbp: z.number().min(0).max(80000),
+    })).max(30).optional(),
+  }).optional(),
+  rent: z.object({
+    pcm: z.number().min(0).max(50000).optional(),
+    low: z.number().optional(),
+    high: z.number().optional(),
+    evidence: z.array(z.string()).max(8).optional(),
+  }).optional(),
+  article4: z.object({
+    status: z.enum(["unknown", "inside", "outside", "partial"]).optional(),
+    council: z.string().optional(),
+    evidence: z.string().optional(),
+  }).optional(),
+  riskFlags: z.object({
+    sharedOwnership: z.boolean().optional(),
+    leasehold: z.boolean().optional(),
+    listed: z.boolean().optional(),
+    auction: z.boolean().optional(),
+    developerInvite: z.boolean().optional(),
+    land: z.boolean().optional(),
+    planningOnly: z.boolean().optional(),
+    notes: z.string().optional(),
+  }).optional(),
+  negotiation: z.object({
+    angles: z.array(z.string()).max(10).optional(),
+    suggestedOfferGbp: z.number().optional(),
+    walkAwayGbp: z.number().optional(),
+  }).optional(),
+  strategyHints: z.object({
+    suitable: z.array(z.string()).optional(),
+    unsuitable: z.array(z.string()).optional(),
+    reasoning: z.string().optional(),
+  }).optional(),
 });
+
+export type AIPayload = z.infer<typeof PayloadSchema>;
+const AI_VERSION = "p3.1";
 
 function getKey() {
   const k = process.env.LOVABLE_API_KEY;
@@ -35,67 +81,7 @@ export const analyseWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
-    const { data: prop, error: pe } = await context.supabase
-      .from("properties").select("*").eq("id", data.propertyId).maybeSingle();
-    if (pe || !prop) throw new Error(pe?.message || "Property not found");
-
-    const { data: photos } = await context.supabase
-      .from("photos").select("*").eq("property_id", data.propertyId).limit(8);
-
-    const photoUrls: string[] = [];
-    for (const ph of photos ?? []) {
-      const { data: signed } = await context.supabase.storage
-        .from("property-photos").createSignedUrl(ph.storage_path, 60 * 10);
-      if (signed?.signedUrl) photoUrls.push(signed.signedUrl);
-    }
-
-    const provider = createLovableAiGatewayProvider(getKey());
-    const model = provider("google/gemini-2.5-flash");
-
-    const systemPrompt = `You are a UK property investment surveyor. Analyse the property photos and listing.
-Return STRICT JSON ONLY (no prose, no markdown) matching:
-{
-  "conditionScore": number 0-10,
-  "items": [{"area":"kitchen|bathroom|roof|windows|electrics|heating|external|garden|decor|structural","issue":"...","severity":"low|medium|high","estimateGbp":number}],
-  "summary": "2-3 sentence condition summary",
-  "negotiationAngles": ["bullet leverage points the buyer can take to the agent"]
-}`;
-
-    const content: any[] = [
-      { type: "text", text: `Listing: ${prop.address}\nType: ${prop.property_type ?? "?"}\nBeds: ${prop.beds ?? "?"}\nEPC: ${prop.epc_rate ?? "?"}\nAsking: £${prop.asking_price_gbp ?? "?"}\n\nPhotos to assess: ${photoUrls.length}` },
-      ...photoUrls.map((url) => ({ type: "image", image: url })),
-    ];
-
-    let findings: any;
-    try {
-      const { text } = await generateText({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content },
-        ],
-      });
-      const parsed = parseJsonBlock(text);
-      findings = FindingsSchema.parse(parsed);
-    } catch (e: any) {
-      throw new Error("AI analysis failed: " + e.message);
-    }
-
-    // upsert analysis row
-    const { data: existing } = await context.supabase
-      .from("analyses").select("id").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
-    if (existing) {
-      await context.supabase.from("analyses").update({
-        ai_notes: findings, ai_used_at: new Date().toISOString(),
-      }).eq("id", existing.id);
-    } else {
-      await context.supabase.from("analyses").insert({
-        user_id: context.userId, property_id: data.propertyId,
-        ai_notes: findings, ai_used_at: new Date().toISOString(),
-      });
-    }
-
-    return findings;
+    return await runFullAnalysis(context, data.propertyId);
   });
 
 export const getAIAnalysis = createServerFn({ method: "GET" })
@@ -103,7 +89,108 @@ export const getAIAnalysis = createServerFn({ method: "GET" })
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
-      .from("analyses").select("ai_notes, ai_used_at")
+      .from("analyses").select("ai_notes, ai_payload, ai_version, ai_used_at")
       .eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
     return row ?? null;
   });
+
+export const analyseLibraryWithAI = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ limit: z.number().int().min(1).max(50).default(20), force: z.boolean().default(false) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: props } = await context.supabase.from("properties").select("id").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(data.limit);
+    if (!props?.length) return { processed: 0 };
+    const { data: existing } = await context.supabase.from("analyses").select("property_id, ai_payload").eq("user_id", context.userId);
+    const have = new Set((existing ?? []).filter((r: any) => r.ai_payload).map((r: any) => r.property_id));
+    const todo = data.force ? props : props.filter((p: any) => !have.has(p.id));
+    let ok = 0, fail = 0;
+    // run sequentially (token + rate-limit hygiene; small library expected)
+    for (const p of todo) {
+      try { await runFullAnalysis(context, p.id); ok++; }
+      catch { fail++; }
+    }
+    return { processed: ok, failed: fail, total: todo.length };
+  });
+
+async function runFullAnalysis(context: any, propertyId: string): Promise<AIPayload> {
+  const { data: prop, error: pe } = await context.supabase
+    .from("properties").select("*").eq("id", propertyId).maybeSingle();
+  if (pe || !prop) throw new Error(pe?.message || "Property not found");
+
+  const { data: photos } = await context.supabase
+    .from("photos").select("*").eq("property_id", propertyId).limit(8);
+
+  const photoUrls: string[] = [];
+  for (const ph of photos ?? []) {
+    const { data: signed } = await context.supabase.storage
+      .from("property-photos").createSignedUrl(ph.storage_path, 60 * 10);
+    if (signed?.signedUrl) photoUrls.push(signed.signedUrl);
+  }
+  const externalImages: string[] = Array.isArray(prop.image_urls) ? prop.image_urls.slice(0, 8) : [];
+  const allImages = [...photoUrls, ...externalImages].slice(0, 10);
+
+  const provider = createLovableAiGatewayProvider(getKey());
+  const model = provider("google/gemini-2.5-flash");
+
+  const systemPrompt = `You are a senior UK property investment analyst (surveyor + lettings + planning).
+Given listing data and (optionally) images, produce ONE structured JSON object covering condition, refurb costs (line items in £), local rent comparables (£/pcm), HMO Article 4 status for the postcode, risk flags (shared ownership, leasehold, listed, auction, developer invite, land-only, planning-only), negotiation angles with suggested offer, and suitable/unsuitable investment strategies (BTL, BRRR, SA, HMO, FLIP, TITLE_SPLIT). Be conservative. STRICT JSON ONLY (no prose, no markdown), matching this shape:
+{
+  "condition": {"score":0-10,"summary":"","items":[{"area":"kitchen|bathroom|roof|windows|electrics|heating|external|damp|structural|decor","issue":"","severity":"low|medium|high","estimateGbp":0,"category":"kitchen|bathroom|rewire|replumb|boiler|windows|roof|external|damp|plaster_decor|flooring|epc_upgrade|other"}]},
+  "refurb": {"totalLow":0,"totalMid":0,"totalHigh":0,"items":[{"category":"","issue":"","estimateGbp":0}]},
+  "rent": {"pcm":0,"low":0,"high":0,"evidence":["..."]},
+  "article4": {"status":"unknown|inside|outside|partial","council":"","evidence":""},
+  "riskFlags": {"sharedOwnership":false,"leasehold":false,"listed":false,"auction":false,"developerInvite":false,"land":false,"planningOnly":false,"notes":""},
+  "negotiation": {"angles":["..."],"suggestedOfferGbp":0,"walkAwayGbp":0},
+  "strategyHints": {"suitable":["BTL"],"unsuitable":["HMO"],"reasoning":""}
+}`;
+
+  const content: any[] = [
+    { type: "text", text: `Listing: ${prop.address}\nPostcode: ${prop.postcode ?? "?"}\nType: ${prop.property_type ?? "?"}\nBeds: ${prop.beds ?? "?"} · Baths: ${prop.baths ?? "?"} · Area: ${prop.area_sqm ?? "?"}m²\nTenure: ${prop.tenure ?? "?"}\nEPC: ${prop.epc_rate ?? "?"}\nAsking: £${prop.asking_price_gbp ?? "?"}\nAgent: ${prop.agent_name ?? "?"}\nListing notes: ${prop.pf_json?.propertyDetail?.summary ?? prop.pf_json?.propertyLight?.description ?? "(none)"}\n\nImages provided: ${allImages.length}` },
+    ...allImages.map((url) => ({ type: "image", image: url })),
+  ];
+
+  let payload: AIPayload;
+  try {
+    const { text } = await generateText({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content },
+      ],
+    });
+    const parsed = parseJsonBlock(text);
+    payload = PayloadSchema.parse(parsed);
+  } catch (e: any) {
+    throw new Error("AI analysis failed: " + e.message);
+  }
+
+  // Persist back to properties (rent + article4 + risk_flags merged in)
+  const updates: any = {};
+  if (payload.rent?.pcm) {
+    updates.estimated_rent_pcm = payload.rent.pcm;
+    updates.rent_source = "ai_comparables";
+  }
+  if (payload.article4?.status && payload.article4.status !== "unknown") {
+    updates.article4_status = payload.article4.status;
+    updates.article4_source = "ai";
+  }
+  if (Object.keys(updates).length) {
+    await context.supabase.from("properties").update(updates).eq("id", propertyId);
+  }
+
+  // Upsert analyses row
+  const { data: existing } = await context.supabase
+    .from("analyses").select("id").eq("property_id", propertyId).eq("user_id", context.userId).maybeSingle();
+  const row = {
+    ai_notes: payload.condition ?? null,  // back-compat
+    ai_payload: payload,
+    ai_version: AI_VERSION,
+    ai_used_at: new Date().toISOString(),
+  };
+  if (existing) {
+    await context.supabase.from("analyses").update(row).eq("id", existing.id);
+  } else {
+    await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: propertyId, ...row });
+  }
+  return payload;
+}
