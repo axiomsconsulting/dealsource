@@ -72,8 +72,9 @@ export const enrichFromPfJson = createServerFn({ method: "POST" })
     const parsed = parsePropertyFilterJson(data.json);
     if (!parsed) throw new Error("Could not parse Property Filter JSON.");
 
-    const { data: existing, error: ge } = await context.supabase
+    const { data: existingRow, error: ge } = await context.supabase
       .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    const existing: any = existingRow;
     if (ge || !existing) throw new Error("Property not found");
 
     const patch: any = {};
