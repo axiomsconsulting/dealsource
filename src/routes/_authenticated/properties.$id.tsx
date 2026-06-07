@@ -168,6 +168,20 @@ function PropertyDetail() {
             {enrichMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Home className="mr-2 h-4 w-4" />}
             Pull details + images
           </Button>
+          <Dialog open={pfDialogOpen} onOpenChange={setPfDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline"><FileJson className="mr-2 h-4 w-4" />Paste PF JSON</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader><DialogTitle>Enrich from Property Filter JSON</DialogTitle></DialogHeader>
+              <p className="text-sm text-muted-foreground">Paste the full JSON object from Property Filter. Existing fields are kept; only missing fields are filled. New image URLs are appended.</p>
+              <Textarea value={pfJsonText} onChange={(e) => setPfJsonText(e.target.value)} placeholder='{"propertyLight":{...},"propertyDetail":{...}}' className="h-64 font-mono text-xs" />
+              <Button onClick={() => enrichJsonMut.mutate(pfJsonText)} disabled={!pfJsonText.trim() || enrichJsonMut.isPending}>
+                {enrichJsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Enrich now
+              </Button>
+            </DialogContent>
+          </Dialog>
           <p className="basis-full text-xs text-muted-foreground">Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in Connectors.</p>
         </CardContent>
       </Card>
