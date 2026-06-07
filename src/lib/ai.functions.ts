@@ -84,6 +84,11 @@ export const analyseWithAI = createServerFn({ method: "POST" })
     return await runFullAnalysis(context, data.propertyId);
   });
 
+// Exported helper so background job runner (ai-jobs.functions) can invoke without going through RPC
+export async function runFullAnalysisForJob(context: any, propertyId: string) {
+  return runFullAnalysis(context, propertyId);
+}
+
 export const getAIAnalysis = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
