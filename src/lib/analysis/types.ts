@@ -18,6 +18,7 @@ export interface PersonaInput {
 }
 
 export interface PropertyInput {
+  address?: string | null;
   asking_price_gbp: number | null;
   beds: number | null;
   baths: number | null;
@@ -26,6 +27,13 @@ export interface PropertyInput {
   property_type: string | null;
   tenure: string | null;
   postcode: string | null;
+  lease_years_remaining?: number | null;
+  estimated_rent_pcm?: number | null;
+  rent_source?: string | null;
+  article4_status?: string | null;
+  risk_flags?: any;
+  refurb_estimate?: any;
+  image_urls?: string[] | null;
   pf_json?: any;
 }
 
