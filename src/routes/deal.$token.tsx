@@ -3,7 +3,8 @@ import { getPublicDealSheet } from "@/lib/deal-sheets.functions";
 import { fmtGBP, fmtPct } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, TrendingUp, Wallet, Calculator, Target } from "lucide-react";
+import { Sparkles, TrendingUp, Wallet, Calculator, Target, History } from "lucide-react";
+import { fmtHistoryDate } from "@/lib/analysis/price-history";
 import { AppFooter } from "@/components/AppFooter";
 
 export const Route = createFileRoute("/deal/$token")({
@@ -93,6 +94,34 @@ function DealSheetPage() {
               <p className="mt-3 text-sm text-muted-foreground">
                 The investment numbers are underwritten at the target deal price, not the lower opening bid.
               </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {Array.isArray(snap.priceHistory) && snap.priceHistory.length >= 2 && (
+          <Card className="mt-6">
+            <CardContent className="pt-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <History className="h-5 w-5 text-primary" /> Tracked price history
+              </h2>
+              <ul className="mt-4 space-y-1.5 text-sm">
+                {snap.priceHistory.map((h: any, i: number) => (
+                  <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3 border-b border-dashed pb-1.5 last:border-0">
+                    <span className="text-muted-foreground">
+                      {fmtHistoryDate(h.date)}
+                      {i === 0 && <Badge variant="outline" className="ml-2 h-5 text-[10px]">current</Badge>}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">{fmtGBP(h.value)}</span>
+                      {h.changeFromPrevious != null && h.changeFromPrevious !== 0 && (
+                        <span className={h.changeFromPrevious < 0 ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
+                          ({h.changeFromPrevious < 0 ? "−" : "+"}{fmtGBP(Math.abs(h.changeFromPrevious))})
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </CardContent>
           </Card>
         )}

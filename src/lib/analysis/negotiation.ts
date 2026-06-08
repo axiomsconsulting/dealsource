@@ -1,4 +1,5 @@
 import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./types";
+import { extractPriceHistory, summarisePriceHistory } from "./price-history";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
@@ -81,10 +82,15 @@ export function buildNegotiation(
   // Market signals
   if (pf.multipleReduce && pf.multipleReduce > 1) {
     const impact = impactPct(asking, 0.015 + Math.min(0.0225, (pf.multipleReduce - 1) * 0.0075), 0.04);
+    // Where the feed gives us the actual tracked price points, cite pounds and dates rather than
+    // just a reduction count — a concrete trajectory is much harder for an agent to wave away.
+    const trail = summarisePriceHistory(extractPriceHistory(prop));
     points.push({
       category: "leverage",
       title: `Price reduced ${pf.multipleReduce} time(s)`,
-      description: `Seller has already re-tested the price. This is motivation evidence, not a blank cheque: weight it as a modest discount chip and keep the reduction history ready if the agent asks why you are below asking.`,
+      description: trail
+        ? `Seller has already re-tested the price. ${trail} Weight it as a modest discount chip, not a blank cheque — keep this trail ready if the agent asks why you are below asking.`
+        : `Seller has already re-tested the price. This is motivation evidence, not a blank cheque: weight it as a modest discount chip and keep the reduction history ready if the agent asks why you are below asking.`,
       gbp_impact: impact,
       confidence: "high",
     });

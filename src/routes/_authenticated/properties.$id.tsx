@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
 import type { NegotiationGuidance, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
+import { extractPriceHistory, fmtHistoryDate } from "@/lib/analysis/price-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -361,6 +362,7 @@ function PropertyDetail() {
                 {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
                 {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
               </div>
+              <PriceHistoryTimeline property={p} />
             </CardContent>
           </Card>
         )}
@@ -403,6 +405,41 @@ function OfferPlanCard({ guidance, personaPass }: { guidance: NegotiationGuidanc
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PriceHistoryTimeline({ property }: { property: any }) {
+  const history = useMemo(() => extractPriceHistory(property), [property]);
+  if (history.length < 2) return null;
+  const oldest = history[history.length - 1];
+  const newest = history[0];
+  const totalChange = newest.value - oldest.value;
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tracked price history</p>
+        {totalChange !== 0 && (
+          <span className={cn("text-xs font-medium", totalChange < 0 ? "text-emerald-700" : "text-amber-700")}>
+            {totalChange < 0 ? "−" : "+"}{fmtGBP(Math.abs(totalChange))} since {fmtHistoryDate(oldest.date)}
+          </span>
+        )}
+      </div>
+      <ul className="space-y-1 text-sm">
+        {history.map((h, i) => (
+          <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">{fmtHistoryDate(h.date)}{i === 0 && <Badge variant="outline" className="ml-2 h-5 text-[10px]">current</Badge>}</span>
+            <span className="flex items-center gap-2">
+              <span className="font-medium">{fmtGBP(h.value)}</span>
+              {h.changeFromPrevious != null && h.changeFromPrevious !== 0 && (
+                <span className={cn("text-xs", h.changeFromPrevious < 0 ? "text-emerald-700" : "text-amber-700")}>
+                  ({h.changeFromPrevious < 0 ? "−" : "+"}{fmtGBP(Math.abs(h.changeFromPrevious))})
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

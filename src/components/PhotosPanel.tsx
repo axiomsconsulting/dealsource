@@ -33,17 +33,35 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
+      // AI condition reports and refurb estimates are tied to the photos that existed when they
+      // ran — silently swapping a same-named file out from under them would leave the report
+      // describing a photo that's no longer there. Once analysis has run, same-name uploads are
+      // skipped and the user must explicitly delete the old photo before adding the replacement.
+      const aiDone = !!(ai.data as any)?.ai_used_at;
+      const existing: any[] = photos.data ?? [];
+      const replacing = new Set<string>();
       const uploaded: { storage_path: string; caption: string | null; is_exterior: boolean }[] = [];
       for (const f of files) {
         if (!f.type.startsWith("image/") && !f.name.match(/\.(jpe?g|png|webp)$/i)) continue;
+        const collision = existing.find((p) => p.caption === f.name && !replacing.has(p.id));
+        if (collision) {
+          if (aiDone) {
+            toast.error(`${f.name}: a photo with this name already exists and AI analysis has run on this property — delete the existing photo first, then re-upload.`);
+            continue;
+          }
+          replacing.add(collision.id);
+        }
         const path = `${user.id}/${propertyId}/${Date.now()}-${f.name.replace(/[^\w.-]/g, "_")}`;
         const { error } = await supabase.storage.from("property-photos").upload(path, f, { upsert: false });
         if (error) { toast.error(`${f.name}: ${error.message}`); continue; }
         uploaded.push({ storage_path: path, caption: f.name, is_exterior: /front|exterior|outside|street/i.test(f.name) });
       }
+      if (replacing.size) {
+        await Promise.all(Array.from(replacing).map((id) => del({ data: { id } })));
+      }
       if (uploaded.length) {
         await add({ data: { propertyId, photos: uploaded } });
-        toast.success(`Uploaded ${uploaded.length} photo(s)`);
+        toast.success(`Uploaded ${uploaded.length} photo(s)${replacing.size ? ` (replaced ${replacing.size} same-named photo${replacing.size === 1 ? "" : "s"})` : ""}`);
         qc.invalidateQueries({ queryKey: ["photos", propertyId] });
       }
     } catch (e: any) { toast.error(e.message); }
@@ -136,8 +154,9 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
               <div key={p.id} className="group relative overflow-hidden rounded-md border">
                 {p.url && <img src={p.url} alt="" className="h-24 w-full object-cover" />}
                 <button
-                  onClick={() => delMut.mutate(p.id)}
-                  className="absolute right-1 top-1 rounded bg-background/80 p-1 opacity-0 group-hover:opacity-100"
+                  onClick={() => { if (confirm("Delete this photo? This removes it from storage too.")) delMut.mutate(p.id); }}
+                  title="Delete photo"
+                  className="absolute right-1 top-1 rounded bg-background/80 p-1 opacity-70 hover:opacity-100 group-hover:opacity-100"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

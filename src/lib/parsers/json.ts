@@ -33,6 +33,7 @@ export function parsePropertyFilterJson(input: string | any): ParsedJsonProperty
   }
   const light = obj?.propertyLight;
   const detail = obj?.propertyDetail;
+  const listingFS = obj?.selectedList?.listingFS;
   if (!light?.address) return null;
   const postcodeMatch = light.address.match(/[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}/i);
   const imgs = collectImages(obj);
@@ -47,7 +48,12 @@ export function parsePropertyFilterJson(input: string | any): ParsedJsonProperty
     epc_rate: light.epcRate || null,
     tenure: light.tenure ?? null,
     area_sqm: light.area ?? null,
+    // The live "current price" (the asking price an investor negotiates against) lives at
+    // different paths depending on the feed vintage — newer exports key the for-sale listing
+    // under selectedList.listingFS.currentPriceValue rather than propertyDetail.forSale; without
+    // this fallback the asking price (and everything downstream of it) silently comes through null.
     asking_price_gbp:
+      listingFS?.currentPriceValue ??
       detail?.forSale?.currentPrice?.value ??
       detail?.forSale?.currentPrice ??
       null,

@@ -8,13 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
-import { bulkIngestProperties, mergeJsonIntoProperty, listProperties } from "@/lib/ingest.functions";
+import { bulkIngestProperties, ingestFromUrl, mergeJsonIntoProperty, listProperties } from "@/lib/ingest.functions";
 import { getOrCreateDefaultPersona } from "@/lib/personas.functions";
 import { parsePropertyFilterCsv } from "@/lib/parsers/csv";
 import { parsePropertyFilterJson } from "@/lib/parsers/json";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Loader2, ArrowRight } from "lucide-react";
+import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Ingest — Deal Negotiator" }] }),
@@ -25,6 +25,7 @@ function Dashboard() {
   const router = useRouter();
   const qc = useQueryClient();
   const ingest = useServerFn(bulkIngestProperties);
+  const ingestUrl = useServerFn(ingestFromUrl);
   const mergeJson = useServerFn(mergeJsonIntoProperty);
   const ensurePersona = useServerFn(getOrCreateDefaultPersona);
   const list = useServerFn(listProperties);
@@ -35,6 +36,7 @@ function Dashboard() {
 
   const [csvText, setCsvText] = useState("");
   const [jsonText, setJsonText] = useState("");
+  const [listingUrl, setListingUrl] = useState("");
   const csvFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
 
@@ -83,6 +85,17 @@ function Dashboard() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const urlMut = useMutation({
+    mutationFn: (url: string) => ingestUrl({ data: { url } }),
+    onSuccess: (r) => {
+      toast.success(`Ingested "${r.property.address}" from listing`);
+      qc.invalidateQueries({ queryKey: ["properties"] });
+      setListingUrl("");
+      router.navigate({ to: "/properties/$id", params: { id: r.property.id } });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const onCsvFile = async (f: File) => {
     const text = await f.text();
     csvMut.mutate(text);
@@ -99,15 +112,16 @@ function Dashboard() {
           <CardHeader>
             <CardTitle>Add properties</CardTitle>
             <CardDescription>
-              Upload a Property Filter CSV export, paste/upload one or many JSON details, or add manually.
+              Upload a Property Filter CSV export, paste/upload one or many JSON details, ingest a listing URL, or add manually.
               Each property is analysed against your active investor criteria automatically.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="csv">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="csv"><FileSpreadsheet className="mr-2 h-4 w-4" />CSV</TabsTrigger>
                 <TabsTrigger value="json"><FileJson className="mr-2 h-4 w-4" />JSON</TabsTrigger>
+                <TabsTrigger value="url"><Link2 className="mr-2 h-4 w-4" />URL</TabsTrigger>
                 <TabsTrigger value="manual"><ClipboardPaste className="mr-2 h-4 w-4" />Manual</TabsTrigger>
               </TabsList>
 
@@ -156,6 +170,25 @@ function Dashboard() {
                 <Button disabled={!jsonText || jsonMut.isPending} onClick={() => jsonMut.mutate(jsonText)}>
                   {jsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Ingest JSON
                 </Button>
+              </TabsContent>
+
+              <TabsContent value="url" className="space-y-4 pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Paste a Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation listing link — Firecrawl scrapes the
+                  page and a property card is created automatically. You can layer on a Property Filter JSON later from
+                  the property page to enrich it further as more data comes in.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    placeholder="https://www.rightmove.co.uk/properties/…"
+                    value={listingUrl}
+                    onChange={(e) => setListingUrl(e.target.value)}
+                  />
+                  <Button disabled={!listingUrl || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
+                    {urlMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                    Ingest from URL
+                  </Button>
+                </div>
               </TabsContent>
 
               <TabsContent value="manual" className="space-y-3 pt-4">

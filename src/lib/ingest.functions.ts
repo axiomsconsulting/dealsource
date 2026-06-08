@@ -4,6 +4,7 @@ import { z } from "zod";
 import { computeRiskFlags } from "./analysis/risk";
 import { lookupArticle4WithClient } from "./analysis/article4";
 import { estimateRefurb } from "./analysis/refurb";
+import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
 
 const PropertyInputSchema = z.object({
   address: z.string().min(1).max(500),
@@ -53,6 +54,50 @@ export const bulkIngestProperties = createServerFn({ method: "POST" })
       .select("id, address");
     if (error) throw new Error(error.message);
     return { inserted: inserted ?? [] };
+  });
+
+export const ingestFromUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ url: z.string().url() }).parse(input))
+  .handler(async ({ data, context }) => {
+    assertSupportedListingUrl(data.url);
+    const scraped = await scrapeListing(data.url);
+    if (!scraped.address) throw new Error("Could not extract a property address from that listing.");
+
+    const propInput: any = {
+      address: scraped.address,
+      postcode: scraped.postcode,
+      beds: scraped.beds,
+      baths: scraped.baths,
+      property_type: scraped.property_type,
+      epc_rate: scraped.epc_rate,
+      tenure: scraped.tenure,
+      area_sqm: scraped.area_sqm,
+      asking_price_gbp: scraped.asking_price_gbp,
+      agent_name: scraped.agent_name,
+      lease_years_remaining: scraped.lease_years_remaining,
+      image_urls: scraped.image_urls,
+      source: "url_scrape",
+      source_link: data.url,
+    };
+    const risks = computeRiskFlags(propInput);
+    const a4 = await lookupArticle4WithClient(context.supabase, propInput.postcode ?? null);
+    const refurb = estimateRefurb(propInput, "medium");
+    const row = {
+      ...propInput,
+      user_id: context.userId,
+      risk_flags: { flags: risks, computed_at: new Date().toISOString() } as any,
+      article4_status: a4.status,
+      article4_source: a4.status !== "unknown" ? "cache" : null,
+      refurb_estimate: refurb as any,
+    };
+    const { data: inserted, error } = await context.supabase
+      .from("properties")
+      .insert(row)
+      .select("id, address")
+      .single();
+    if (error) throw new Error(error.message);
+    return { property: inserted };
   });
 
 export const mergeJsonIntoProperty = createServerFn({ method: "POST" })

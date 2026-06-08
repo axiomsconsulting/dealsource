@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { analyseProperty } from "@/lib/analysis/engine";
+import { extractPriceHistory } from "@/lib/analysis/price-history";
 
 export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -39,6 +40,7 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
         asking_price_gbp: prop.asking_price_gbp, source_link: prop.source_link,
       },
       analysis,
+      priceHistory: extractPriceHistory(prop as any),
       ai: aiRow?.ai_notes ?? null,
       photoIds: (photos ?? []).map((p) => p.id),
       generatedAt: new Date().toISOString(),
