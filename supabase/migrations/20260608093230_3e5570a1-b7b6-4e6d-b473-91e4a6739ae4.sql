@@ -1,0 +1,3 @@
+ALTER TABLE public.properties
+  ADD COLUMN IF NOT EXISTS epc_data JSONB,
+  ADD COLUMN IF NOT EXISTS epc_fetched_at TIMESTAMPTZ;
