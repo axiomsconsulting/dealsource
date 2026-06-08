@@ -22,6 +22,9 @@ import { RefurbPanel } from "@/components/RefurbPanel";
 import { RiskChips } from "@/components/RiskChips";
 import { NegotiationPanel } from "@/components/NegotiationPanel";
 import { ImageLibrary } from "@/components/ImageLibrary";
+import { ImageCarousel } from "@/components/ImageCarousel";
+import { HmoLayoutPanel } from "@/components/HmoLayoutPanel";
+import { SurveyStrategyPanel } from "@/components/SurveyStrategyPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -29,11 +32,11 @@ import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
-  head: () => ({ meta: [{ title: "Property — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Property — Deal Negotiator" }] }),
   component: PropertyDetail,
 });
 
@@ -74,6 +77,7 @@ function PropertyDetail() {
   });
   const [pfJsonText, setPfJsonText] = useState("");
   const [pfDialogOpen, setPfDialogOpen] = useState(false);
+  const [heroOpenIndex, setHeroOpenIndex] = useState<number | null>(null);
   const enrichJsonMut = useMutation({
     mutationFn: (json: string) => enrichJson({ data: { propertyId: id, json } }),
     onSuccess: (r: any) => {
@@ -91,7 +95,9 @@ function PropertyDetail() {
   const eff = analysis.effectiveInputs;
   const best = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
   const allImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
-  const { photos: heroImages, floorPlans } = partitionImageUrls(allImages);
+  const { photos: heroImagesRaw, floorPlans } = partitionImageUrls(allImages);
+  const heroImages = Array.from(new Set(heroImagesRaw));
+  const heroCarouselImages = heroImages.map((url) => ({ url }));
 
   return (
     <AppShell>
@@ -150,16 +156,28 @@ function PropertyDetail() {
       {heroImages.length > 0 && (
         <Card className="mb-4 overflow-hidden p-0">
           <div className="grid grid-cols-4 gap-1">
-            <div className="col-span-4 sm:col-span-2 sm:row-span-2">
-              <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover" />
-            </div>
+            <button className="col-span-4 sm:col-span-2 sm:row-span-2" onClick={() => setHeroOpenIndex(0)}>
+              <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover transition hover:opacity-90" />
+            </button>
             {heroImages.slice(1, 5).map((u, i) => (
-              <img key={i} src={u} alt="" className="h-32 w-full object-cover sm:h-[178px]" loading="lazy" />
+              <button key={i} onClick={() => setHeroOpenIndex(i + 1)}>
+                <img src={u} alt="" className="h-32 w-full object-cover transition hover:opacity-90 sm:h-[178px]" loading="lazy" />
+              </button>
             ))}
           </div>
-          {heroImages.length > 5 && <p className="px-3 py-2 text-xs text-muted-foreground">+{heroImages.length - 5} more in listing</p>}
+          <div className="flex items-center justify-between px-3 py-2">
+            <button onClick={() => setHeroOpenIndex(0)} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length} photos
+            </button>
+            {heroImages.length > 5 && (
+              <a href="#image-library" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                +{heroImages.length - 5} more — open in image library ↓
+              </a>
+            )}
+          </div>
         </Card>
       )}
+      <ImageCarousel images={heroCarouselImages} index={heroOpenIndex} onIndexChange={setHeroOpenIndex} onClose={() => setHeroOpenIndex(null)} />
 
       {floorPlans.length > 0 && (
         <Card className="mb-4">
@@ -177,6 +195,8 @@ function PropertyDetail() {
           </CardContent>
         </Card>
       )}
+
+      <HmoLayoutPanel propertyId={id} hasFloorPlan={floorPlans.length > 0} />
 
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center gap-2 py-3">
@@ -250,6 +270,17 @@ function PropertyDetail() {
                       <p className="font-medium">{n.title}</p>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
+                    {n.specOptions && n.specOptions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {n.specOptions.map((s) => (
+                          <div key={s.rating} className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-xs">
+                            <Badge className="h-5 w-5 justify-center rounded-full p-0 text-[10px]">{s.rating}</Badge>
+                            <span className="text-muted-foreground">{s.label}</span>
+                            <span className="font-semibold">{fmtGBP(s.gbp)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
@@ -258,6 +289,10 @@ function PropertyDetail() {
                 </div>
               </div>
             ))}
+            <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
+              <p className="text-sm font-medium">Total justified reduction</p>
+              <p className="text-lg font-bold text-primary">−{fmtGBP(analysis.negotiationTotal)}</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -317,12 +352,13 @@ function PropertyDetail() {
         <PhotosPanel propertyId={id} />
         <EpcPanel propertyId={id} />
         <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
-        <ImageLibrary urls={heroImages} />
+        <ImageLibrary propertyId={id} urls={heroImages} />
         <NegotiationPanel
           property={p}
           refurbTotal={analysis.effectiveInputs.refurb_cost}
           onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Offer set to ${fmtGBP(gbp)}`); }}
         />
+        <SurveyStrategyPanel property={p} />
         <DealSheetPanel propertyId={id} overrides={over} />
       </div>
     </AppShell>
@@ -342,6 +378,7 @@ function fmtNumber(n: StrategyNumber) {
   return n.format === "gbp" ? fmtGBP(n.value)
     : n.format === "pct" ? fmtPct(n.value)
     : n.format === "months" ? `${fmtNum(n.value)} mo`
+    : n.format === "count" ? fmtNum(Math.round(n.value), 0)
     : fmtNum(n.value, 2);
 }
 

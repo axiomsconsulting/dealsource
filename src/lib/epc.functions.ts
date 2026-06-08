@@ -118,16 +118,40 @@ function normaliseAddress(s: string | null | undefined): string {
   return (s ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/** Scores how well an EPC search row's address matches the property's stored address —
- *  token-overlap so "12 High Street" matches "Flat 2, 12 High Street, Townsville". */
-function addressMatchScore(propertyAddress: string, row: any): number {
-  const rowAddr = normaliseAddress([row.addressLine1, row.addressLine2, row.addressLine3, row.addressLine4].filter(Boolean).join(" "));
-  const a = new Set(normaliseAddress(propertyAddress).split(" ").filter((t) => t.length > 1));
-  const b = new Set(rowAddr.split(" ").filter((t) => t.length > 1));
-  if (!a.size || !b.size) return 0;
+function joinRowAddress(row: any): string {
+  return [row.addressLine1, row.addressLine2, row.addressLine3, row.addressLine4].filter(Boolean).join(", ");
+}
+
+/** The first standalone number (house/flat/unit number, optionally suffixed "27a") in an address —
+ *  the single most important disambiguator between neighbouring or stacked properties ("27
+ *  Flaxlands Court" vs "1 Flaxlands Court" share every other word but are different dwellings). */
+function extractUnitNumber(normalisedAddr: string): string | null {
+  const m = normalisedAddr.match(/\b(\d+[a-z]?)\b/);
+  return m ? m[1] : null;
+}
+
+/** Address match scoring tuned to make a *wrong* match structurally impossible to rank as
+ *  confident: the leading unit/house number must match exactly (it's the one token that
+ *  distinguishes "27 Flaxlands Court" from "1 Flaxlands Court"), and a normalised exact string
+ *  match is the only thing that can be auto-applied without the user confirming. Anything short
+ *  of that is surfaced as a pick-list — never silently substituted. */
+function scoreAddressMatch(propertyAddress: string, row: any): { score: number; exact: boolean; numberMatch: boolean; rowAddr: string } {
+  const rowAddr = joinRowAddress(row);
+  const normP = normaliseAddress(propertyAddress);
+  const normR = normaliseAddress(rowAddr);
+  const exact = !!normP && normP === normR;
+
+  const numP = extractUnitNumber(normP);
+  const numR = extractUnitNumber(normR);
+  const numberMatch = numP != null && numP === numR;
+
+  const tokensP = new Set(normP.split(" ").filter((t) => t.length > 1));
+  const tokensR = new Set(normR.split(" ").filter((t) => t.length > 1));
   let overlap = 0;
-  for (const t of a) if (b.has(t)) overlap++;
-  return overlap / a.size;
+  for (const t of tokensP) if (tokensR.has(t)) overlap++;
+  const overlapRatio = tokensP.size ? overlap / tokensP.size : 0;
+
+  return { score: overlapRatio, exact, numberMatch, rowAddr };
 }
 
 function buildEpcData(cert: any, certificateNumber: string, stepTitles: Map<number, string>): any {
@@ -200,6 +224,27 @@ function buildEpcData(cert: any, certificateNumber: string, stepTitles: Map<numb
   };
 }
 
+async function loadCertificateAndPersist(context: any, propertyId: string, certificateNumber: string, token: string, matchedManually: boolean) {
+  const certRes = await epcFetch(`/api/certificate?certificate_number=${encodeURIComponent(certificateNumber)}`, token);
+  const cert = certRes?.data;
+  if (!cert) throw new Error("EPC register did not return certificate detail for that certificate number");
+
+  const stepTitles = await fetchStepTitles(certificateNumber);
+  const epc_data = { ...buildEpcData(cert, certificateNumber, stepTitles), matchedByAddress: true, matchedManually };
+  const epc_fetched_at = new Date().toISOString();
+  const { error: updErr } = await context.supabase
+    .from("properties").update({ epc_data, epc_fetched_at }).eq("id", propertyId).eq("user_id", context.userId);
+  if (updErr) throw new Error(updErr.message);
+  return { status: "matched" as const, epc_data, epc_fetched_at };
+}
+
+// Wrong EPC matches are worse than no match — they put another property's improvement costs,
+// scores and recommendations in front of the user as if they were this property's own. So the
+// only thing this ever does *without* asking is an exact, normalised string match (for the very
+// common single-dwelling-per-postcode case, where it's effectively unambiguous). Anything short
+// of that — including the "looks pretty close" matches that caused "27 Flaxlands Court" to be
+// silently swapped for "1 Flaxlands Court" — comes back as a pick-list for the user to confirm
+// with one click via `selectEpcCertificate`. Nothing is written to the property until then.
 export const fetchEpcForProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
@@ -216,29 +261,46 @@ export const fetchEpcForProperty = createServerFn({ method: "POST" })
 
     const search = await epcFetch(`/api/domestic/search?postcode=${encodeURIComponent(prop.postcode)}&page_size=100`, token);
     const rows: any[] = search?.data ?? [];
-    if (!rows.length) throw new Error(`No EPC certificates found on the register for postcode ${prop.postcode}`);
+    if (!rows.length) return { status: "not_found" as const, searchedPostcode: prop.postcode };
 
-    // Best address match first; fall back to the most recently lodged certificate for the postcode.
     const scored = rows
-      .map((r) => ({ row: r, score: addressMatchScore(prop.address ?? "", r) }))
-      .sort((a, b) => (b.score - a.score) || (String(b.row.registrationDate ?? "").localeCompare(String(a.row.registrationDate ?? ""))));
-    const chosen = scored[0];
-    if (!chosen?.row?.certificateNumber) throw new Error("EPC register returned no usable certificate reference for this postcode");
-    const matchedByAddress = chosen.score >= 0.5;
+      .map((r) => ({ row: r, ...scoreAddressMatch(prop.address ?? "", r) }))
+      .sort((a, b) => (Number(b.exact) - Number(a.exact)) || (Number(b.numberMatch) - Number(a.numberMatch)) || (b.score - a.score)
+        || String(b.row.registrationDate ?? "").localeCompare(String(a.row.registrationDate ?? "")));
 
-    const certificateNumber = chosen.row.certificateNumber;
-    const certRes = await epcFetch(`/api/certificate?certificate_number=${encodeURIComponent(certificateNumber)}`, token);
-    const cert = certRes?.data;
-    if (!cert) throw new Error("EPC register did not return certificate detail for the matched property");
+    const exactMatches = scored.filter((s) => s.exact);
+    if (exactMatches.length === 1) {
+      return await loadCertificateAndPersist(context, data.propertyId, exactMatches[0].row.certificateNumber, token, false);
+    }
 
-    const stepTitles = await fetchStepTitles(certificateNumber);
-    const epc_data = { ...buildEpcData(cert, certificateNumber, stepTitles), matchedByAddress };
-    const epc_fetched_at = new Date().toISOString();
-    const { error: updErr } = await context.supabase
-      .from("properties").update({ epc_data, epc_fetched_at }).eq("id", data.propertyId).eq("user_id", context.userId);
-    if (updErr) throw new Error(updErr.message);
+    // Either no exact match, or more than one identical address on the register for this postcode
+    // (genuinely possible — re-lodged certificates) — surface candidates, best-ranked first, and
+    // let the user pick. Capped to a sane review size; the full list is on the register itself.
+    const candidates = scored.slice(0, 12).map((s) => ({
+      certificateNumber: s.row.certificateNumber as string,
+      address: s.rowAddr,
+      band: s.row.currentEnergyEfficiencyBand ?? null,
+      lodgementDate: s.row.registrationDate ?? null,
+      numberMatch: s.numberMatch,
+    }));
+    return { status: "ambiguous" as const, candidates, searchedPostcode: prop.postcode, propertyAddress: prop.address ?? null };
+  });
 
-    return { epc_data, epc_fetched_at };
+// One-click confirmation step for the "ambiguous" path above — the user has visually confirmed
+// which register entry is actually their property, so we fetch and persist that exact one.
+export const selectEpcCertificate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid(), certificateNumber: z.string().min(1) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const token = await loadUserEpcToken(context.supabase, context.userId);
+    if (!token) throw new Error("Add your EPC register bearer token below before fetching — it's saved to your account only.");
+
+    const { data: prop, error: propErr } = await context.supabase
+      .from("properties").select("id").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (propErr) throw new Error(propErr.message);
+    if (!prop) throw new Error("Property not found");
+
+    return await loadCertificateAndPersist(context, data.propertyId, data.certificateNumber, token, true);
   });
 
 export const getEpcForProperty = createServerFn({ method: "GET" })

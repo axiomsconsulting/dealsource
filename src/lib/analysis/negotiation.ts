@@ -6,6 +6,9 @@ export interface NegotiationResult {
    *  the strategy-comparison baseline; deliberately independent of any persona's target/max budget
    *  so the recommendation stays grounded in the property itself, not a generic client preference. */
   suggestedOffer: number;
+  /** Sum of every justified-adjustment line item (excludes the "suggested opening offer" anchor,
+   *  which restates this total as a price) — the headline "total justified reduction" figure. */
+  totalLeverage: number;
 }
 
 // Anchoring far below this reads as not understanding the property — agents/sellers dismiss it
@@ -52,6 +55,42 @@ export function buildNegotiation(
       description: `From 2030 most rentals must be EPC C+. Buying at EPC ${epc} means committing capex (insulation £1.5k–£4k, double glazing top-up £2k–£6k, low-energy boiler £3k). Use this to negotiate a price reduction reflecting that work.`,
       gbp_impact: epc === "D" ? 3500 : epc === "E" ? 7500 : 12000,
       confidence: "medium",
+    });
+
+    // EPC spend to reach C — a dedicated bill-of-materials line, broken into Low/Medium/High spec
+    // tiers so the offer can be framed around "however they want to play it, here's what closing
+    // the gap costs". Where the register's own improvement roadmap is available (cumulative cost
+    // to the step that lands the property in band C — see epc.functions.ts buildEpcData), use that
+    // grounded figure for L (cheapest path to C) and H (full works); otherwise fall back to a
+    // banded heuristic. M is always the midpoint — the number actually used to frame the ask.
+    const epcData: any = (prop as any).epc_data ?? null;
+    const recs: any[] = Array.isArray(epcData?.recommendations) ? epcData.recommendations : [];
+    const stepToC = recs.find((r) => typeof r.resultingScore === "number" && r.resultingScore >= 69);
+    let lowSpec: number, highSpec: number, grounded: boolean;
+    if (stepToC && (stepToC.cumulativeCostMin > 0 || stepToC.cumulativeCostMax > 0)) {
+      lowSpec = stepToC.cumulativeCostMin || stepToC.cumulativeCostMax;
+      highSpec = Math.max(stepToC.cumulativeCostMax || stepToC.cumulativeCostMin, lowSpec);
+      grounded = true;
+    } else {
+      const base = epc === "D" ? 3500 : epc === "E" ? 7500 : 12000;
+      lowSpec = Math.round(base * 0.6);
+      highSpec = Math.round(base * 1.6);
+      grounded = false;
+    }
+    const midSpec = Math.round((lowSpec + highSpec) / 2);
+    points.push({
+      category: "improvement_gap",
+      title: "EPC spend to reach C",
+      description: grounded
+        ? `The register's own improvement roadmap shows the cumulative cost of the measures needed to lift this property from EPC ${epc} into band C${stepToC?.resultingBand === "C" ? "" : " or better"} (step ${stepToC.sequence ?? "?"}: "${stepToC.title}"). L = cheapest qualifying route, H = full assessor-costed works, M = realistic midpoint — quote M when framing the ask, and hold L/H in reserve to match whatever spec level the seller pushes back with.`
+        : `No assessor-costed roadmap on file for this certificate, so this is a banded estimate from the EPC ${epc} → C gap (insulation, glazing, heating). L = bare-minimum measures to scrape into C, H = full comprehensive works, M = realistic midpoint — quote M, and use L/H as your floor and ceiling depending on how the seller responds.`,
+      gbp_impact: midSpec,
+      confidence: grounded ? "high" : "medium",
+      specOptions: [
+        { rating: "L", label: "Low spec — minimum to qualify", gbp: lowSpec },
+        { rating: "M", label: "Medium spec — realistic midpoint", gbp: midSpec },
+        { rating: "H", label: "High spec — full works", gbp: highSpec },
+      ],
     });
   }
 
@@ -132,5 +171,5 @@ export function buildNegotiation(
     confidence: "high",
   });
 
-  return { points, suggestedOffer };
+  return { points, suggestedOffer, totalLeverage };
 }

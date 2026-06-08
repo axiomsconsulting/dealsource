@@ -3,6 +3,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { isFloorPlan, partitionImageUrls } from "@/lib/images";
+import { estimateMaxHmoRoomsByArea, HMO_MIN_SINGLE_ROOM_SQM, HMO_MIN_DOUBLE_ROOM_SQM } from "@/lib/analysis/hmo-layout";
 
 const PayloadSchema = z.object({
   condition: z.object({
@@ -169,6 +171,186 @@ Use UK 2026 trade prices. Be conservative.`;
     if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
     else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
     return { items, summary: parsed.summary, conditionScore: parsed.conditionScore };
+  });
+
+/* ------------------------------------------------------------------ */
+/* HMO/SA floor-plan layout assessment                                 */
+/* ------------------------------------------------------------------ */
+
+const HmoLayoutSchema = z.object({
+  summary: z.string().max(700).optional(),
+  recommendedRooms: z.number().int().min(0).max(20).optional(),
+  rooms: z.array(z.object({
+    label: z.string(),
+    approxSqm: z.number().min(0).max(100).optional(),
+    meetsMinStandard: z.boolean().optional(),
+    ensuitePossible: z.boolean().optional(),
+    notes: z.string().max(300).optional(),
+  })).max(20).optional(),
+  saUnits: z.array(z.object({
+    label: z.string(),
+    approxSqm: z.number().min(0).max(150).optional(),
+    ensuiteAndKitchenettePossible: z.boolean().optional(),
+    notes: z.string().max(300).optional(),
+  })).max(10).optional(),
+  caveats: z.string().max(500).optional(),
+});
+
+/** Floor-plan-driven HMO/SA layout assessment — two layers, kept clearly separate so the user
+ *  can see where the "hard" numbers end and the AI's visual judgement begins:
+ *   1. A deterministic ceiling on lettable bedrooms from total floor area against the *statutory*
+ *      minimum HMO bedroom size (6.51m² single-occupant) — arithmetic against a published
+ *      standard, independent of any model call, computed by `estimateMaxHmoRoomsByArea`.
+ *   2. A vision pass over the actual floor plan image(s) — the only source that can speak to
+ *      *where* walls/doors/plumbing actually sit — proposing a room-by-room conversion within
+ *      that ceiling, judging per-room ensuite feasibility, and flagging any self-contained
+ *      ensuite+kitchenette unit a serviced-accommodation (SA) strategy could carve out. */
+export const analyseHmoLayout = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const { data: photos } = await context.supabase
+      .from("photos").select("*").eq("property_id", data.propertyId);
+    const storedFloorPlans = (photos ?? []).filter((p: any) => isFloorPlan(p.caption, p.storage_path));
+    const urls: string[] = [];
+    for (const ph of storedFloorPlans) {
+      const { data: signed } = await context.supabase.storage.from("property-photos").createSignedUrl(ph.storage_path, 600);
+      if (signed?.signedUrl) urls.push(signed.signedUrl);
+    }
+    const externalAll: string[] = Array.isArray(prop.image_urls) ? prop.image_urls : [];
+    const { floorPlans: externalFloorPlans } = partitionImageUrls(externalAll);
+    const all = [...urls, ...externalFloorPlans].slice(0, 6);
+    if (!all.length) throw new Error("No floor plan image found — upload one or fetch the listing's floor plan first. Layout analysis needs to see the actual room arrangement, not just photos.");
+
+    const areaEstimate = estimateMaxHmoRoomsByArea(prop.area_sqm);
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+
+    const system = `You are a UK HMO/serviced-accommodation conversion surveyor. Examine the floor plan image(s) and propose a realistic room-by-room conversion into individually-let bedrooms.
+
+Hard rules — do not propose anything that breaches these:
+- Single-occupant bedroom (person aged 10+): minimum ${HMO_MIN_SINGLE_ROOM_SQM} m²
+- Two persons sharing a bedroom: minimum ${HMO_MIN_DOUBLE_ROOM_SQM} m²
+- Never suggest more bedrooms than the floor-area ceiling provided in the user message
+- Don't propose layouts that would remove the only fire escape route from a room, or require moving structural walls, soil stacks or staircases
+
+For each proposed bedroom, judge from the actual layout (door/window positions, adjacent plumbing, room shape) whether there is realistically space to partition off a small ensuite shower/WC without the remaining bedroom area dropping below the minimum. Separately, identify whether any part of the property (e.g. a larger room, loft, or annexe shown on the plan) could be configured as a fully self-contained unit — its own ensuite AND kitchenette — suitable for serviced-accommodation (SA) letting. Be conservative: if the plan doesn't clearly support a claim, say so in "notes" rather than asserting it. Output STRICT JSON ONLY, matching:
+{"summary":"...","recommendedRooms":0,"rooms":[{"label":"Room 1 — front double bedroom","approxSqm":12,"meetsMinStandard":true,"ensuitePossible":true,"notes":"..."}],"saUnits":[{"label":"Loft conversion — self-contained studio","approxSqm":22,"ensuiteAndKitchenettePossible":true,"notes":"..."}],"caveats":"..."}`;
+
+    const contextLine = areaEstimate
+      ? `Floor-area ceiling at the statutory minimum bedroom size (after reserving ~${Math.round(areaEstimate.communalReservePct * 100)}% of ${areaEstimate.totalAreaSqm}m² total for kitchen/bathrooms/circulation, leaving ~${areaEstimate.lettableAreaSqm}m² lettable): no more than ${areaEstimate.maxRooms} bedroom(s). Do not propose more than this.`
+      : `No total floor area is on file for this property — judge bedroom count from the plan's drawn dimensions/scale only, and say so in "caveats" if the plan has no scale or dimensions.`;
+
+    const content: any[] = [
+      { type: "text", text: `Property: ${prop.address}\nType: ${prop.property_type ?? "?"}, currently ${prop.beds ?? "?"} bed${prop.area_sqm ? `, ${prop.area_sqm}m² total` : ""}.\n${contextLine}\n${all.length} floor plan image(s) attached.` },
+      ...all.map((u) => ({ type: "image", image: u })),
+    ];
+
+    let parsed: any;
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content }] });
+      parsed = HmoLayoutSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Floor plan layout AI failed: " + e.message);
+    }
+
+    const hmoLayout = { ...parsed, areaEstimate, analysedAt: new Date().toISOString() };
+
+    const { data: existing } = await context.supabase
+      .from("analyses").select("id, ai_payload").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    const prev = (existing?.ai_payload ?? {}) as any;
+    const merged = { ...prev, hmoLayout };
+    const row = { ai_payload: merged, ai_version: AI_VERSION, ai_used_at: new Date().toISOString() };
+    if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
+    else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
+
+    return hmoLayout;
+  });
+
+/* ------------------------------------------------------------------ */
+/* Listing photo room tagging — groups the image library by room      */
+/* ------------------------------------------------------------------ */
+
+const ROOM_KEYS = ["lounge", "dining", "kitchen", "bedroom", "bathroom", "garden", "landing", "exterior", "other"] as const;
+export const ROOM_LABELS: Record<(typeof ROOM_KEYS)[number], string> = {
+  lounge: "Lounge / living room",
+  dining: "Dining room",
+  kitchen: "Kitchen",
+  bedroom: "Bedroom(s)",
+  bathroom: "Bathroom",
+  garden: "Garden",
+  landing: "Landing / hallway",
+  exterior: "Outside / exterior",
+  other: "Other",
+};
+
+const ImageTagsSchema = z.object({
+  tags: z.array(z.object({
+    index: z.number().int().min(0),
+    room: z.enum(ROOM_KEYS),
+    label: z.string().max(80),
+  })).max(60),
+});
+
+/** Tags every listing photo with the room it shows and a short caption — a one-off, cached vision
+ *  pass (google/gemini-2.5-flash, the cheapest vision-capable model on the gateway) so the image
+ *  library can group "Lounge / Kitchen / Bedrooms / Garden / ..." automatically without re-running
+ *  on every page view. Persisted into analyses.ai_payload.imageTags, keyed by URL so it survives
+ *  re-ordering of the listing's own image array. */
+export const categoriseListingImages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("image_urls").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const all: string[] = Array.isArray(prop.image_urls) ? prop.image_urls : [];
+    const { photos } = partitionImageUrls(all);
+    const urls = Array.from(new Set(photos)).slice(0, 30);
+    if (!urls.length) throw new Error("No listing photos to organise — this property has no photo gallery on file.");
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+
+    const system = `You are organising a UK property listing's photo gallery by room. For EVERY photo given (in order, indices 0..N-1), identify which room/area it shows and write a short (3-6 word) caption describing what's notable in it (e.g. "Lounge with bay window", "Kitchen — fitted units", "Rear garden, lawned"). Output STRICT JSON only, matching:
+{"tags":[{"index":0,"room":"lounge|dining|kitchen|bedroom|bathroom|garden|landing|exterior|other","label":"short caption"}]}
+One entry per photo, in index order. Use "other" only when truly ambiguous (hallway storage cupboards, utility rooms, unclear angles).`;
+
+    const content: any[] = [
+      { type: "text", text: `${urls.length} listing photos attached, indices 0..${urls.length - 1}.` },
+      ...urls.map((u) => ({ type: "image", image: u })),
+    ];
+
+    let parsed: any;
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content }] });
+      parsed = ImageTagsSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Photo organiser AI failed: " + e.message);
+    }
+
+    const byUrl: Record<string, { room: string; label: string }> = {};
+    for (const t of parsed.tags ?? []) {
+      const url = urls[t.index];
+      if (url) byUrl[url] = { room: t.room, label: t.label };
+    }
+
+    const { data: existing } = await context.supabase
+      .from("analyses").select("id, ai_payload").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    const prev = (existing?.ai_payload ?? {}) as any;
+    const imageTags = { byUrl, taggedAt: new Date().toISOString() };
+    const merged = { ...prev, imageTags };
+    const row = { ai_payload: merged, ai_version: AI_VERSION, ai_used_at: new Date().toISOString() };
+    if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
+    else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
+
+    return imageTags;
   });
 
 /* ------------------------------------------------------------------ */

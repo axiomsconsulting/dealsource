@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Ingest — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Ingest — Deal Negotiator" }] }),
   component: Dashboard,
 });
 

@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Building2, TrendingUp, ScrollText, Sliders } from "lucide-react";
+import { TrendingUp, ScrollText, Sliders } from "lucide-react";
+import { AppFooter } from "@/components/AppFooter";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Deal Sourcer — UK Property Investment Analyser" },
+      { title: "Deal Negotiator — UK Property Investment Analyser" },
       { name: "description", content: "Ingest properties from Property Filter, run BTL / BRRR / SA / HMO / Flip analysis, generate negotiation playbooks and investor deal sheets." },
-      { property: "og:title", content: "Deal Sourcer" },
+      { property: "og:title", content: "Deal Negotiator" },
       { property: "og:description", content: "BTL / BRRR / SA / HMO / Flip analysis with negotiation playbook." },
     ],
   }),
@@ -15,21 +16,18 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b bg-card">
         <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <Building2 className="h-6 w-6 text-primary" />
-            Deal Sourcer
-          </div>
+          <img src="/omnispace-logo.png" alt="Deal Negotiator — Omnispace Estates" className="h-9 w-auto" />
           <Link to="/auth" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
             Sign in
           </Link>
         </div>
       </header>
-      <section className="container mx-auto px-6 py-20 text-center">
+      <section className="container mx-auto flex-1 px-6 py-20 text-center">
         <h1 className="mx-auto max-w-3xl text-5xl font-bold tracking-tight">
-          Stop paying asking price. <span className="text-primary">Source deals like a pro.</span>
+          Stop paying asking price. <span className="text-primary">Negotiate deals like a pro.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
           Ingest Property Filter CSVs and JSON, analyse against BTL / BRRR / SA / HMO / Flip / Title Split,
@@ -52,6 +50,7 @@ function Landing() {
           ))}
         </div>
       </section>
+      <AppFooter />
     </div>
   );
 }

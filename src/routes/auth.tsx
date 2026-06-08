@@ -4,11 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Sign in — Deal Negotiator" }] }),
   component: AuthPage,
 });
 
@@ -45,13 +44,12 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm rounded-lg border bg-card p-8 shadow-sm">
-        <div className="mb-6 flex items-center gap-2">
-          <Building2 className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Deal Sourcer</span>
+        <div className="mb-6 flex items-center">
+          <img src="/omnispace-logo.png" alt="Deal Negotiator — Omnispace Estates" className="h-9 w-auto" />
         </div>
         <h1 className="mb-1 text-xl font-bold">{mode === "signin" ? "Sign in" : "Create account"}</h1>
         <p className="mb-6 text-sm text-muted-foreground">
-          {mode === "signin" ? "Welcome back." : "Start sourcing deals."}
+          {mode === "signin" ? "Welcome back." : "Start negotiating deals."}
         </p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1.5">

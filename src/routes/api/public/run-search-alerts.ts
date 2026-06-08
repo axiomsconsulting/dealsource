@@ -57,7 +57,7 @@ export const Route = createFileRoute("/api/public/run-search-alerts")({
           if (newMatches.length && resend && s.notify_email) {
             const html = `<h2>${newMatches.length} new deal${newMatches.length > 1 ? "s" : ""} match "${s.name}"</h2>
               <ul>${newMatches.map((m) => `<li><strong>${m.score}/100</strong> — ${m.address}</li>`).join("")}</ul>
-              <p>Open Deal Sourcer to view full analysis.</p>`;
+              <p>Open Deal Negotiator to view full analysis.</p>`;
             try {
               await resend.emails.send({
                 from: fromEmail, to: s.notify_email,

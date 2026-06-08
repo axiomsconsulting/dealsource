@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Flame, KeyRound, RefreshCw, Zap } from "lucide-react";
 import {
-  fetchEpcForProperty, getEpcForProperty, getEpcCredentialsStatus, saveEpcCredentials, clearEpcCredentials,
+  fetchEpcForProperty, selectEpcCertificate, getEpcForProperty, getEpcCredentialsStatus, saveEpcCredentials, clearEpcCredentials,
   EPC_BANDS, bandForScore,
 } from "@/lib/epc.functions";
 import { buildEpcRoadmap } from "@/lib/analysis/epc-plan";
@@ -27,6 +27,7 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
   const qc = useQueryClient();
   const getEpc = useServerFn(getEpcForProperty);
   const fetchEpc = useServerFn(fetchEpcForProperty);
+  const selectCert = useServerFn(selectEpcCertificate);
 
   const q = useQuery({ queryKey: ["epc", propertyId], queryFn: () => getEpc({ data: { propertyId } }) });
   const epc: any = (q.data as any)?.epc_data ?? null;
@@ -36,9 +37,39 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
   const credQ = useQuery({ queryKey: ["epc-credentials"], queryFn: () => getCredsStatus({ data: {} } as any) });
   const configured = !!(credQ.data as any)?.configured;
 
+  // A wrong auto-match is worse than no match — it puts another property's certificate in front
+  // of the user as if it were theirs. So `fetchEpcForProperty` only auto-applies an exact address
+  // match; anything else comes back as a "candidates" pick-list for a one-click human confirmation
+  // via `selectEpcCertificate`, and nothing is written until the user picks.
+  const [candidates, setCandidates] = useState<any[] | null>(null);
+  const [searchedPostcode, setSearchedPostcode] = useState<string | null>(null);
+
   const mut = useMutation({
     mutationFn: () => fetchEpc({ data: { propertyId } }),
-    onSuccess: () => { toast.success("EPC certificate fetched from the register"); qc.invalidateQueries({ queryKey: ["epc", propertyId] }); },
+    onSuccess: (r: any) => {
+      if (r.status === "matched") {
+        toast.success("EPC certificate matched and fetched from the register");
+        setCandidates(null);
+        qc.invalidateQueries({ queryKey: ["epc", propertyId] });
+      } else if (r.status === "ambiguous") {
+        setCandidates(r.candidates);
+        setSearchedPostcode(r.searchedPostcode);
+        toast.message("Couldn't confirm a single exact address match — pick the right certificate below");
+      } else {
+        setCandidates(null);
+        toast.error(`No EPC certificates found on the register for postcode ${r.searchedPostcode}`);
+      }
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const selectMut = useMutation({
+    mutationFn: (certificateNumber: string) => selectCert({ data: { propertyId, certificateNumber } }),
+    onSuccess: () => {
+      toast.success("Certificate saved to this property");
+      setCandidates(null);
+      qc.invalidateQueries({ queryKey: ["epc", propertyId] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -50,7 +81,7 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2"><Zap className="h-4 w-4 text-accent" /> EPC — energy performance</span>
           {credQ.isSuccess && configured && (
-            <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => mut.mutate()}>
+            <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => { setCandidates(null); mut.mutate(); }}>
               <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
               {epc ? "Refetch from register" : "Fetch from EPC register"}
             </Button>
@@ -58,13 +89,41 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
         </CardTitle>
         <CardDescription>
           {epc
-            ? <>From the government EPC register{epc.matchedByAddress ? "" : " — matched by postcode only, double-check the address below"}{fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}</>
+            ? <>From the government EPC register — matched on the exact registered address{epc.matchedManually ? " (you confirmed this one)" : ""}{fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}</>
             : "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."}
         </CardDescription>
       </CardHeader>
-      <CardContent className={epc ? "border-b pb-6" : undefined}>
+      <CardContent className={epc || candidates ? "border-b pb-6" : undefined}>
         <EpcCredentialsForm />
       </CardContent>
+      {candidates && (
+        <CardContent className="border-b pb-6">
+          <h4 className="mb-1 text-sm font-semibold">Which of these is this property?</h4>
+          <p className="mb-3 text-xs text-muted-foreground">
+            The register doesn't have an exact address match for postcode {searchedPostcode} — rather than guess (and risk showing you
+            another property's certificate), pick the correct one below. Nothing is saved until you choose.
+          </p>
+          {candidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No certificates found for this postcode.</p>
+          ) : (
+            <ul className="space-y-2">
+              {candidates.map((c) => (
+                <li key={c.certificateNumber} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{c.address}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.band ? `Band ${c.band} · ` : ""}lodged {c.lodgementDate ? new Date(c.lodgementDate).toLocaleDateString("en-GB") : "unknown date"} · cert {c.certificateNumber}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" disabled={selectMut.isPending} onClick={() => selectMut.mutate(c.certificateNumber)}>
+                    Use this certificate
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      )}
       {epc && (
         <CardContent className="space-y-6">
           {epc.address && (

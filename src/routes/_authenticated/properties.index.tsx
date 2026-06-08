@@ -27,7 +27,7 @@ import { rowsToCSV, downloadCSV, type ExportRow } from "@/lib/export";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/")({
-  head: () => ({ meta: [{ title: "Properties — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Properties — Deal Negotiator" }] }),
   component: PropertiesPage,
 });
 

@@ -55,9 +55,48 @@ export function NegotiationPanel({
   const compMid = flex?.reductionPctMid ?? 0.05;
   const combinedFlexPct = Math.min(0.25, compMid + circFlex);
   const refurbReduction = Math.min(refurbTotal, asking * 0.15);
+
+  // Opening anchor: stack every justified factor — your most aggressive credible bid. This is the
+  // low end; you expect (and want) to move up from here over the rounds below.
   const baseline = asking * (1 - combinedFlexPct);
   const recommendedOffer = Math.max(0, Math.round(baseline - refurbReduction));
-  const walkAway = Math.max(0, Math.round(asking * (1 - Math.min(0.3, combinedFlexPct + 0.05)) - refurbReduction));
+
+  // Walk-away: the ceiling you refuse to cross — by definition HIGHER than your opener (it's where
+  // the negotiation ends, not where it starts) and LOWER than asking (paying full asking means
+  // there was nothing to negotiate). Grounded in only the slice of your case you'd insist on even
+  // under pressure (a fraction of the combined flex) plus half the refurb offset — at the eleventh
+  // hour you'd absorb more of the capex into the price than you would on the opener. Clamped so it
+  // always lands strictly between the recommended offer and asking.
+  const walkAwayFlexPct = combinedFlexPct * 0.4;
+  const walkAwayCeiling = asking * (1 - walkAwayFlexPct) - refurbReduction * 0.5;
+  const walkAway = asking > 0
+    ? Math.min(asking - 1, Math.max(recommendedOffer + 1, Math.round(walkAwayCeiling)))
+    : 0;
+
+  // Up to 3 escalating offers between the opener and the walk-away ceiling — never reaching
+  // asking. Each round trades a price increment for a specific concession from the seller, so the
+  // gap closes through compromise on both sides rather than a one-way climb back to asking.
+  const offerLadder = useMemo(() => {
+    if (asking <= 0 || walkAway <= recommendedOffer) return [];
+    const gap = walkAway - recommendedOffer;
+    return [
+      {
+        round: 1,
+        offer: recommendedOffer,
+        compromise: "Open here, framed around the evidenced case below (market signals, EPC, condition, refurb capex) — a maths-led number, not a lowball. No compromise needed yet; you're setting the terms of the conversation.",
+      },
+      {
+        round: 2,
+        offer: Math.max(recommendedOffer + 1, Math.round(recommendedOffer + gap * 0.45)),
+        compromise: "Move up roughly halfway, but only against something of equal value back — e.g. the seller fixes or formally discloses the survey-flagged issues below, throws in fixtures/white goods, or commits to a fixed completion date that removes your holding costs.",
+      },
+      {
+        round: 3,
+        offer: walkAway,
+        compromise: "Your final position, at the walk-away ceiling — only move here for a concession that changes your numbers (repairs done pre-exchange, contingencies dropped, a completion date that suits your finance). If they won't move off asking past this point, walk — don't concede the rest of the way.",
+      },
+    ];
+  }, [asking, walkAway, recommendedOffer]);
 
   return (
     <Card>
@@ -129,11 +168,38 @@ export function NegotiationPanel({
             <div>
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Recommended first offer</p>
               <p className="text-2xl font-bold text-primary">{fmtGBP(recommendedOffer)}</p>
-              <p className="text-xs text-muted-foreground">Walk-away: {fmtGBP(walkAway)}</p>
+              <p className="text-xs text-muted-foreground">
+                Walk-away ceiling: <span className="font-medium text-foreground">{fmtGBP(walkAway)}</span> — the most you'd pay before pulling out; always above your opener and below asking ({fmtGBP(asking)}).
+              </p>
             </div>
             <Button onClick={() => onApplyOffer(recommendedOffer)}>Apply to deal</Button>
           </div>
         </div>
+
+        {offerLadder.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Negotiation ladder — up to 3 rounds, never to asking</p>
+            <div className="space-y-2">
+              {offerLadder.map((o) => (
+                <div key={o.round} className="flex items-start gap-3 rounded-md border p-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{o.round}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold">{fmtGBP(o.offer)}</span>
+                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        {o.round === 1 ? "Opening offer" : o.round === offerLadder.length ? "Final position (walk-away)" : "Counter-offer"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{o.compromise}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Each round trades a price increment for a concession — the gap closes through compromise on both sides. Your final position stays at {fmtGBP(walkAway)}, below the {fmtGBP(asking)} asking price; if the seller won't move off asking from there, that's the cue to walk, not to close the rest of the gap yourself.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

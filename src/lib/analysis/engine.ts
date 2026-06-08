@@ -8,6 +8,7 @@ import { computeRiskFlags, strategiesBlockedByRisk, maxRiskSeverity } from "./ri
 import { resolveMonthlyRent, proposeRentRange } from "./rent";
 import { deriveLenderCriteria } from "./lender-criteria";
 import { estimateRefurb, tierFromConditionScore } from "./refurb";
+import { estimateMaxHmoRoomsByArea } from "./hmo-layout";
 
 const SDLT_INVESTOR = (price: number) => {
   // UK SDLT additional-dwellings approximation (2024 rates +5% surcharge)
@@ -267,7 +268,9 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
 
 function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
   const reasons: string[] = [];
-  const rooms = overrides.room_count ?? defaults.room_count;
+  // Rooms is a headcount, never a fraction — round whatever the slider/default produced before
+  // it touches any downstream maths or display (a "4.00-room HMO" is meaningless).
+  const rooms = Math.round(overrides.room_count ?? defaults.room_count);
   const rentPerRoom = overrides.rent_per_room ?? defaults.rent_per_room;
   const monthlyRevenue = rooms * rentPerRoom;
   const opex = 350 + monthlyRevenue * 0.08; // bills + mgmt
@@ -285,6 +288,11 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const article4Blocks = isArticle4Inside(article4Status);
   if (article4Blocks) reasons.push("Article 4 area — planning permission required for change of use to HMO (C3→C4/Sui Generis)");
 
+  const areaEstimate = estimateMaxHmoRoomsByArea(p.area_sqm);
+  if (areaEstimate && rooms > areaEstimate.maxRooms) {
+    reasons.push(`At the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m²), ${p.area_sqm}m² total only realistically supports ~${areaEstimate.maxRooms} lettable room(s) after kitchen/bathroom/communal space — ${rooms} may not be achievable without an extension.`);
+  }
+
   const score = Math.max(0, Math.min(100, Math.round(monthlyCashflow / 15 + annualROI * 100 * 2)));
   return {
     key: "HMO",
@@ -297,7 +305,8 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     dealScore: score,
     summary: `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
     numbers: [
-      tunable("Rooms", rooms, "num", "room_count", overrides, defaults),
+      tunable("Rooms", rooms, "count", "room_count", overrides, defaults,
+        areaEstimate ? `Up to ~${areaEstimate.maxRooms} rooms fit at the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m², ${Math.round(areaEstimate.communalReservePct * 100)}% reserved for kitchen/bathrooms/circulation)` : undefined),
       tunable("Rent per room", rentPerRoom, "gbp", "rent_per_room", overrides, defaults),
       { label: "Monthly revenue", value: monthlyRevenue, format: "gbp" },
       { label: "Bills + mgmt", value: opex, format: "gbp" },
@@ -451,6 +460,15 @@ export function analyseProperty(
     rent_range, lender_criteria: lenderCriteria,
   };
 
+  // Room-count default: when we know the floor area, ground it in the statutory minimum
+  // bedroom size for licensed HMOs (6.51m², after reserving space for kitchen/bathrooms/
+  // circulation) rather than guessing off the listed bedroom count — "how many rooms are
+  // technically possible" is a floor-area question, not a "beds + 1" heuristic. Falls back to
+  // the bedroom-count heuristic only when no floor area is on file.
+  const roomsByArea = estimateMaxHmoRoomsByArea(prop.area_sqm)?.maxRooms ?? null;
+  const roomsByBeds = prop.beds ? prop.beds + (prop.beds >= 3 ? 1 : 0) : 4;
+  const room_count_default = roomsByArea != null ? Math.max(1, Math.min(roomsByArea, OVERRIDE_BOUNDS.room_count.max)) : roomsByBeds;
+
   // Baselines for every slider-tunable lever — what the engine would compute with zero overrides.
   // These drive each number cell's "reset to default" target and its "overridden" badge.
   const defaults: ResolvedDefaults = {
@@ -460,7 +478,7 @@ export function analyseProperty(
     mortgage_rate: lenderCriteria.mortgage_rate,
     ltv: lenderCriteria.ltv,
     arv: arv_default,
-    room_count: prop.beds ? prop.beds + (prop.beds >= 3 ? 1 : 0) : 4,
+    room_count: room_count_default,
     rent_per_room: 525,
     sa_nightly: Math.max(85, monthly_rent / 12),
     sa_occupancy: 0.65,
@@ -511,6 +529,7 @@ export function analyseProperty(
     effectiveInputs: eff,
     strategies,
     negotiation: negotiation.points,
+    negotiationTotal: negotiation.totalLeverage,
     bestStrategy: best.key as StrategyKey,
     overallScore,
     riskFlags: riskFlags as any[],

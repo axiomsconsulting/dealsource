@@ -1,17 +1,17 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { Building2, LayoutDashboard, ListChecks, LogOut, Sliders, Bell } from "lucide-react";
+import { LayoutDashboard, ListChecks, LogOut, Sliders, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReactNode } from "react";
+import { AppFooter } from "@/components/AppFooter";
 
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const router = useRouter();
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b bg-card sticky top-0 z-30">
         <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="flex items-center gap-2 text-lg font-semibold">
-            <Building2 className="h-6 w-6 text-primary" />
-            Deal Sourcer
+          <Link to="/dashboard" className="flex items-center">
+            <img src="/omnispace-logo.png" alt="Deal Negotiator — Omnispace Estates" className="h-9 w-auto" />
           </Link>
           <nav className="flex items-center gap-1">
             <Link to="/dashboard" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
@@ -38,10 +38,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           </nav>
         </div>
       </header>
-      <main className="container mx-auto px-6 py-8">
+      <main className="container mx-auto flex-1 px-6 py-8">
         {title && <h1 className="mb-6 text-2xl font-bold tracking-tight">{title}</h1>}
         {children}
       </main>
+      <AppFooter />
     </div>
   );
 }

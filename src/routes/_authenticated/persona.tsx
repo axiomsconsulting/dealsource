@@ -19,7 +19,7 @@ import { LENDER_CRITERIA, INVESTOR_TYPES, deriveLenderCriteria, type InvestorTyp
 import { fmtPct } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/persona")({
-  head: () => ({ meta: [{ title: "Personas — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Personas — Deal Negotiator" }] }),
   component: PersonaPage,
 });
 

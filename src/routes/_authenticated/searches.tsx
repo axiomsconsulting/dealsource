@@ -14,7 +14,7 @@ import { Bell, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/searches")({
-  head: () => ({ meta: [{ title: "Saved searches — Deal Sourcer" }] }),
+  head: () => ({ meta: [{ title: "Saved searches — Deal Negotiator" }] }),
   component: SearchesPage,
 });
 

@@ -18,12 +18,12 @@ function pdfSafe(text: string | null | undefined): string {
 export const Route = createFileRoute("/api/deal-pdf/$token")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         const { getPublicDealSheet } = await import("@/lib/deal-sheets.functions");
         const sheet = await getPublicDealSheet({ data: { token: params.token } });
         if (!sheet) return new Response("Not found", { status: 404 });
         try {
-          return await buildDealSheetPdf(sheet, params.token);
+          return await buildDealSheetPdf(sheet, params.token, new URL(request.url).origin);
         } catch (err) {
           console.error("deal-pdf generation failed", err);
           return new Response("Could not generate this PDF — the deal sheet data may be incomplete.", { status: 500 });
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/deal-pdf/$token")({
   },
 });
 
-async function buildDealSheetPdf(sheet: any, token: string) {
+async function buildDealSheetPdf(sheet: any, token: string, origin: string) {
   const snap: any = sheet.snapshot;
   const prop = snap.property;
   const a = snap.analysis;
@@ -52,6 +52,28 @@ async function buildDealSheetPdf(sheet: any, token: string) {
   let page = pdf.addPage([595, 842]);
   let y = 800;
   const margin = 40;
+
+  // Wide Omnispace Estates / Deal Negotiator logo, served as a static asset — fetched from the
+  // request's own origin so this works identically in dev and prod without filesystem assumptions.
+  // Best-effort: a missing/broken logo shouldn't fail the whole PDF.
+  let logoDims: { width: number; height: number } | null = null;
+  let logoImage: Awaited<ReturnType<typeof pdf.embedPng>> | null = null;
+  try {
+    const res = await fetch(`${origin}/omnispace-logo.png`);
+    if (res.ok) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      logoImage = await pdf.embedPng(bytes);
+      const maxWidth = 180;
+      const scale = Math.min(1, maxWidth / logoImage.width);
+      logoDims = { width: logoImage.width * scale, height: logoImage.height * scale };
+    }
+  } catch {
+    // logo is decorative — proceed without it
+  }
+  if (logoImage && logoDims) {
+    page.drawImage(logoImage, { x: margin, y: y - logoDims.height + 10, width: logoDims.width, height: logoDims.height });
+    y -= logoDims.height + 6;
+  }
   const write = (text: string, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) => {
     const size = opts.size ?? 11;
     if (y < 60) { page = pdf.addPage([595, 842]); y = 800; }

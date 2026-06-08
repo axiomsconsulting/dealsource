@@ -73,7 +73,7 @@ export const OVERRIDE_BOUNDS: Record<OverrideKey, { min: number; max: number; st
 export interface StrategyNumber {
   label: string;
   value: number;
-  format: "gbp" | "pct" | "num" | "months";
+  format: "gbp" | "pct" | "num" | "months" | "count";
   hint?: string;
   /** Present when this cell is directly tunable via an inline slider. */
   overrideKey?: OverrideKey;
@@ -106,6 +106,9 @@ export interface NegotiationPoint {
   description: string;
   gbp_impact: number;
   confidence: "low" | "medium" | "high";
+  /** Low/Medium/High specification tiers for capex line items (e.g. EPC works) — lets the
+   *  negotiation reflect that the same outcome can be reached at different spend levels. */
+  specOptions?: { rating: "L" | "M" | "H"; label: string; gbp: number }[];
 }
 
 export interface AnalysisOutput {
@@ -127,6 +130,9 @@ export interface AnalysisOutput {
   };
   strategies: StrategyResult[];
   negotiation: NegotiationPoint[];
+  /** Sum of every justified-adjustment line item in `negotiation` (excludes the "suggested
+   *  opening offer" anchor) — the headline total to show at the foot of the playbook. */
+  negotiationTotal: number;
   bestStrategy: StrategyKey;
   overallScore: number;
   riskFlags?: any[];
