@@ -33,10 +33,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
+import { lookupArticle4ByPostcode } from "@/lib/article4.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -52,6 +53,7 @@ function PropertyDetail() {
   const update = useServerFn(updateProperty);
   const enrich = useServerFn(enrichFromUrl);
   const enrichJson = useServerFn(enrichFromPfJson);
+  const lookupA4 = useServerFn(lookupArticle4ByPostcode);
 
   const prop = useQuery({ queryKey: ["property", id], queryFn: () => getProp({ data: { id } }) });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => listP({ data: {} } as any) });
@@ -92,6 +94,19 @@ function PropertyDetail() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const article4Mut = useMutation({
+    mutationFn: (postcode: string) => lookupA4({ data: { postcode, propertyId: id } }),
+    onSuccess: (r: any) => {
+      qc.invalidateQueries({ queryKey: ["property", id] });
+      if (r.status === "inside") {
+        toast.warning(`Article 4 confirmed — ${r.areas.length} direction(s) found for ${r.postcode}. HMO strategy score has been adjusted.`);
+      } else {
+        toast.success(`No Article 4 directions found for ${r.postcode} via the UK Planning Data API.`);
+      }
+    },
+    onError: (e: any) => toast.error(`Article 4 check failed: ${e.message}`),
+  });
+
   if (prop.isLoading || personasQ.isLoading) return <AppShell><p className="text-muted-foreground">Loading…</p></AppShell>;
   if (!prop.data || !persona || !analysis) return <AppShell><p>Not found</p></AppShell>;
 
@@ -126,6 +141,24 @@ function PropertyDetail() {
             <Badge>Asking {fmtGBP(p.asking_price_gbp)}</Badge>
             {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — inside</Badge>}
             {p.article4_status === "partial" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — partial</Badge>}
+            {!p.article4_status && p.pf_json?.propertyLight?.article4Status && (
+              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+                Article 4 — {String(p.pf_json.propertyLight.article4Status)}
+              </Badge>
+            )}
+            {p.postcode && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                disabled={article4Mut.isPending}
+                onClick={() => article4Mut.mutate(p.postcode)}
+                title="Check Article 4 status via UK Planning Data API"
+              >
+                {article4Mut.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <MapPin className="mr-1 h-3 w-3" />}
+                {p.article4_status ? "Re-check Article 4" : "Check Article 4"}
+              </Button>
+            )}
             {p.source_link && (
               <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                 <ExternalLink className="h-3 w-3" /> View listing

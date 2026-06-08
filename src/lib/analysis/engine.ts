@@ -55,13 +55,17 @@ function tunable(
   };
 }
 
-function isArticle4Inside(status: string | null | undefined): boolean {
-  const s = (status || "").toLowerCase();
-  return s === "inside" || s === "in" || s === "yes" || s === "true";
+function isArticle4Inside(status: unknown): boolean {
+  if (status === true || status === 1) return true;
+  if (!status || status === false || status === 0) return false;
+  const s = String(status).toLowerCase().trim();
+  return ["inside", "in", "yes", "true", "1", "y", "confirmed", "restricted", "applicable", "present", "applies", "affected"].includes(s);
 }
 
-function isArticle4Partial(status: string | null | undefined): boolean {
-  return (status || "").toLowerCase() === "partial";
+function isArticle4Partial(status: unknown): boolean {
+  if (!status || status === false || status === 0) return false;
+  const s = String(status).toLowerCase().trim();
+  return ["partial", "partly", "potential", "possible", "borderline", "nearby", "adjacent"].includes(s);
 }
 
 // NOTE: this is a SUITABILITY check — "would this deal work for this investor criteria profile" — not a
@@ -484,7 +488,10 @@ function deriveDealIndicators(riskFlags: any[], best: StrategyResult, overallSco
   } else if (overallScore >= 45) {
     reward = { key: "reward", label: "Reward", value: "Moderate upside", tone: "neutral", detail: `Deal score ${overallScore}/100 — workable but unremarkable; lead strategy ${best.name} scores ${best.dealScore}/100.` };
   } else {
-    reward = { key: "reward", label: "Reward", value: "Limited upside", tone: "warn", detail: `Deal score ${overallScore}/100 — the numbers are weak at the current price; even the lead strategy (${best.name}) only scores ${best.dealScore}/100.` };
+    const bestNote = best.dealScore >= 60
+      ? `Best individual strategy is ${best.name} (${best.dealScore}/100), but the average across all six strategies is dragging the headline down.`
+      : `Best available strategy is ${best.name} at ${best.dealScore}/100 — weak overall.`;
+    reward = { key: "reward", label: "Reward", value: "Limited upside", tone: "warn", detail: `Deal score ${overallScore}/100 — the numbers are weak at the current price. ${bestNote}` };
   }
 
   return [risk, income, reward];
@@ -616,7 +623,12 @@ export function analyseProperty(
   // hmoAnalysis() already explains "inside" via its own reasons; we add the licensing-risk
   // framing for "partial" here since that's a postcode-level signal, not a property one.
   if (isArticle4Inside(article4Status)) {
-    strategies = strategies.map((s) => s.key === "HMO" ? { ...s, dealScore: Math.min(s.dealScore, 35) } : s);
+    strategies = strategies.map((s) => s.key === "HMO" ? {
+      ...s,
+      feasible: false,
+      dealScore: Math.min(s.dealScore, 35),
+      reasons: [...(s.reasons ?? []).filter((r) => !r.includes("Article 4")), "Article 4 direction in this area — new HMO licences are unlikely to be granted. Verify with the council before pursuing this strategy."],
+    } : s);
   } else if (isArticle4Partial(article4Status)) {
     strategies = strategies.map((s) => s.key === "HMO" ? {
       ...s,

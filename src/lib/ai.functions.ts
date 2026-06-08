@@ -361,7 +361,7 @@ const FlexSchema = z.object({
   reductionPctLow: z.number().min(0).max(0.4).optional(),
   reductionPctMid: z.number().min(0).max(0.4).optional(),
   reductionPctHigh: z.number().min(0).max(0.4).optional(),
-  rationale: z.string().max(600).optional(),
+  rationale: z.string().max(2000).optional(),
   comparables: z.array(z.object({ note: z.string(), gbp: z.number().optional() })).max(8).optional(),
   marketTemp: z.enum(["hot", "balanced", "cold"]).optional(),
 });

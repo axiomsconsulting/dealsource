@@ -5,11 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { AddPropertyDialog } from "@/components/AddPropertyDialog";
+import { PropertyNewsPanel } from "@/components/PropertyNewsPanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { listProperties } from "@/lib/ingest.functions";
 import { listPersonas } from "@/lib/personas.functions";
+import { fetchPropertyNews } from "@/lib/news.functions";
 import { analyseProperty } from "@/lib/analysis/engine";
 import type { StrategyKey, StrategyResult } from "@/lib/analysis/types";
 import { fmtGBP } from "@/lib/format";
@@ -49,8 +51,10 @@ function WelcomePage() {
   const router = useRouter();
   const list = useServerFn(listProperties);
   const personasFn = useServerFn(listPersonas);
+  const newsFn = useServerFn(fetchPropertyNews);
   const propsQ = useQuery({ queryKey: ["properties"], queryFn: () => list() });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => personasFn({ data: {} } as any) });
+  const newsQ = useQuery({ queryKey: ["property-news"], queryFn: () => newsFn(), staleTime: 10 * 60 * 1000 });
 
   const greeting = useMemo(() => getGreeting(), []);
   const TimeIcon = TIME_ICONS[greeting.timeOfDay];
@@ -271,6 +275,12 @@ function WelcomePage() {
             </CardContent>
           </Card>
         )}
+
+        <PropertyNewsPanel
+          articles={(newsQ.data ?? []) as any[]}
+          isLoading={newsQ.isLoading}
+          onRefresh={() => newsQ.refetch()}
+        />
       </div>
     </AppShell>
   );

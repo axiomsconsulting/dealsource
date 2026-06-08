@@ -47,7 +47,7 @@ export function DealIndicators({ indicators, className }: { indicators: DealIndi
                 {ind.value}
               </Badge>
             </TooltipTrigger>
-            <TooltipContent className="max-w-[280px] text-xs">{ind.detail}</TooltipContent>
+            <TooltipContent side="bottom" className="max-w-[300px] text-xs">{ind.detail}</TooltipContent>
           </Tooltip>
         ))}
       </div>
