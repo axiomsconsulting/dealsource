@@ -1,7 +1,7 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { getPublicDealSheet } from "@/lib/deal-sheets.functions";
 import { fmtGBP, fmtPct } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, TrendingUp, Wallet, Calculator, Target, History } from "lucide-react";
 import { fmtHistoryDate } from "@/lib/analysis/price-history";
@@ -80,156 +80,157 @@ function DealSheetPage() {
         </div>
 
         {a.negotiationGuidance && (
-          <Card className="mt-8 border-primary/30 bg-primary/[0.03]">
-            <CardContent className="pt-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <Target className="h-5 w-5 text-primary" /> Offer plan
-              </h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-                <MiniStat label="Opening bid" value={fmtGBP(a.negotiationGuidance.openingOffer)} />
-                <MiniStat label="Target deal price" value={fmtGBP(a.negotiationGuidance.targetOffer)} />
-                <MiniStat label="Walk-away ceiling" value={fmtGBP(a.negotiationGuidance.walkAwayOffer)} />
-                <MiniStat label="Evidence cap" value={`${(a.negotiationGuidance.maxOpeningDiscountPct * 100).toFixed(1)}%`} />
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                The investment numbers are underwritten at the target deal price, not the lower opening bid.
-              </p>
-            </CardContent>
-          </Card>
+          <CollapsibleCard
+            className="mt-8 border-primary/30 bg-primary/[0.03]"
+            icon={<Target className="h-5 w-5 text-primary" />}
+            title="Offer plan"
+            summary={`Open ${fmtGBP(a.negotiationGuidance.openingOffer)} · Target ${fmtGBP(a.negotiationGuidance.targetOffer)} · Walk-away ${fmtGBP(a.negotiationGuidance.walkAwayOffer)}`}
+          >
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+              <MiniStat label="Opening bid" value={fmtGBP(a.negotiationGuidance.openingOffer)} />
+              <MiniStat label="Target deal price" value={fmtGBP(a.negotiationGuidance.targetOffer)} />
+              <MiniStat label="Walk-away ceiling" value={fmtGBP(a.negotiationGuidance.walkAwayOffer)} />
+              <MiniStat label="Evidence cap" value={`${(a.negotiationGuidance.maxOpeningDiscountPct * 100).toFixed(1)}%`} />
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              The investment numbers are underwritten at the target deal price, not the lower opening bid.
+            </p>
+          </CollapsibleCard>
         )}
 
         {Array.isArray(snap.priceHistory) && snap.priceHistory.length >= 2 && (
-          <Card className="mt-6">
-            <CardContent className="pt-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <History className="h-5 w-5 text-primary" /> Tracked price history
-              </h2>
-              <ul className="mt-4 space-y-1.5 text-sm">
-                {snap.priceHistory.map((h: any, i: number) => (
-                  <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3 border-b border-dashed pb-1.5 last:border-0">
-                    <span className="text-muted-foreground">
-                      {fmtHistoryDate(h.date)}
-                      {i === 0 && <Badge variant="outline" className="ml-2 h-5 text-[10px]">current</Badge>}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">{fmtGBP(h.value)}</span>
-                      {h.changeFromPrevious != null && h.changeFromPrevious !== 0 && (
-                        <span className={h.changeFromPrevious < 0 ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
-                          ({h.changeFromPrevious < 0 ? "−" : "+"}{fmtGBP(Math.abs(h.changeFromPrevious))})
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <CollapsibleCard
+            className="mt-6"
+            icon={<History className="h-5 w-5 text-primary" />}
+            title="Tracked price history"
+            summary={`${snap.priceHistory.length - 1} change(s) — ${fmtGBP(snap.priceHistory[snap.priceHistory.length - 1].value)} → ${fmtGBP(snap.priceHistory[0].value)}`}
+          >
+            <ul className="space-y-1.5 text-sm">
+              {snap.priceHistory.map((h: any, i: number) => (
+                <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3 border-b border-dashed pb-1.5 last:border-0">
+                  <span className="text-muted-foreground">
+                    {fmtHistoryDate(h.date)}
+                    {i === 0 && <Badge variant="outline" className="ml-2 h-5 text-[10px]">current</Badge>}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium">{fmtGBP(h.value)}</span>
+                    {h.changeFromPrevious != null && h.changeFromPrevious !== 0 && (
+                      <span className={h.changeFromPrevious < 0 ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
+                        ({h.changeFromPrevious < 0 ? "−" : "+"}{fmtGBP(Math.abs(h.changeFromPrevious))})
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleCard>
         )}
 
-        <Card className="mt-8">
-          <CardContent className="pt-6">
-            <h2 className="text-xl font-semibold">{best?.name} — recommended strategy</h2>
-            <p className="mt-1 text-muted-foreground">{best?.summary}</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-              {best?.numbers.map((n: any, i: number) => (
-                <div key={i} className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">{n.label}</p>
-                  <p className="text-lg font-semibold">
-                    {n.format === "gbp" ? fmtGBP(n.value) : n.format === "pct" ? fmtPct(n.value) : Math.round(n.value * 100) / 100}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <CollapsibleCard
+          className="mt-8"
+          title={`${best?.name} — recommended strategy`}
+          summary={`Score ${best?.dealScore}/100`}
+        >
+          <p className="text-muted-foreground">{best?.summary}</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {best?.numbers.map((n: any, i: number) => (
+              <div key={i} className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">{n.label}</p>
+                <p className="text-lg font-semibold">
+                  {n.format === "gbp" ? fmtGBP(n.value) : n.format === "pct" ? fmtPct(n.value) : Math.round(n.value * 100) / 100}
+                </p>
+              </div>
+            ))}
+          </div>
+        </CollapsibleCard>
 
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <h2 className="text-xl font-semibold">Strategy comparison</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-              {a.strategies.map((s: any) => (
-                <div key={s.key} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{s.name}</p>
-                    <Badge variant={s.dealScore >= 60 ? "default" : "outline"}>{s.dealScore}</Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{s.summary}</p>
+        <CollapsibleCard
+          className="mt-6"
+          title="Strategy comparison"
+          summary={`${a.strategies.length} strategies compared — best ${best?.name} (${best?.dealScore})`}
+        >
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {a.strategies.map((s: any) => (
+              <div key={s.key} className="rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{s.name}</p>
+                  <Badge variant={s.dealScore >= 60 ? "default" : "outline"}>{s.dealScore}</Badge>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <p className="mt-1 text-xs text-muted-foreground">{s.summary}</p>
+              </div>
+            ))}
+          </div>
+        </CollapsibleCard>
 
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <h2 className="text-xl font-semibold">Negotiation leverage</h2>
-            <div className="mt-4 space-y-3">
-              {a.negotiation.map((n: any, i: number) => (
-                <div key={i} className="flex items-start justify-between gap-4 rounded-md border p-3">
-                  <div>
-                    <p className="font-medium">{n.title}</p>
-                    <p className="text-sm text-muted-foreground">{n.description}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
-                    <div className="text-[10px] uppercase text-muted-foreground">{n.confidence}</div>
-                  </div>
+        <CollapsibleCard
+          className="mt-6"
+          title="Negotiation leverage"
+          summary={`${a.negotiation.length} point(s) — −${fmtGBP(a.negotiation.reduce((sum: number, n: any) => sum + (n.gbp_impact ?? 0), 0))} total`}
+        >
+          <div className="space-y-3">
+            {a.negotiation.map((n: any, i: number) => (
+              <div key={i} className="flex items-start justify-between gap-4 rounded-md border p-3">
+                <div>
+                  <p className="font-medium">{n.title}</p>
+                  <p className="text-sm text-muted-foreground">{n.description}</p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="text-right">
+                  <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
+                  <div className="text-[10px] uppercase text-muted-foreground">{n.confidence}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CollapsibleCard>
 
         {ai && (
-          <Card className="mt-6">
-            <CardContent className="pt-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <Sparkles className="h-4 w-4 text-accent" /> Surveyor AI condition report
-              </h2>
-              <p className="mt-2 text-muted-foreground">{ai.summary}</p>
-              {ai.items?.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {ai.items.map((it: any, i: number) => (
-                    <div key={i} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                      <div>
-                        <p className="font-medium capitalize">{it.area}: {it.issue}</p>
-                        <Badge variant="outline" className="mt-1 capitalize">{it.severity}</Badge>
-                      </div>
-                      <div className="font-semibold">{fmtGBP(it.estimateGbp)}</div>
+          <CollapsibleCard
+            className="mt-6"
+            icon={<Sparkles className="h-4 w-4 text-accent" />}
+            title="Surveyor AI condition report"
+            summary={`${ai.items?.length ?? 0} issue(s) flagged`}
+          >
+            <p className="text-muted-foreground">{ai.summary}</p>
+            {ai.items?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {ai.items.map((it: any, i: number) => (
+                  <div key={i} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                    <div>
+                      <p className="font-medium capitalize">{it.area}: {it.issue}</p>
+                      <Badge variant="outline" className="mt-1 capitalize">{it.severity}</Badge>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="font-semibold">{fmtGBP(it.estimateGbp)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CollapsibleCard>
         )}
 
         {photos.length > 1 && (
-          <Card className="mt-6">
-            <CardContent className="pt-6">
-              <h2 className="text-xl font-semibold">Photos</h2>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {photos.slice(1).map((p: any) => (
-                  <img key={p.id} src={p.url} alt="" className="h-40 w-full rounded-md object-cover" />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <CollapsibleCard className="mt-6" title="Photos" summary={`${photos.length} photo(s)`}>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {photos.slice(1).map((p: any) => (
+                <img key={p.id} src={p.url} alt="" className="h-40 w-full rounded-md object-cover" />
+              ))}
+            </div>
+          </CollapsibleCard>
         )}
 
         {floorPlans.length > 0 && (
-          <Card className="mt-6">
-            <CardContent className="pt-6">
-              <h2 className="text-xl font-semibold">Floor plan{floorPlans.length > 1 ? "s" : ""}</h2>
-              <div className={`mt-4 grid gap-3 ${floorPlans.length > 1 ? "sm:grid-cols-2" : ""}`}>
-                {floorPlans.map((p: any) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
-                    <img src={p.url} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
-                  </a>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <CollapsibleCard
+            className="mt-6"
+            title={`Floor plan${floorPlans.length > 1 ? "s" : ""}`}
+            summary={`${floorPlans.length} floor plan(s)`}
+          >
+            <div className={`grid gap-3 ${floorPlans.length > 1 ? "sm:grid-cols-2" : ""}`}>
+              {floorPlans.map((p: any) => (
+                <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
+                  <img src={p.url} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </CollapsibleCard>
         )}
 
         <p className="mt-10 text-center text-xs text-muted-foreground">

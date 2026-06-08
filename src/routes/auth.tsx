@@ -28,12 +28,12 @@ function AuthPage() {
           : supabase.auth.signUp({
               email,
               password,
-              options: { emailRedirectTo: window.location.origin + "/dashboard" },
+              options: { emailRedirectTo: window.location.origin + "/welcome" },
             });
       const { error } = await fn;
       if (error) throw error;
       toast.success(mode === "signin" ? "Signed in" : "Account created");
-      router.navigate({ to: "/dashboard" });
+      router.navigate({ to: "/welcome" });
     } catch (err: any) {
       toast.error(err.message || "Auth failed");
     } finally {

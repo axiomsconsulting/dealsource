@@ -4,29 +4,44 @@ import { z } from "zod";
 
 const PRESETS: Array<{ name: string; strategy: string; patch: Record<string, any> }> = [
   {
-    name: "Cashflow BTL — £60k",
+    name: "BTL £60k",
     strategy: "BTL",
     patch: { cash_available_gbp: 60000, target_rent_gbp: 1200, target_offer_gbp: 150000, max_offer_gbp: 180000, investor_type: "individual", refurb_buffer_gbp: 12000, min_beds: 3, max_beds: 4 },
   },
   {
-    name: "BRRR Recycler — £80k",
+    name: "BRRR £80k",
     strategy: "BRRR",
     patch: { cash_available_gbp: 80000, target_rent_gbp: 1100, target_offer_gbp: 120000, max_offer_gbp: 160000, investor_type: "ltd_company", refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
   },
   {
-    name: "SA Operator — city centre",
+    name: "SA City Centre",
     strategy: "SA",
     patch: { cash_available_gbp: 100000, target_rent_gbp: 1600, target_offer_gbp: 180000, max_offer_gbp: 230000, investor_type: "ltd_company", refurb_buffer_gbp: 25000, min_beds: 1, max_beds: 3, require_parking: false },
   },
   {
-    name: "HMO Operator — 5–6 bed",
+    name: "HMO 5–6 Bed",
     strategy: "HMO",
     patch: { cash_available_gbp: 120000, target_rent_gbp: 2800, target_offer_gbp: 200000, max_offer_gbp: 260000, investor_type: "portfolio_landlord", refurb_buffer_gbp: 30000, min_beds: 4, max_beds: 6 },
   },
   {
-    name: "Flipper — 20% margin",
+    name: "Flip 20%",
     strategy: "FLIP",
     patch: { cash_available_gbp: 90000, target_rent_gbp: 1000, target_offer_gbp: 130000, max_offer_gbp: 170000, investor_type: "individual", refurb_buffer_gbp: 35000, min_beds: 2, max_beds: 4 },
+  },
+  {
+    name: "Title Split",
+    strategy: "TITLE_SPLIT",
+    patch: { cash_available_gbp: 150000, target_rent_gbp: 1800, target_offer_gbp: 220000, max_offer_gbp: 280000, investor_type: "group_holding", refurb_buffer_gbp: 40000, min_beds: 3, max_beds: 6 },
+  },
+  {
+    name: "First-Timer £30k",
+    strategy: "BTL",
+    patch: { cash_available_gbp: 30000, target_rent_gbp: 950, target_offer_gbp: 110000, max_offer_gbp: 130000, investor_type: "first_time_landlord", refurb_buffer_gbp: 6000, min_beds: 2, max_beds: 3 },
+  },
+  {
+    name: "Portfolio £250k",
+    strategy: "BRRR",
+    patch: { cash_available_gbp: 250000, target_rent_gbp: 1500, target_offer_gbp: 200000, max_offer_gbp: 280000, investor_type: "portfolio_landlord", refurb_buffer_gbp: 50000, min_beds: 3, max_beds: 5 },
   },
 ];
 

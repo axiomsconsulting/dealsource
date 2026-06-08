@@ -19,7 +19,7 @@ import { LENDER_CRITERIA, INVESTOR_TYPES, deriveLenderCriteria, type InvestorTyp
 import { fmtPct } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/persona")({
-  head: () => ({ meta: [{ title: "Investor criteria — Deal Negotiator" }] }),
+  head: () => ({ meta: [{ title: "Investment criteria — Deal Negotiator" }] }),
   component: PersonaPage,
 });
 
@@ -82,14 +82,14 @@ function PersonaPage() {
       payload.id = selected!.id;
       return update({ data: payload });
     },
-    onSuccess: () => { toast.success("Criteria saved"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
+    onSuccess: () => { toast.success("Profile saved"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const createMut = useMutation({
     mutationFn: () => create({ data: { name: newName, strategy: newStrategy as any, copyFromId: selected?.id } }),
     onSuccess: (row: any) => {
-      toast.success("Criteria profile created"); setNewName(""); setSelectedId(row.id);
+      toast.success("Profile created"); setNewName(""); setSelectedId(row.id);
       qc.invalidateQueries({ queryKey: ["personas"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -104,11 +104,11 @@ function PersonaPage() {
   });
 
   return (
-    <AppShell title="Investor criteria">
+    <AppShell title="Investment criteria">
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Criteria profiles</CardTitle>
+            <CardTitle className="text-base">Profiles</CardTitle>
             <CardDescription>Switch active criteria — the active profile drives fit checks, lending assumptions and strategy analysis.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -126,13 +126,13 @@ function PersonaPage() {
                     <CheckCircle2 className="h-4 w-4" />
                   </Button>
                 )}
-                <Button size="icon" variant="ghost" title="Delete" onClick={() => { if (confirm("Delete criteria profile?")) delMut.mutate(p.id); }}>
+                <Button size="icon" variant="ghost" title="Delete" onClick={() => { if (confirm("Delete profile?")) delMut.mutate(p.id); }}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             ))}
             <div className="mt-3 space-y-2 rounded-md border border-dashed p-3">
-              <p className="text-xs font-medium uppercase text-muted-foreground">New criteria profile</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">New profile</p>
               <Input placeholder="e.g. First BTL £60k, or HMO £120k" value={newName} onChange={(e) => setNewName(e.target.value)} />
               <Select value={newStrategy} onValueChange={setNewStrategy}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -149,7 +149,7 @@ function PersonaPage() {
         {selected && (
         <Card>
         <CardHeader>
-          <CardTitle>Edit criteria</CardTitle>
+          <CardTitle>Edit profile</CardTitle>
           <CardDescription>These numbers define what fits the investor; they do not force the offer below what the property evidence can justify.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -214,7 +214,7 @@ function PersonaPage() {
             </div>
           </div>
           <div className="mt-6 flex items-center gap-3">
-            <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save criteria"}</Button>
+            <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save profile"}</Button>
             {!selected.is_default && (
               <Button variant="outline" onClick={() => activeMut.mutate(selected.id)}>Make active</Button>
             )}

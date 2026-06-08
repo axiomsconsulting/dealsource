@@ -14,7 +14,7 @@ import { fmtGBP } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon } from "lucide-react";
+import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -23,6 +23,7 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { BatchAIDialog } from "@/components/BatchAIDialog";
+import { AddPropertyDialog } from "@/components/AddPropertyDialog";
 import { rowsToCSV, downloadCSV, type ExportRow } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -352,6 +353,7 @@ function PropertiesPage() {
           <Download className="mr-2 h-4 w-4" />
           Export CSV {selected.size > 0 ? `(${selected.size})` : `(${rows.length})`}
         </Button>
+        <AddPropertyDialog trigger={<Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
         <BatchAIDialog
           totalProperties={allRows.length}
           alreadyAnalysed={analysedCount}
@@ -369,8 +371,9 @@ function PropertiesPage() {
         </div>
       )}
       {!props.data?.length ? (
-        <Card className="p-12 text-center text-muted-foreground">
-          No properties yet. <Link to="/dashboard" className="text-primary underline">Add some</Link>.
+        <Card className="flex flex-col items-center gap-3 p-12 text-center text-muted-foreground">
+          <p>No properties yet.</p>
+          <AddPropertyDialog trigger={<Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
         </Card>
       ) : (
         <div className="grid gap-4">

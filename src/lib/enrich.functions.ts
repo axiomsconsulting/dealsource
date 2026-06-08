@@ -50,8 +50,20 @@ export const enrichFromPfJson = createServerFn({ method: "POST" })
       if (value == null || value === "") return;
       if (existing[field] == null || existing[field] === "") patch[field] = value;
     };
-    setIfMissing("address", parsed.address);
-    setIfMissing("postcode", parsed.postcode);
+    // URL scrapes routinely land a coarse address/postcode (agent portals withhold the house
+    // number — e.g. "Newcombe Road, Northampton, NN5" / "NN5"). setIfMissing alone would leave
+    // that coarse value in place forever once it's set. Property Filter JSON nearly always carries
+    // the full postal address, so when it does — and it's strictly more complete than what's
+    // there — let it upgrade the existing value. The EPC register match requires a full postcode,
+    // so this directly unblocks EPC lookups on properties that started life as a URL scrape.
+    const refineIfBetter = (field: string, value: any, isBetter: (cur: string) => boolean) => {
+      if (value == null || value === "") return;
+      const cur = existing[field];
+      if (cur == null || cur === "" || isBetter(String(cur))) patch[field] = value;
+    };
+    const FULL_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+    refineIfBetter("address", parsed.address, (cur) => !/^\d/.test(cur.trim()) && /^\d/.test(String(parsed.address).trim()));
+    refineIfBetter("postcode", parsed.postcode, (cur) => !FULL_POSTCODE_RE.test(cur) && FULL_POSTCODE_RE.test(String(parsed.postcode)));
     setIfMissing("beds", parsed.beds);
     setIfMissing("baths", parsed.baths);
     setIfMissing("property_type", parsed.property_type);

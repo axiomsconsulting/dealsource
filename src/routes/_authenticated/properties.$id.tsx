@@ -109,7 +109,12 @@ function PropertyDetail() {
           <Link to="/properties" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> All properties
           </Link>
-          <h1 className="text-2xl font-bold">{p.hide_address ? "Property (address hidden)" : p.address}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold">{p.hide_address ? "Property (address hidden)" : p.address}</h1>
+            <Link to="/properties/$id/guide" params={{ id }}>
+              <Button size="sm" variant="outline"><Sparkles className="mr-2 h-4 w-4" />Guided walkthrough</Button>
+            </Link>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
             {p.baths && <Badge variant="outline">{p.baths} bath</Badge>}
