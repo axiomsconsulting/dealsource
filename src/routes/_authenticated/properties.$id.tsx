@@ -381,9 +381,9 @@ function PropertyDetail() {
           </Card>
         )}
 
-        {(p as any).market_data && (
+        {p.pf_json && (
           <MarketComparablesPanel
-            marketData={(p as any).market_data}
+            pf_json={p.pf_json}
             askingPrice={p.asking_price_gbp}
           />
         )}

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
 import { fmtGBP } from "@/lib/format";
-import type { MarketData, SoldComparable } from "@/lib/parsers/json";
+import { extractMarketDataFromPfJson, type MarketData, type SoldComparable } from "@/lib/parsers/json";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -11,8 +11,7 @@ function fmtDate(iso: string | null): string {
   return d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
-function priceVsAsking(soldPrice: number, askingPrice: number | null): { label: string; cls: string } | null {
-  if (!askingPrice || askingPrice <= 0) return null;
+function priceVsAsking(soldPrice: number, askingPrice: number): { label: string; cls: string } {
   const diff = ((soldPrice - askingPrice) / askingPrice) * 100;
   if (Math.abs(diff) < 0.5) return { label: "≈ asking", cls: "text-muted-foreground" };
   if (diff < 0) return { label: `${Math.abs(diff).toFixed(1)}% below asking`, cls: "text-emerald-700" };
@@ -20,18 +19,23 @@ function priceVsAsking(soldPrice: number, askingPrice: number | null): { label: 
 }
 
 interface Props {
-  marketData: MarketData;
+  pf_json: any;
   askingPrice: number | null;
 }
 
-export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
+export function MarketComparablesPanel({ pf_json, askingPrice }: Props) {
+  const marketData: MarketData | null = extractMarketDataFromPfJson(
+    pf_json?.propertyLight ?? {},
+    pf_json?.propertyDetail ?? {},
+  );
+  if (!marketData) return null;
+
   const { soldComparables, areaStats, subjectLastSold } = marketData;
   const hasComps = soldComparables.length > 0;
   const hasStats = areaStats && (areaStats.medianSoldPrice || areaStats.averageSoldPrice);
 
   if (!hasComps && !hasStats && !subjectLastSold) return null;
 
-  // Simple benchmark: where does the asking price sit relative to the sold comps?
   const prices = soldComparables.map((c) => c.price).filter((p): p is number => p != null);
   const medianComp =
     prices.length > 0
@@ -46,7 +50,7 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Headline benchmark */}
+        {/* Headline benchmark boxes */}
         {(askingPrice || medianComp || hasStats) && (
           <div className="grid gap-3 sm:grid-cols-3">
             {askingPrice && (
@@ -61,26 +65,28 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
                   Median of {prices.length} sold comp{prices.length === 1 ? "" : "s"}
                 </p>
                 <p className="mt-0.5 text-base font-semibold">{fmtGBP(medianComp)}</p>
-                {askingPrice && (() => {
-                  const v = priceVsAsking(medianComp, askingPrice);
-                  return v ? <p className={`text-xs mt-0.5 ${v.cls}`}>{v.label}</p> : null;
-                })()}
+                {askingPrice && (
+                  <p className={`mt-0.5 text-xs ${priceVsAsking(medianComp, askingPrice).cls}`}>
+                    {priceVsAsking(medianComp, askingPrice).label}
+                  </p>
+                )}
               </div>
             )}
-            {hasStats && (areaStats.medianSoldPrice || areaStats.averageSoldPrice) && (
+            {hasStats && (
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  Area {areaStats.medianSoldPrice ? "median" : "average"}
-                  {areaStats.periodLabel ? ` · ${areaStats.periodLabel}` : ""}
-                  {areaStats.sampleSize ? ` (${areaStats.sampleSize} sales)` : ""}
+                  Area {areaStats!.medianSoldPrice ? "median" : "average"}
+                  {areaStats!.periodLabel ? ` · ${areaStats!.periodLabel}` : ""}
+                  {areaStats!.sampleSize ? ` (${areaStats!.sampleSize} sales)` : ""}
                 </p>
                 <p className="mt-0.5 text-base font-semibold">
-                  {fmtGBP((areaStats.medianSoldPrice ?? areaStats.averageSoldPrice)!)}
+                  {fmtGBP((areaStats!.medianSoldPrice ?? areaStats!.averageSoldPrice)!)}
                 </p>
-                {askingPrice && (() => {
-                  const v = priceVsAsking((areaStats.medianSoldPrice ?? areaStats.averageSoldPrice)!, askingPrice);
-                  return v ? <p className={`text-xs mt-0.5 ${v.cls}`}>{v.label}</p> : null;
-                })()}
+                {askingPrice && (
+                  <p className={`mt-0.5 text-xs ${priceVsAsking((areaStats!.medianSoldPrice ?? areaStats!.averageSoldPrice)!, askingPrice).cls}`}>
+                    {priceVsAsking((areaStats!.medianSoldPrice ?? areaStats!.averageSoldPrice)!, askingPrice).label}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -89,7 +95,8 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
         {/* Subject last sold */}
         {subjectLastSold && (
           <p className="text-sm text-muted-foreground">
-            This property last sold for <span className="font-medium text-foreground">{fmtGBP(subjectLastSold.value)}</span>{" "}
+            This property last sold for{" "}
+            <span className="font-medium text-foreground">{fmtGBP(subjectLastSold.value)}</span>{" "}
             in {fmtDate(subjectLastSold.date)}
             {askingPrice && subjectLastSold.value > 0
               ? ` — asking is ${fmtGBP(Math.abs(askingPrice - subjectLastSold.value))} ${askingPrice > subjectLastSold.value ? "above" : "below"} that.`
@@ -100,7 +107,7 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
         {/* Comparables table */}
         {hasComps && (
           <div>
-            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Sold comparables from listing data
             </p>
             <div className="overflow-x-auto rounded-md border">
@@ -122,7 +129,9 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
                         <td className="px-3 py-2 text-xs">
                           {c.address ?? "—"}
                           {c.distanceMiles != null && (
-                            <span className="ml-1 text-muted-foreground">({c.distanceMiles.toFixed(2)} mi)</span>
+                            <span className="ml-1 text-muted-foreground">
+                              ({c.distanceMiles.toFixed(2)} mi)
+                            </span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right font-medium">
@@ -131,9 +140,15 @@ export function MarketComparablesPanel({ marketData, askingPrice }: Props) {
                         <td className="px-3 py-2 text-muted-foreground">{fmtDate(c.date)}</td>
                         <td className="px-3 py-2">
                           {c.propertyType ? (
-                            <Badge variant="outline" className="text-[10px]">{c.propertyType}</Badge>
-                          ) : "—"}
-                          {c.beds != null && <span className="ml-1 text-xs text-muted-foreground">{c.beds}b</span>}
+                            <Badge variant="outline" className="text-[10px]">
+                              {c.propertyType}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
+                          {c.beds != null && (
+                            <span className="ml-1 text-xs text-muted-foreground">{c.beds}b</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right text-xs">
                           {vs ? <span className={vs.cls}>{vs.label}</span> : "—"}

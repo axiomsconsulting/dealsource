@@ -127,7 +127,7 @@ function bandLetter(v: unknown): string | null {
  *    currentRating : propertyLight.epcRate | propertyDetail.epcCurrentBand | epcBand | epcRating
  *    potentialRating: propertyDetail.epcPotentialBand | epcPotentialRating
  */
-function extractEpcFromPfJson(light: any, detail: any): EpcFromJson | null {
+export function extractEpcFromPfJson(light: any, detail: any): EpcFromJson | null {
   const currentScore = numOrNull(
     detail?.epcEfficiency ?? detail?.epcCurrentScore ?? detail?.epcCurrentEfficiency ?? detail?.epcSapScore,
   );
@@ -158,7 +158,7 @@ function extractEpcFromPfJson(light: any, detail: any): EpcFromJson | null {
  *  Each entry is normalised to a common shape — add extra source fields in the mapping below
  *  if your feed uses different keys inside each comparable object.
  */
-function extractMarketDataFromPfJson(light: any, detail: any): MarketData | null {
+export function extractMarketDataFromPfJson(light: any, detail: any): MarketData | null {
   const rawComps: any[] =
     detail?.soldComparables ??
     detail?.comparables ??

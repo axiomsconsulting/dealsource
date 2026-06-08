@@ -95,12 +95,6 @@ export const enrichFromPfJson = createServerFn({ method: "POST" })
       }
     }
 
-    // Market data — sold comparables and area statistics from the listing JSON, always refreshed
-    // from the latest pf_json paste (the feed may include updated sold comparables each time).
-    if (parsed.market_data) {
-      patch.market_data = parsed.market_data;
-    }
-
     const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
     if (error) throw new Error(error.message);
     const countedFields = Object.keys(patch).filter((k) => k !== "pf_json");
