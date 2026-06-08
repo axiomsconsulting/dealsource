@@ -21,7 +21,7 @@ import { Route as AuthenticatedPropertiesIndexRouteImport } from './routes/_auth
 import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
 import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
-import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id.guide'
+import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -87,9 +87,9 @@ const AuthenticatedPropertiesIdRoute =
   } as any)
 const AuthenticatedPropertiesIdGuideRoute =
   AuthenticatedPropertiesIdGuideRouteImport.update({
-    id: '/guide',
-    path: '/guide',
-    getParentRoute: () => AuthenticatedPropertiesIdRoute,
+    id: '/properties/$id_/guide',
+    path: '/properties/$id/guide',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -100,7 +100,7 @@ export interface FileRoutesByFullPath {
   '/searches': typeof AuthenticatedSearchesRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
-  '/properties/$id': typeof AuthenticatedPropertiesIdRouteWithChildren
+  '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/properties/': typeof AuthenticatedPropertiesIndexRoute
@@ -114,7 +114,7 @@ export interface FileRoutesByTo {
   '/searches': typeof AuthenticatedSearchesRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
-  '/properties/$id': typeof AuthenticatedPropertiesIdRouteWithChildren
+  '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/properties': typeof AuthenticatedPropertiesIndexRoute
@@ -130,11 +130,11 @@ export interface FileRoutesById {
   '/_authenticated/searches': typeof AuthenticatedSearchesRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
-  '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRouteWithChildren
+  '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/_authenticated/properties/': typeof AuthenticatedPropertiesIndexRoute
-  '/_authenticated/properties/$id/guide': typeof AuthenticatedPropertiesIdGuideRoute
+  '/_authenticated/properties/$id_/guide': typeof AuthenticatedPropertiesIdGuideRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -179,7 +179,7 @@ export interface FileRouteTypes {
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
     | '/_authenticated/properties/'
-    | '/_authenticated/properties/$id/guide'
+    | '/_authenticated/properties/$id_/guide'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -277,37 +277,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPropertiesIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/properties/$id/guide': {
-      id: '/_authenticated/properties/$id/guide'
-      path: '/guide'
+    '/_authenticated/properties/$id_/guide': {
+      id: '/_authenticated/properties/$id_/guide'
+      path: '/properties/$id/guide'
       fullPath: '/properties/$id/guide'
       preLoaderRoute: typeof AuthenticatedPropertiesIdGuideRouteImport
-      parentRoute: typeof AuthenticatedPropertiesIdRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
-
-interface AuthenticatedPropertiesIdRouteChildren {
-  AuthenticatedPropertiesIdGuideRoute: typeof AuthenticatedPropertiesIdGuideRoute
-}
-
-const AuthenticatedPropertiesIdRouteChildren: AuthenticatedPropertiesIdRouteChildren =
-  {
-    AuthenticatedPropertiesIdGuideRoute: AuthenticatedPropertiesIdGuideRoute,
-  }
-
-const AuthenticatedPropertiesIdRouteWithChildren =
-  AuthenticatedPropertiesIdRoute._addFileChildren(
-    AuthenticatedPropertiesIdRouteChildren,
-  )
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPersonaRoute: typeof AuthenticatedPersonaRoute
   AuthenticatedSearchesRoute: typeof AuthenticatedSearchesRoute
   AuthenticatedWelcomeRoute: typeof AuthenticatedWelcomeRoute
-  AuthenticatedPropertiesIdRoute: typeof AuthenticatedPropertiesIdRouteWithChildren
+  AuthenticatedPropertiesIdRoute: typeof AuthenticatedPropertiesIdRoute
   AuthenticatedPropertiesIndexRoute: typeof AuthenticatedPropertiesIndexRoute
+  AuthenticatedPropertiesIdGuideRoute: typeof AuthenticatedPropertiesIdGuideRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -315,8 +302,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPersonaRoute: AuthenticatedPersonaRoute,
   AuthenticatedSearchesRoute: AuthenticatedSearchesRoute,
   AuthenticatedWelcomeRoute: AuthenticatedWelcomeRoute,
-  AuthenticatedPropertiesIdRoute: AuthenticatedPropertiesIdRouteWithChildren,
+  AuthenticatedPropertiesIdRoute: AuthenticatedPropertiesIdRoute,
   AuthenticatedPropertiesIndexRoute: AuthenticatedPropertiesIndexRoute,
+  AuthenticatedPropertiesIdGuideRoute: AuthenticatedPropertiesIdGuideRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

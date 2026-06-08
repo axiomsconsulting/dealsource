@@ -21,7 +21,7 @@ import {
   Target, ShieldCheck, Sparkles, CheckCircle2, ListChecks,
 } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/properties/$id/guide")({
+export const Route = createFileRoute("/_authenticated/properties/$id_/guide")({
   head: () => ({ meta: [{ title: "Guided walkthrough — Deal Negotiator" }] }),
   component: GuidedWalkthrough,
 });
