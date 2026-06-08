@@ -96,12 +96,10 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
 
           {roadmap && (
             <div>
-              <h4 className="mb-1 flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-orange-500" /> Improvement roadmap — cheapest first</h4>
+              <h4 className="mb-1 flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-orange-500" /> Improvement roadmap — assessor's order, cheapest first</h4>
               <p className="mb-3 text-xs text-muted-foreground">
                 {epc.currentRating}{epc.currentScore != null ? ` (${epc.currentScore})` : ""} → {epc.potentialRating}{epc.potentialScore != null ? ` (${epc.potentialScore})` : ""} is what the assessor says is achievable doing every measure below, for a total indicative spend of {fmtGBP(roadmap.totalCostMin)}–{fmtGBP(roadmap.totalCostMax)}.
-                {roadmap.totalAvailablePoints != null && roadmap.totalAvailablePoints > 0 && (
-                  <> Sequenced cheapest-first, the markers below estimate where you'd plausibly clear D (≥55) and C (≥69) — the register doesn't publish a per-measure score contribution, so treat these as a sequencing steer rather than a guarantee.</>
-                )}
+                {" "}The resulting score after each step is the register's own calculated cumulative figure — not an estimate — so the "reaches D" / "reaches C" markers below are read straight off the certificate.
               </p>
               <ol className="space-y-2">
                 {roadmap.steps.map((s) => (
@@ -111,10 +109,13 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
                         <div className="flex items-center gap-2">
                           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">{s.index}</span>
                           <span className="font-medium">{s.summary}</span>
-                          {s.crossesIntoD && <Badge className="bg-amber-500 text-[10px] text-white">~ reaches D here</Badge>}
-                          {s.crossesIntoC && <Badge className="bg-green-600 text-[10px] text-white">~ reaches C here</Badge>}
+                          {s.crossesIntoD && <Badge className="bg-amber-500 text-[10px] text-white">reaches D here</Badge>}
+                          {s.crossesIntoC && <Badge className="bg-green-600 text-[10px] text-white">reaches C here</Badge>}
                         </div>
-                        {s.description && <p className="mt-1 pl-7 text-xs text-muted-foreground">{s.description}</p>}
+                        <p className="mt-1 pl-7 text-xs text-muted-foreground">
+                          {s.resultingScore != null && <>Resulting score after this step: {s.resultingScore}{s.resultingBand ? ` (band ${s.resultingBand})` : ""}</>}
+                          {s.typicalSavingPerYear != null && <> · typical saving ~{fmtGBP(s.typicalSavingPerYear)}/yr</>}
+                        </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-sm font-semibold">{s.costLabel}</div>
@@ -124,6 +125,11 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
                   </li>
                 ))}
               </ol>
+              {epc.certificateUrl && (
+                <a href={epc.certificateUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs text-accent underline">
+                  View the official certificate on the government register ↗
+                </a>
+              )}
             </div>
           )}
         </CardContent>
@@ -189,10 +195,11 @@ function RatingChip({ label, band, score }: { label: string; band: string | null
   );
 }
 
-/** Each user brings their own free Open Data Communities account — saved to *their* profile row
- *  only (RLS-scoped), never a shared platform secret, so nobody else's key ever touches this app's
- *  config. The key is write-only from the browser's perspective: once saved we only ever ask the
- *  server "is one configured?", never read it back. */
+/** Each user brings their own free GOV.UK "Get energy performance of buildings data" account and
+ *  signs in with GOV.UK One Login to generate a personal bearer token — saved to *their* profile
+ *  row only (RLS-scoped), never a shared platform secret, so nobody else's token ever touches this
+ *  app's config. The token is write-only from the browser's perspective: once saved we only ever
+ *  ask the server "is one configured?", never read it back. */
 function EpcCredentialsForm() {
   const qc = useQueryClient();
   const getStatus = useServerFn(getEpcCredentialsStatus);
@@ -204,16 +211,15 @@ function EpcCredentialsForm() {
   const configured = !!status?.configured;
 
   const [editing, setEditing] = useState(false);
-  const [email, setEmail] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [token, setToken] = useState("");
 
   useEffect(() => { if (!configured) setEditing(true); }, [configured]);
 
   const saveMut = useMutation({
-    mutationFn: () => save({ data: { email, apiKey } }),
+    mutationFn: () => save({ data: { token } }),
     onSuccess: () => {
-      toast.success("EPC credentials saved to your account");
-      setApiKey(""); setEditing(false);
+      toast.success("EPC register token saved to your account");
+      setToken(""); setEditing(false);
       qc.invalidateQueries({ queryKey: ["epc-credentials"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -221,8 +227,8 @@ function EpcCredentialsForm() {
   const clearMut = useMutation({
     mutationFn: () => clear({ data: {} } as any),
     onSuccess: () => {
-      toast.success("EPC credentials removed");
-      setEmail(""); setApiKey(""); setEditing(true);
+      toast.success("EPC register token removed");
+      setToken(""); setEditing(true);
       qc.invalidateQueries({ queryKey: ["epc-credentials"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -235,11 +241,11 @@ function EpcCredentialsForm() {
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <span className="flex items-center gap-2 text-muted-foreground">
           <KeyRound className="h-4 w-4 text-emerald-600" />
-          EPC register connected as <span className="font-medium text-foreground">{status.email}</span> — saved to your account, used only for your fetches.
+          EPC register connected — your bearer token is saved to your account and used only for your fetches.
         </span>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => { setEmail(status.email ?? ""); setEditing(true); }}>Replace key</Button>
-          <Button size="sm" variant="ghost" disabled={clearMut.isPending} onClick={() => { if (confirm("Remove your saved EPC credentials?")) clearMut.mutate(); }}>Remove</Button>
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Replace token</Button>
+          <Button size="sm" variant="ghost" disabled={clearMut.isPending} onClick={() => { if (confirm("Remove your saved EPC register token?")) clearMut.mutate(); }}>Remove</Button>
         </div>
       </div>
     );
@@ -249,25 +255,20 @@ function EpcCredentialsForm() {
     <div className="space-y-3">
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
-        Bring your own free <span className="font-medium text-foreground">Open Data Communities EPC register</span> account
-        (the email you registered it under, plus your API key). It's stored against your account only — gated so only
-        you can read or write it — and is never shared with other users or written into this app's source/config.
+        Bring your own free <span className="font-medium text-foreground">"Get energy performance of buildings data"</span> account.
+        Sign in with GOV.UK One Login on the register's site and generate a personal access token from your account page,
+        then paste it here. It's stored against your account only — gated so only you can read or write it — and is never
+        shared with other users or written into this app's source/config.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="epc-email">Account email</Label>
-          <Input id="epc-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="epc-key">API key</Label>
-          <Input id="epc-key" type="password" placeholder={configured ? "Enter new key to replace the saved one" : "Paste your EPC API key"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="epc-token">Bearer token</Label>
+        <Input id="epc-token" type="password" placeholder={configured ? "Enter new token to replace the saved one" : "Paste your EPC register access token"} value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" />
       </div>
       <div className="flex gap-2">
-        <Button size="sm" disabled={!email || !apiKey || saveMut.isPending} onClick={() => saveMut.mutate()}>
-          {saveMut.isPending ? "Saving…" : "Save credentials"}
+        <Button size="sm" disabled={!token || saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? "Saving…" : "Save token"}
         </Button>
-        {configured && <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setApiKey(""); }}>Cancel</Button>}
+        {configured && <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setToken(""); }}>Cancel</Button>}
       </div>
     </div>
   );
