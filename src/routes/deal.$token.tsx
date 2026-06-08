@@ -60,7 +60,7 @@ function DealSheetPage() {
   const visiblePhotos = allPhotos.filter((p: any) => redact ? !p.is_exterior : true);
   const photos = visiblePhotos.filter((p: any) => !p.is_floor_plan);
   const floorPlans = visiblePhotos.filter((p: any) => p.is_floor_plan);
-  const best = a.strategies.find((s: any) => s.key === a.bestStrategy);
+  const best = (a.strategies ?? []).find((s: any) => s.key === a.bestStrategy);
   const displayAddress = redact
     ? `${prop.postcode?.split(" ")[0] ?? prop.city ?? "Location"} · ${prop.property_type ?? ""}`
     : prop.address;

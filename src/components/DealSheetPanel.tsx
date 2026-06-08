@@ -33,7 +33,7 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
   });
 
   const token = (sheet.data as any)?.share_token;
-  const shareUrl = token ? `${typeof window !== "undefined" ? window.location.origin : ""}/deal/${token}` : "";
+  const shareUrl = token ? `${typeof window !== "undefined" ? window.location.origin : ""}/deal/${encodeURIComponent(token)}` : "";
   const pdfUrl = token ? `/api/deal-pdf/${token}` : "";
 
   return (
