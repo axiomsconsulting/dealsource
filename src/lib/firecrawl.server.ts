@@ -22,7 +22,35 @@ export function assertSupportedListingUrl(url: string) {
 }
 
 const EXTRACT_PROMPT =
-  "Extract: full address, postcode, asking price (GBP), property type (terraced/semi/detached/flat/bungalow), number of bedrooms, number of bathrooms, tenure (Freehold/Leasehold), lease years remaining if shown, EPC rating, floor area in m², agent name, image URLs (jpg/png). Return null for unknowns.";
+  "Extract: address (use whatever address text the page displays — many listings show only a street/area name and postcode district with no house number, e.g. 'Newcombe Road, Northampton, NN5'; return that partial address rather than null — only return null if there is truly no location text at all), postcode (a postcode district/outcode like 'NN5' is fine if the full postcode is not shown), asking price (GBP), property type (terraced/semi/detached/flat/bungalow), number of bedrooms, number of bathrooms, tenure (Freehold/Leasehold), lease years remaining if shown, EPC rating, floor area in m², agent name, image URLs (jpg/png). Return null for unknowns.";
+
+/** Rightmove/Zoopla/etc. listing pages routinely withhold the exact house number and show only
+ *  "<street/area>, <town>, <postcode district>" — and the page <title>/og:description nearly always
+ *  reads "<n> bedroom <type> for sale in <that address> for £<price>". When the LLM extraction comes
+ *  back empty (e.g. it over-indexes on "address" meaning a full postal address), recover the same
+ *  string straight from that boilerplate so a real, if partial, address still reaches the user. */
+function deriveAddressFromText(root: any): string | null {
+  const text = [
+    root?.metadata?.title, root?.metadata?.ogTitle,
+    root?.metadata?.description, root?.metadata?.ogDescription,
+    typeof root?.markdown === "string" ? root.markdown.slice(0, 4000) : "",
+  ].filter(Boolean).join("\n");
+  const m = text.match(/for sale in ([^£\n]+?)(?:[.\n]|£|$)/i);
+  if (!m) return null;
+  // Trim the price-intro filler ("for", "for offers over", "guide price", …) the capture
+  // swallows when the price sits right after the address with no separating punctuation.
+  const addr = m[1].replace(/[\s,]*(?:for\s+)?(?:offers?\s*(?:over|in\s+excess\s+of|in\s+the\s+region\s+of)?|guide\s+price|asking\s+price|from)?\s*$/i, "").trim();
+  return addr || null;
+}
+
+const POSTCODE_RE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})?\b/i;
+
+function derivePostcodeFromText(root: any, address: string | null): string | null {
+  const text = [address, root?.metadata?.title, root?.metadata?.description, root?.metadata?.ogDescription].filter(Boolean).join(" ");
+  const m = text.match(POSTCODE_RE);
+  if (!m) return null;
+  return (m[2] ? `${m[1]} ${m[2]}` : m[1]).toUpperCase();
+}
 
 export async function scrapeListing(url: string): Promise<ScrapedListing> {
   const key = process.env.FIRECRAWL_API_KEY;
@@ -42,9 +70,12 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
   const root = body?.data ?? body;
   const j = root?.json ?? root?.extract ?? {};
 
+  const address = j.address ? String(j.address) : deriveAddressFromText(root);
+  const postcode = j.postcode ? String(j.postcode).toUpperCase() : derivePostcodeFromText(root, address);
+
   return {
-    address: j.address ? String(j.address) : null,
-    postcode: j.postcode ? String(j.postcode).toUpperCase() : null,
+    address,
+    postcode,
     asking_price_gbp: numOrNull(j.price ?? j.asking_price ?? j.asking_price_gbp),
     property_type: (j.property_type ?? j.type) ? String(j.property_type ?? j.type) : null,
     beds: numOrNull(j.bedrooms ?? j.beds),

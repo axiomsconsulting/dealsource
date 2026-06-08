@@ -87,6 +87,18 @@ export interface StrategyNumber {
   overridden?: boolean;
 }
 
+/** One weighted line item behind a deal score — the sum of `points` across a strategy's
+ *  `scoreBreakdown` (before the final 0-100 clamp) is the score shown for that strategy, so
+ *  the number is reproducible by hand from the figures already on screen. */
+export interface ScoreComponent {
+  label: string;
+  points: number;
+  /** The cap this component is held to, if it has one — omitted when the component is
+   *  uncapped on its own and only the strategy's overall 0-100 clamp applies. */
+  max?: number;
+  detail: string;
+}
+
 export interface StrategyResult {
   key: StrategyKey;
   name: string;
@@ -97,7 +109,31 @@ export interface StrategyResult {
   monthlyCashflow?: number;
   annualROI?: number;
   dealScore: number; // 0-100
+  /** The weighted components that sum to `dealScore` (pre-clamp) — what the score "is made of". */
+  scoreBreakdown?: ScoreComponent[];
+  /** One-line statement of the formula that combines `scoreBreakdown` into `dealScore`. */
+  scoreFormula?: string;
   summary: string;
+}
+
+/** A plain-language read on what the numbers mean — shown as badges alongside the deal score
+ *  so "62/100" comes with "why" (risk level, income shape, upside potential). Each value is
+ *  derived from figures already computed elsewhere in the analysis (see deriveDealIndicators). */
+export interface DealIndicator {
+  key: "risk" | "income" | "reward";
+  label: string;
+  value: string;
+  tone: "good" | "neutral" | "warn" | "bad";
+  detail: string;
+}
+
+/** How the headline 0-100 score was derived from the six strategy scores — lets the UI show
+ *  the averaging (and any risk-flag cap) as plain arithmetic rather than a black box. */
+export interface OverallScoreBreakdown {
+  strategyScores: { key: StrategyKey; name: string; score: number }[];
+  average: number;
+  cappedAt?: number;
+  capReason?: string;
 }
 
 export interface NegotiationPoint {
@@ -150,6 +186,8 @@ export interface AnalysisOutput {
   negotiationGuidance: NegotiationGuidance;
   bestStrategy: StrategyKey;
   overallScore: number;
+  overallScoreBreakdown: OverallScoreBreakdown;
+  dealIndicators: DealIndicator[];
   riskFlags?: any[];
   article4?: { status: string; council: string | null } | null;
 }
