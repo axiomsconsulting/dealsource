@@ -141,7 +141,7 @@ function buildEpcData(cert: any, recRows: any[]): any {
 
 export const fetchEpcForProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: prop, error: propErr } = await context.supabase
       .from("properties").select("id, address, postcode, epc_data, epc_fetched_at")
@@ -181,7 +181,7 @@ export const fetchEpcForProperty = createServerFn({ method: "POST" })
 
 export const getEpcForProperty = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase
       .from("properties").select("epc_data, epc_fetched_at")

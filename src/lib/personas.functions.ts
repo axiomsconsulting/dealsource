@@ -89,7 +89,7 @@ const StrategyEnum = z.enum(["BTL", "BRRR", "SA", "HMO", "FLIP", "TITLE_SPLIT", 
 
 export const createPersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({
+  .inputValidator((i: unknown) => z.object({
     name: z.string().min(1).max(120),
     strategy: StrategyEnum.default("BTL"),
     copyFromId: z.string().uuid().optional(),
@@ -110,7 +110,7 @@ export const createPersona = createServerFn({ method: "POST" })
 
 export const deletePersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase.from("personas").select("is_default").eq("id", data.id).eq("user_id", context.userId).maybeSingle();
     const { error } = await context.supabase.from("personas").delete().eq("id", data.id).eq("user_id", context.userId);
@@ -124,7 +124,7 @@ export const deletePersona = createServerFn({ method: "POST" })
 
 export const setActivePersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await context.supabase.from("personas").update({ is_default: false }).eq("user_id", context.userId).eq("is_default", true);
     const { error } = await context.supabase.from("personas").update({ is_default: true }).eq("id", data.id).eq("user_id", context.userId);
@@ -155,7 +155,7 @@ const PersonaPatchSchema = z.object({
 
 export const updateDefaultPersona = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: unknown) => PersonaPatchSchema.parse(input))
+  .inputValidator((input: unknown) => PersonaPatchSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { id, ...patch } = data;
     const q = context.supabase.from("personas").update(patch).eq("user_id", context.userId);
