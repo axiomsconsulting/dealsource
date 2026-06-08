@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const listPhotos = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: rows, error } = await context.supabase
       .from("photos")
@@ -25,7 +25,7 @@ export const listPhotos = createServerFn({ method: "GET" })
 
 export const addPhotoRecords = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) =>
+  .inputValidator((i: unknown) =>
     z.object({
       propertyId: z.string().uuid(),
       photos: z.array(z.object({
@@ -51,7 +51,7 @@ export const addPhotoRecords = createServerFn({ method: "POST" })
 
 export const deletePhoto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("photos").select("storage_path").eq("id", data.id).maybeSingle();

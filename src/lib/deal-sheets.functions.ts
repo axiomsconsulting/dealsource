@@ -5,7 +5,7 @@ import { analyseProperty } from "@/lib/analysis/engine";
 
 export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({
+  .inputValidator((i: unknown) => z.object({
     propertyId: z.string().uuid(),
     redact: z.boolean().optional(),
     is_public: z.boolean().optional(),
@@ -77,7 +77,7 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
 
 export const getMyDealSheet = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("deal_sheets").select("*").eq("property_id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -85,7 +85,7 @@ export const getMyDealSheet = createServerFn({ method: "GET" })
   });
 
 export const getPublicDealSheet = createServerFn({ method: "GET" })
-  .validator((i: unknown) => z.object({ token: z.string().min(8).max(200) }).parse(i))
+  .inputValidator((i: unknown) => z.object({ token: z.string().min(8).max(200) }).parse(i))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin

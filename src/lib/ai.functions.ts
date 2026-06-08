@@ -79,7 +79,7 @@ function parseJsonBlock(text: string): any {
 
 export const analyseWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     return await runFullAnalysis(context, data.propertyId);
   });
@@ -107,7 +107,7 @@ const PhotoRefurbSchema = z.object({
 
 export const analysePhotosForRefurb = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: prop } = await context.supabase
       .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -186,7 +186,7 @@ const FlexSchema = z.object({
 
 export const estimateSellerFlex = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: prop } = await context.supabase
       .from("properties").select("*").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -221,7 +221,7 @@ EPC: ${prop.epc_rate ?? "?"}, Tenure: ${prop.tenure ?? "?"}`;
 
 export const getAIAnalysis = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("analyses").select("ai_notes, ai_payload, ai_version, ai_used_at")
@@ -231,7 +231,7 @@ export const getAIAnalysis = createServerFn({ method: "GET" })
 
 export const analyseLibraryWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((i: unknown) => z.object({ limit: z.number().int().min(1).max(50).default(20), force: z.boolean().default(false) }).parse(i))
+  .inputValidator((i: unknown) => z.object({ limit: z.number().int().min(1).max(50).default(20), force: z.boolean().default(false) }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: props } = await context.supabase.from("properties").select("id").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(data.limit);
     if (!props?.length) return { processed: 0 };
