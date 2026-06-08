@@ -98,12 +98,22 @@ const ELEMENT_FIELDS: { key: string; label: string }[] = [
   { key: "air_tightness", label: "Air tightness" },
 ];
 
+// The register returns plain strings for most certificates, but bilingual ones (Wales, mainly)
+// shape `description` as `{ value, language }` — render either as the same flat string so
+// downstream consumers (and JSX) never have to know the difference.
+function descriptionText(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object" && "value" in (raw as any) && typeof (raw as any).value === "string") return (raw as any).value;
+  return null;
+}
+
 function normaliseElement(raw: any): ElementShape | null {
   if (!raw) return null;
   // walls/roofs/floors are arrays of building parts; the rest are single objects.
   const item = Array.isArray(raw) ? raw[0] : raw;
   if (!item || typeof item !== "object") return null;
-  return item;
+  return { ...item, description: descriptionText(item.description) };
 }
 
 function parseCostRange(raw: string | null | undefined): { min: number | null; max: number | null; raw: string } {

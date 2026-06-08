@@ -15,6 +15,16 @@ import { buildEpcRoadmap } from "@/lib/analysis/epc-plan";
 import { fmtGBP } from "@/lib/format";
 import { toast } from "sonner";
 
+// Certificates fetched before the bilingual-description fix may still have `description` cached
+// as `{ value, language }` (Welsh certificates shape it that way) — coerce defensively so a stale
+// row can't crash the page; React refuses to render a bare object as a child.
+function descriptionText(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object" && typeof (raw as any).value === "string") return (raw as any).value;
+  return null;
+}
+
 const EFF_LABEL_COLOR: Record<string, string> = {
   "very good": "text-emerald-700 bg-emerald-50 border-emerald-200",
   good: "text-green-700 bg-green-50 border-green-200",
@@ -146,7 +156,7 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
                         <Badge variant="outline" className={`text-[10px] ${EFF_LABEL_COLOR[el.energyEff.toLowerCase()] ?? ""}`}>{el.energyEff}</Badge>
                       )}
                     </div>
-                    {el.description && <p className="text-xs text-muted-foreground">{el.description}</p>}
+                    {descriptionText(el.description) && <p className="text-xs text-muted-foreground">{descriptionText(el.description)}</p>}
                   </div>
                 ))}
               </div>

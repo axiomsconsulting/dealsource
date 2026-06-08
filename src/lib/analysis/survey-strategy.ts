@@ -50,16 +50,27 @@ const PRE_2000_ERA_PATTERNS: RegExp[] = [
   /\b1990s\b/i,
 ];
 
+// Some cached certificates (Welsh ones, mainly) shape element `description` as `{ value, language }`
+// rather than a plain string — coerce defensively so the regex blob and any rendered evidence
+// text never end up with a literal "[object Object]" in them.
+function descriptionText(raw: unknown): string | undefined {
+  if (typeof raw === "string") return raw;
+  if (raw && typeof raw === "object" && typeof (raw as any).value === "string") return (raw as any).value;
+  return undefined;
+}
+
 function epcTextBlob(prop: PropertyInput): { blob: string; wallDesc?: string; roofDesc?: string; roofEff?: string | null } {
   const epc: any = (prop as any).epc_data ?? null;
   if (!epc) return { blob: "" };
   const elements: any[] = Array.isArray(epc.elements) ? epc.elements : [];
   const wall = elements.find((e) => e?.key === "walls");
   const roof = elements.find((e) => e?.key === "roofs");
-  const blob = [epc.propertyType, epc.builtForm, wall?.description, roof?.description, epc.lodgementDate, epc.inspectionDate]
+  const wallDesc = descriptionText(wall?.description);
+  const roofDesc = descriptionText(roof?.description);
+  const blob = [epc.propertyType, epc.builtForm, wallDesc, roofDesc, epc.lodgementDate, epc.inspectionDate]
     .filter(Boolean)
     .join(" — ");
-  return { blob, wallDesc: wall?.description ?? undefined, roofDesc: roof?.description ?? undefined, roofEff: roof?.energyEff ?? null };
+  return { blob, wallDesc, roofDesc, roofEff: roof?.energyEff ?? null };
 }
 
 /** Pure, persona-independent survey/condition leverage: what to brief the surveyor and builder to
