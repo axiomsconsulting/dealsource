@@ -4,25 +4,26 @@ import { z } from "zod";
 
 // UK government's Open Data Communities EPC register — the authoritative source for lodged
 // Energy Performance Certificates (England & Wales). Auth is HTTP Basic with the email the API
-// account was registered under, plus the API key. Configure EPC_API_EMAIL / EPC_API_KEY as
-// server-side secrets (same place as LOVABLE_API_KEY/FIRECRAWL_API_KEY) — never in the repo .env,
-// since that file is committed and only meant for public/publishable values.
+// account was registered under, plus the API key. Each user supplies their own credentials
+// (saved via `saveEpcCredentials` below), stored on that user's own `profiles` row and gated by
+// the existing "own profile" RLS policy (auth.uid() = id) — never a shared server secret, never
+// written to the repo.
 const EPC_BASE = "https://epc.opendatacommunities.org/api/v1/domestic";
 
-function authHeader(): string | null {
-  const email = process.env.EPC_API_EMAIL;
-  const key = process.env.EPC_API_KEY;
-  if (!email || !key) return null;
-  return "Basic " + Buffer.from(`${email}:${key}`).toString("base64");
+async function loadUserEpcCredentials(supabase: any, userId: string): Promise<{ email: string; apiKey: string } | null> {
+  const { data, error } = await supabase.from("profiles").select("epc_api_email, epc_api_key").eq("id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.epc_api_email || !data?.epc_api_key) return null;
+  return { email: data.epc_api_email, apiKey: data.epc_api_key };
 }
 
-async function epcFetch(path: string): Promise<any> {
-  const auth = authHeader();
-  if (!auth) throw new Error("EPC_API_EMAIL / EPC_API_KEY are not configured on the server");
+async function epcFetch(path: string, creds: { email: string; apiKey: string }): Promise<any> {
+  const auth = "Basic " + Buffer.from(`${creds.email}:${creds.apiKey}`).toString("base64");
   const res = await fetch(`${EPC_BASE}${path}`, {
     headers: { Accept: "application/json", Authorization: auth },
   });
   if (res.status === 404) return null;
+  if (res.status === 401 || res.status === 403) throw new Error("The EPC register rejected your email/API key — double-check them and save again");
   if (!res.ok) throw new Error(`EPC register request failed (${res.status}): ${await res.text().catch(() => res.statusText)}`);
   return res.json();
 }
@@ -143,6 +144,9 @@ export const fetchEpcForProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
+    const creds = await loadUserEpcCredentials(context.supabase, context.userId);
+    if (!creds) throw new Error("Add your EPC register email and API key below before fetching — they're saved to your account only.");
+
     const { data: prop, error: propErr } = await context.supabase
       .from("properties").select("id, address, postcode, epc_data, epc_fetched_at")
       .eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -150,7 +154,7 @@ export const fetchEpcForProperty = createServerFn({ method: "POST" })
     if (!prop) throw new Error("Property not found");
     if (!prop.postcode) throw new Error("This property has no postcode on file — the EPC register is searched by postcode");
 
-    const search = await epcFetch(`/search?postcode=${encodeURIComponent(prop.postcode)}&size=50`);
+    const search = await epcFetch(`/search?postcode=${encodeURIComponent(prop.postcode)}&size=50`, creds);
     const rows: any[] = search?.rows ?? [];
     if (!rows.length) throw new Error(`No EPC certificates found on the register for postcode ${prop.postcode}`);
 
@@ -164,8 +168,8 @@ export const fetchEpcForProperty = createServerFn({ method: "POST" })
 
     const lmkKey = chosen.row["lmk-key"];
     const [certRes, recRes] = await Promise.all([
-      epcFetch(`/certificate/${encodeURIComponent(lmkKey)}`),
-      epcFetch(`/recommendations/${encodeURIComponent(lmkKey)}`),
+      epcFetch(`/certificate/${encodeURIComponent(lmkKey)}`, creds),
+      epcFetch(`/recommendations/${encodeURIComponent(lmkKey)}`, creds),
     ]);
     const cert = certRes?.rows?.[0];
     if (!cert) throw new Error("EPC register did not return certificate detail for the matched property");
@@ -188,4 +192,42 @@ export const getEpcForProperty = createServerFn({ method: "GET" })
       .eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
     if (error) throw new Error(error.message);
     return row ?? { epc_data: null, epc_fetched_at: null };
+  });
+
+// --- Per-user EPC register credentials -------------------------------------------------
+// Stored on the user's own `profiles` row (RLS: auth.uid() = id), so each user brings their
+// own free Open Data Communities account. `getEpcCredentialsStatus` deliberately never returns
+// the key itself to the client — only whether one is on file — so it isn't echoed back into
+// the browser after being saved.
+
+export const getEpcCredentialsStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("profiles").select("epc_api_email, epc_api_key").eq("id", context.userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return { email: data?.epc_api_email ?? null, configured: !!(data?.epc_api_email && data?.epc_api_key) };
+  });
+
+export const saveEpcCredentials = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ email: z.string().email(), apiKey: z.string().min(10) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("profiles")
+      .update({ epc_api_email: data.email, epc_api_key: data.apiKey })
+      .eq("id", context.userId);
+    if (error) throw new Error(error.message);
+    return { email: data.email, configured: true };
+  });
+
+export const clearEpcCredentials = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { error } = await context.supabase
+      .from("profiles")
+      .update({ epc_api_email: null, epc_api_key: null })
+      .eq("id", context.userId);
+    if (error) throw new Error(error.message);
+    return { email: null, configured: false };
   });

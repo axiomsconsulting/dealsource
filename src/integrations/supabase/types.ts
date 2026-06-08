@@ -354,18 +354,24 @@ export type Database = {
           created_at: string
           display_name: string | null
           email: string | null
+          epc_api_email: string | null
+          epc_api_key: string | null
           id: string
         }
         Insert: {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          epc_api_email?: string | null
+          epc_api_key?: string | null
           id: string
         }
         Update: {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          epc_api_email?: string | null
+          epc_api_key?: string | null
           id?: string
         }
         Relationships: []

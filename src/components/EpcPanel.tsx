@@ -1,11 +1,16 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Flame, RefreshCw, Zap } from "lucide-react";
-import { fetchEpcForProperty, getEpcForProperty, EPC_BANDS, bandForScore } from "@/lib/epc.functions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Flame, KeyRound, RefreshCw, Zap } from "lucide-react";
+import {
+  fetchEpcForProperty, getEpcForProperty, getEpcCredentialsStatus, saveEpcCredentials, clearEpcCredentials,
+  EPC_BANDS, bandForScore,
+} from "@/lib/epc.functions";
 import { buildEpcRoadmap } from "@/lib/analysis/epc-plan";
 import { fmtGBP } from "@/lib/format";
 import { toast } from "sonner";
@@ -27,6 +32,10 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
   const epc: any = (q.data as any)?.epc_data ?? null;
   const fetchedAt: string | null = (q.data as any)?.epc_fetched_at ?? null;
 
+  const getCredsStatus = useServerFn(getEpcCredentialsStatus);
+  const credQ = useQuery({ queryKey: ["epc-credentials"], queryFn: () => getCredsStatus({ data: {} } as any) });
+  const configured = !!(credQ.data as any)?.configured;
+
   const mut = useMutation({
     mutationFn: () => fetchEpc({ data: { propertyId } }),
     onSuccess: () => { toast.success("EPC certificate fetched from the register"); qc.invalidateQueries({ queryKey: ["epc", propertyId] }); },
@@ -40,10 +49,12 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2"><Zap className="h-4 w-4 text-accent" /> EPC — energy performance</span>
-          <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => mut.mutate()}>
-            <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
-            {epc ? "Refetch from register" : "Fetch from EPC register"}
-          </Button>
+          {credQ.isSuccess && configured && (
+            <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => mut.mutate()}>
+              <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
+              {epc ? "Refetch from register" : "Fetch from EPC register"}
+            </Button>
+          )}
         </CardTitle>
         <CardDescription>
           {epc
@@ -51,6 +62,9 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
             : "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."}
         </CardDescription>
       </CardHeader>
+      <CardContent className={epc ? "border-b pb-6" : undefined}>
+        <EpcCredentialsForm />
+      </CardContent>
       {epc && (
         <CardContent className="space-y-6">
           {epc.address && (
@@ -171,6 +185,90 @@ function RatingChip({ label, band, score }: { label: string; band: string | null
         {band ?? "?"}
       </span>
       {score != null && <span className="text-xs text-muted-foreground">({score}/100)</span>}
+    </div>
+  );
+}
+
+/** Each user brings their own free Open Data Communities account — saved to *their* profile row
+ *  only (RLS-scoped), never a shared platform secret, so nobody else's key ever touches this app's
+ *  config. The key is write-only from the browser's perspective: once saved we only ever ask the
+ *  server "is one configured?", never read it back. */
+function EpcCredentialsForm() {
+  const qc = useQueryClient();
+  const getStatus = useServerFn(getEpcCredentialsStatus);
+  const save = useServerFn(saveEpcCredentials);
+  const clear = useServerFn(clearEpcCredentials);
+
+  const q = useQuery({ queryKey: ["epc-credentials"], queryFn: () => getStatus({ data: {} } as any) });
+  const status: any = q.data;
+  const configured = !!status?.configured;
+
+  const [editing, setEditing] = useState(false);
+  const [email, setEmail] = useState("");
+  const [apiKey, setApiKey] = useState("");
+
+  useEffect(() => { if (!configured) setEditing(true); }, [configured]);
+
+  const saveMut = useMutation({
+    mutationFn: () => save({ data: { email, apiKey } }),
+    onSuccess: () => {
+      toast.success("EPC credentials saved to your account");
+      setApiKey(""); setEditing(false);
+      qc.invalidateQueries({ queryKey: ["epc-credentials"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const clearMut = useMutation({
+    mutationFn: () => clear({ data: {} } as any),
+    onSuccess: () => {
+      toast.success("EPC credentials removed");
+      setEmail(""); setApiKey(""); setEditing(true);
+      qc.invalidateQueries({ queryKey: ["epc-credentials"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  if (q.isLoading) return null;
+
+  if (configured && !editing) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span className="flex items-center gap-2 text-muted-foreground">
+          <KeyRound className="h-4 w-4 text-emerald-600" />
+          EPC register connected as <span className="font-medium text-foreground">{status.email}</span> — saved to your account, used only for your fetches.
+        </span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setEmail(status.email ?? ""); setEditing(true); }}>Replace key</Button>
+          <Button size="sm" variant="ghost" disabled={clearMut.isPending} onClick={() => { if (confirm("Remove your saved EPC credentials?")) clearMut.mutate(); }}>Remove</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+        <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
+        Bring your own free <span className="font-medium text-foreground">Open Data Communities EPC register</span> account
+        (the email you registered it under, plus your API key). It's stored against your account only — gated so only
+        you can read or write it — and is never shared with other users or written into this app's source/config.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="epc-email">Account email</Label>
+          <Input id="epc-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="epc-key">API key</Label>
+          <Input id="epc-key" type="password" placeholder={configured ? "Enter new key to replace the saved one" : "Paste your EPC API key"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={!email || !apiKey || saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? "Saving…" : "Save credentials"}
+        </Button>
+        {configured && <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setApiKey(""); }}>Cancel</Button>}
+      </div>
     </div>
   );
 }
