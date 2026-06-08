@@ -158,7 +158,7 @@ export const updateDefaultPersona = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => PersonaPatchSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { id, ...patch } = data;
-    const q = context.supabase.from("personas").update(patch).eq("user_id", context.userId);
+    const q = context.supabase.from("personas").update(patch as any).eq("user_id", context.userId);
     const { error } = id ? await q.eq("id", id) : await q.eq("is_default", true);
     if (error) throw new Error(error.message);
     return { ok: true };
