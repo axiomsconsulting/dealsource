@@ -386,6 +386,8 @@ export type Database = {
           city: string | null
           created_at: string
           csv_row: Json | null
+          epc_data: Json | null
+          epc_fetched_at: string | null
           epc_rate: string | null
           estimated_rent_pcm: number | null
           hidden: boolean
@@ -419,6 +421,8 @@ export type Database = {
           city?: string | null
           created_at?: string
           csv_row?: Json | null
+          epc_data?: Json | null
+          epc_fetched_at?: string | null
           epc_rate?: string | null
           estimated_rent_pcm?: number | null
           hidden?: boolean
@@ -452,6 +456,8 @@ export type Database = {
           city?: string | null
           created_at?: string
           csv_row?: Json | null
+          epc_data?: Json | null
+          epc_fetched_at?: string | null
           epc_rate?: string | null
           estimated_rent_pcm?: number | null
           hidden?: boolean

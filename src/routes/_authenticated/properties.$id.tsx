@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
+import { EpcPanel } from "@/components/EpcPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { RefurbPanel } from "@/components/RefurbPanel";
 import { RiskChips } from "@/components/RiskChips";
@@ -314,6 +315,7 @@ function PropertyDetail() {
         )}
 
         <PhotosPanel propertyId={id} />
+        <EpcPanel propertyId={id} />
         <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
         <ImageLibrary urls={heroImages} />
         <NegotiationPanel
