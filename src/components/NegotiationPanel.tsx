@@ -12,14 +12,15 @@ import { SELLER_CIRCUMSTANCES, circumstanceFlexPct, type SellerContext } from "@
 import { estimateSellerFlex } from "@/lib/ai.functions";
 import { updateProperty } from "@/lib/ingest.functions";
 import { toast } from "sonner";
+import type { NegotiationGuidance } from "@/lib/analysis/types";
 
 export function NegotiationPanel({
   property,
-  refurbTotal,
+  guidance,
   onApplyOffer,
 }: {
   property: any;
-  refurbTotal: number;
+  guidance: NegotiationGuidance;
   onApplyOffer: (gbp: number) => void;
 }) {
   const qc = useQueryClient();
@@ -52,43 +53,44 @@ export function NegotiationPanel({
 
   const asking = Number(property.asking_price_gbp ?? 0);
   const circFlex = useMemo(() => circumstanceFlexPct(local), [local]);
-  const compMid = flex?.reductionPctMid ?? 0.05;
-  const combinedFlexPct = Math.min(0.25, compMid + circFlex);
-  const refurbReduction = Math.min(refurbTotal, asking * 0.15);
+  const compMid = flex?.reductionPctMid ?? 0;
+  const combinedFlexPct = Math.max(-0.03, Math.min(0.10, compMid + circFlex));
+  const sellerContextAdjustment = asking * combinedFlexPct * 0.5;
+  const maxContextDiscountPct = Math.min(0.24, guidance.maxOpeningDiscountPct + Math.max(0, combinedFlexPct * 0.35));
+  const contextFloor = asking * (1 - maxContextDiscountPct);
 
-  // Opening anchor: stack every justified factor — your most aggressive credible bid. This is the
-  // low end; you expect (and want) to move up from here over the rounds below.
-  const baseline = asking * (1 - combinedFlexPct);
-  const recommendedOffer = Math.max(0, Math.round(baseline - refurbReduction));
+  const roundOffer = (n: number, allowAsking = false) => {
+    const step = n < 125_000 ? 500 : 1_000;
+    const rounded = Math.round(n / step) * step;
+    if (asking <= 0) return rounded;
+    return Math.max(0, Math.min(allowAsking ? asking : asking - step, rounded));
+  };
 
-  // Walk-away: the ceiling you refuse to cross — by definition HIGHER than your opener (it's where
-  // the negotiation ends, not where it starts) and LOWER than asking (paying full asking means
-  // there was nothing to negotiate). Grounded in only the slice of your case you'd insist on even
-  // under pressure (a fraction of the combined flex) plus half the refurb offset — at the eleventh
-  // hour you'd absorb more of the capex into the price than you would on the opener. Clamped so it
-  // always lands strictly between the recommended offer and asking.
-  const walkAwayFlexPct = combinedFlexPct * 0.4;
-  const walkAwayCeiling = asking * (1 - walkAwayFlexPct) - refurbReduction * 0.5;
+  const openingOffer = asking > 0
+    ? roundOffer(Math.max(contextFloor, Math.min(asking, guidance.openingOffer - sellerContextAdjustment)), guidance.openingOffer >= asking && sellerContextAdjustment <= 0)
+    : 0;
+  const targetOffer = asking > 0
+    ? roundOffer(Math.max(openingOffer, Math.min(asking, guidance.targetOffer - sellerContextAdjustment * 0.45)), guidance.targetOffer >= asking && sellerContextAdjustment <= 0)
+    : 0;
   const walkAway = asking > 0
-    ? Math.min(asking - 1, Math.max(recommendedOffer + 1, Math.round(walkAwayCeiling)))
+    ? roundOffer(Math.min(asking, Math.max(targetOffer + 500, guidance.walkAwayOffer - sellerContextAdjustment * 0.25)), guidance.walkAwayOffer >= asking && sellerContextAdjustment <= 0)
     : 0;
 
   // Up to 3 escalating offers between the opener and the walk-away ceiling — never reaching
   // asking. Each round trades a price increment for a specific concession from the seller, so the
   // gap closes through compromise on both sides rather than a one-way climb back to asking.
   const offerLadder = useMemo(() => {
-    if (asking <= 0 || walkAway <= recommendedOffer) return [];
-    const gap = walkAway - recommendedOffer;
+    if (asking <= 0 || walkAway <= openingOffer) return [];
     return [
       {
         round: 1,
-        offer: recommendedOffer,
-        compromise: "Open here, framed around the evidenced case below (market signals, EPC, condition, refurb capex) — a maths-led number, not a lowball. No compromise needed yet; you're setting the terms of the conversation.",
+        offer: openingOffer,
+        compromise: "Open here, framed around the evidenced case below. This is the anchor, not the price you underwrite the deal at.",
       },
       {
         round: 2,
-        offer: Math.max(recommendedOffer + 1, Math.round(recommendedOffer + gap * 0.45)),
-        compromise: "Move up roughly halfway, but only against something of equal value back — e.g. the seller fixes or formally discloses the survey-flagged issues below, throws in fixtures/white goods, or commits to a fixed completion date that removes your holding costs.",
+        offer: targetOffer,
+        compromise: "This is the working deal price. Move here for something useful back: speed, fixtures, disclosure, access for quotes, or a completion date that protects your finance.",
       },
       {
         round: 3,
@@ -96,7 +98,7 @@ export function NegotiationPanel({
         compromise: "Your final position, at the walk-away ceiling — only move here for a concession that changes your numbers (repairs done pre-exchange, contingencies dropped, a completion date that suits your finance). If they won't move off asking past this point, walk — don't concede the rest of the way.",
       },
     ];
-  }, [asking, walkAway, recommendedOffer]);
+  }, [asking, walkAway, openingOffer, targetOffer]);
 
   return (
     <Card>
@@ -160,19 +162,19 @@ export function NegotiationPanel({
         <div className="rounded-md border border-primary bg-primary/5 p-3">
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
             <Cell label="Asking" v={fmtGBP(asking)} />
-            <Cell label="Comparables flex" v={`${(compMid * 100).toFixed(1)}%`} />
-            <Cell label="Circumstance flex" v={`${circFlex >= 0 ? "+" : ""}${(circFlex * 100).toFixed(1)}%`} />
-            <Cell label="Refurb chip" v={`−${fmtGBP(refurbReduction)}`} />
+            <Cell label="Evidence cap" v={`${(guidance.maxOpeningDiscountPct * 100).toFixed(1)}%`} />
+            <Cell label="Comparables flex" v={flex ? `${(compMid * 100).toFixed(1)}%` : "not run"} />
+            <Cell label="Seller context" v={`${combinedFlexPct >= 0 ? "+" : ""}${(combinedFlexPct * 100).toFixed(1)}%`} />
           </div>
           <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Recommended first offer</p>
-              <p className="text-2xl font-bold text-primary">{fmtGBP(recommendedOffer)}</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Target deal price</p>
+              <p className="text-2xl font-bold text-primary">{fmtGBP(targetOffer)}</p>
               <p className="text-xs text-muted-foreground">
-                Walk-away ceiling: <span className="font-medium text-foreground">{fmtGBP(walkAway)}</span> — the most you'd pay before pulling out; always above your opener and below asking ({fmtGBP(asking)}).
+                Open at <span className="font-medium text-foreground">{fmtGBP(openingOffer)}</span>; walk away above <span className="font-medium text-foreground">{fmtGBP(walkAway)}</span>.
               </p>
             </div>
-            <Button onClick={() => onApplyOffer(recommendedOffer)}>Apply to deal</Button>
+            <Button onClick={() => onApplyOffer(targetOffer)}>Apply target to deal</Button>
           </div>
         </div>
 
@@ -196,7 +198,7 @@ export function NegotiationPanel({
               ))}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Each round trades a price increment for a concession — the gap closes through compromise on both sides. Your final position stays at {fmtGBP(walkAway)}, below the {fmtGBP(asking)} asking price; if the seller won't move off asking from there, that's the cue to walk, not to close the rest of the gap yourself.
+              Each round trades a price increment for a concession. The model underwrites the deal at {fmtGBP(targetOffer)}, not the opener, so the investment case stays credible under human due diligence.
             </p>
           </div>
         )}

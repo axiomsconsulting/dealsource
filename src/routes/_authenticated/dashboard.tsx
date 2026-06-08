@@ -29,7 +29,7 @@ function Dashboard() {
   const ensurePersona = useServerFn(getOrCreateDefaultPersona);
   const list = useServerFn(listProperties);
 
-  // Ensure persona exists on mount
+  // Ensure an investor criteria profile exists on mount
   useQuery({ queryKey: ["persona-default"], queryFn: () => ensurePersona({ data: {} } as any) });
   const recent = useQuery({ queryKey: ["properties"], queryFn: () => list() });
 
@@ -100,7 +100,7 @@ function Dashboard() {
             <CardTitle>Add properties</CardTitle>
             <CardDescription>
               Upload a Property Filter CSV export, paste/upload one or many JSON details, or add manually.
-              Each property is analysed against your default persona automatically.
+              Each property is analysed against your active investor criteria automatically.
             </CardDescription>
           </CardHeader>
           <CardContent>

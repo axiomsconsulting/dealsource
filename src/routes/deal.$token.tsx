@@ -3,7 +3,7 @@ import { getPublicDealSheet } from "@/lib/deal-sheets.functions";
 import { fmtGBP, fmtPct } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, TrendingUp, Wallet, Calculator } from "lucide-react";
+import { Sparkles, TrendingUp, Wallet, Calculator, Target } from "lucide-react";
 import { AppFooter } from "@/components/AppFooter";
 
 export const Route = createFileRoute("/deal/$token")({
@@ -77,6 +77,25 @@ function DealSheetPage() {
           <KPI icon={<Calculator />} label="Best strategy" value={best?.name ?? "—"} />
           <KPI icon={<Sparkles />} label="Monthly cashflow" value={best?.monthlyCashflow != null ? fmtGBP(Math.round(best.monthlyCashflow)) : "—"} />
         </div>
+
+        {a.negotiationGuidance && (
+          <Card className="mt-8 border-primary/30 bg-primary/[0.03]">
+            <CardContent className="pt-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <Target className="h-5 w-5 text-primary" /> Offer plan
+              </h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <MiniStat label="Opening bid" value={fmtGBP(a.negotiationGuidance.openingOffer)} />
+                <MiniStat label="Target deal price" value={fmtGBP(a.negotiationGuidance.targetOffer)} />
+                <MiniStat label="Walk-away ceiling" value={fmtGBP(a.negotiationGuidance.walkAwayOffer)} />
+                <MiniStat label="Evidence cap" value={`${(a.negotiationGuidance.maxOpeningDiscountPct * 100).toFixed(1)}%`} />
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                The investment numbers are underwritten at the target deal price, not the lower opening bid.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="mt-8">
           <CardContent className="pt-6">
@@ -200,6 +219,15 @@ function KPI({ icon, label, value, accent }: { icon: React.ReactNode; label: str
         <span className="[&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span> {label}
       </div>
       <p className="mt-2 text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-semibold">{value}</p>
     </div>
   );
 }

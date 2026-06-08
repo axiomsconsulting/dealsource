@@ -19,7 +19,7 @@ import { LENDER_CRITERIA, INVESTOR_TYPES, deriveLenderCriteria, type InvestorTyp
 import { fmtPct } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/persona")({
-  head: () => ({ meta: [{ title: "Personas — Deal Negotiator" }] }),
+  head: () => ({ meta: [{ title: "Investor criteria — Deal Negotiator" }] }),
   component: PersonaPage,
 });
 
@@ -82,14 +82,14 @@ function PersonaPage() {
       payload.id = selected!.id;
       return update({ data: payload });
     },
-    onSuccess: () => { toast.success("Persona saved"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
+    onSuccess: () => { toast.success("Criteria saved"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const createMut = useMutation({
     mutationFn: () => create({ data: { name: newName, strategy: newStrategy as any, copyFromId: selected?.id } }),
     onSuccess: (row: any) => {
-      toast.success("Persona created"); setNewName(""); setSelectedId(row.id);
+      toast.success("Criteria profile created"); setNewName(""); setSelectedId(row.id);
       qc.invalidateQueries({ queryKey: ["personas"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -100,16 +100,16 @@ function PersonaPage() {
   });
   const activeMut = useMutation({
     mutationFn: (id: string) => setActive({ data: { id } }),
-    onSuccess: () => { toast.success("Active persona updated"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); qc.invalidateQueries({ queryKey: ["properties"] }); },
+    onSuccess: () => { toast.success("Active criteria updated"); qc.invalidateQueries({ queryKey: ["personas"] }); qc.invalidateQueries({ queryKey: ["persona-default"] }); qc.invalidateQueries({ queryKey: ["properties"] }); },
   });
 
   return (
-    <AppShell title="Investor personas">
+    <AppShell title="Investor criteria">
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Personas</CardTitle>
-            <CardDescription>Switch active profile — the active one drives all analysis.</CardDescription>
+            <CardTitle className="text-base">Criteria profiles</CardTitle>
+            <CardDescription>Switch active criteria — the active profile drives fit checks, lending assumptions and strategy analysis.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {personas.map((p) => (
@@ -126,14 +126,14 @@ function PersonaPage() {
                     <CheckCircle2 className="h-4 w-4" />
                   </Button>
                 )}
-                <Button size="icon" variant="ghost" title="Delete" onClick={() => { if (confirm("Delete persona?")) delMut.mutate(p.id); }}>
+                <Button size="icon" variant="ghost" title="Delete" onClick={() => { if (confirm("Delete criteria profile?")) delMut.mutate(p.id); }}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             ))}
             <div className="mt-3 space-y-2 rounded-md border border-dashed p-3">
-              <p className="text-xs font-medium uppercase text-muted-foreground">New persona</p>
-              <Input placeholder="e.g. Sarah Johnson, or HMO £100k" value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <p className="text-xs font-medium uppercase text-muted-foreground">New criteria profile</p>
+              <Input placeholder="e.g. First BTL £60k, or HMO £120k" value={newName} onChange={(e) => setNewName(e.target.value)} />
               <Select value={newStrategy} onValueChange={setNewStrategy}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -141,7 +141,7 @@ function PersonaPage() {
                 </SelectContent>
               </Select>
               <Button size="sm" className="w-full" disabled={!newName || createMut.isPending} onClick={() => createMut.mutate()}>
-                <Plus className="mr-1 h-4 w-4" /> Add persona{selected ? " (copy of selected)" : ""}
+                <Plus className="mr-1 h-4 w-4" /> Add profile{selected ? " (copy of selected)" : ""}
               </Button>
             </div>
           </CardContent>
@@ -149,14 +149,14 @@ function PersonaPage() {
         {selected && (
         <Card>
         <CardHeader>
-          <CardTitle>Edit persona</CardTitle>
-          <CardDescription>Criteria drive persona-match warnings and default slider values on every property analysis.</CardDescription>
+          <CardTitle>Edit criteria</CardTitle>
+          <CardDescription>These numbers define what fits the investor; they do not force the offer below what the property evidence can justify.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-4 grid gap-4 sm:grid-cols-[1fr_180px]">
             <div className="space-y-1.5">
-              <Label>Persona name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Johnson — HMO" />
+              <Label>Profile name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. First BTL — Manchester" />
             </div>
             <div className="space-y-1.5">
               <Label>Primary strategy</Label>
@@ -214,7 +214,7 @@ function PersonaPage() {
             </div>
           </div>
           <div className="mt-6 flex items-center gap-3">
-            <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save persona"}</Button>
+            <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save criteria"}</Button>
             {!selected.is_default && (
               <Button variant="outline" onClick={() => activeMut.mutate(selected.id)}>Make active</Button>
             )}

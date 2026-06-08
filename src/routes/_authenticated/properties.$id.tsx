@@ -6,7 +6,7 @@ import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
-import type { OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
+import type { NegotiationGuidance, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +32,7 @@ import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -235,7 +235,7 @@ function PropertyDetail() {
           <CardContent className="flex items-start gap-3 py-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
             <div>
-              <p className="text-sm font-medium text-amber-900">Persona mismatch</p>
+              <p className="text-sm font-medium text-amber-900">Investor criteria mismatch</p>
               <ul className="mt-1 list-inside list-disc text-sm text-amber-800">
                 {analysis.personaMatch.reasons.map((r, i) => <li key={i}>{r}</li>)}
               </ul>
@@ -255,10 +255,12 @@ function PropertyDetail() {
           </CardHeader>
         </Card>
 
+        <OfferPlanCard guidance={analysis.negotiationGuidance} personaPass={analysis.personaMatch.pass} />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-accent" /> Negotiation playbook</CardTitle>
-            <p className="text-sm text-muted-foreground">Justified leverage points to take to the agent — the strategy numbers below start from these.</p>
+            <p className="text-sm text-muted-foreground">Weighted evidence to take to the agent. Full costs are shown where useful, but only the defensible share is counted into the offer.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             {analysis.negotiation.map((n, i) => (
@@ -290,11 +292,25 @@ function PropertyDetail() {
               </div>
             ))}
             <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
-              <p className="text-sm font-medium">Total justified reduction</p>
+              <p className="text-sm font-medium">Weighted leverage used by the model</p>
               <p className="text-lg font-bold text-primary">−{fmtGBP(analysis.negotiationTotal)}</p>
             </div>
+            {analysis.negotiationGuidance.warnings.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="mb-1 font-medium">Credibility guardrails</p>
+                <ul className="list-inside list-disc">
+                  {analysis.negotiationGuidance.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        <NegotiationPanel
+          property={p}
+          guidance={analysis.negotiationGuidance}
+          onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Target offer set to ${fmtGBP(gbp)}`); }}
+        />
 
         <Card>
           <CardHeader>
@@ -353,15 +369,40 @@ function PropertyDetail() {
         <EpcPanel propertyId={id} />
         <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
         <ImageLibrary propertyId={id} urls={heroImages} />
-        <NegotiationPanel
-          property={p}
-          refurbTotal={analysis.effectiveInputs.refurb_cost}
-          onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Offer set to ${fmtGBP(gbp)}`); }}
-        />
         <SurveyStrategyPanel property={p} />
         <DealSheetPanel propertyId={id} overrides={over} />
       </div>
     </AppShell>
+  );
+}
+
+function OfferPlanCard({ guidance, personaPass }: { guidance: NegotiationGuidance; personaPass: boolean }) {
+  const discount = guidance.askingPrice > 0 ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice : 0;
+  return (
+    <Card className="border-primary/30 bg-primary/[0.03]">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Target className="h-4 w-4 text-primary" /> Offer plan
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 md:grid-cols-4">
+          <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
+          <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
+          <Stat label="Walk-away ceiling" v={fmtGBP(guidance.walkAwayOffer)} />
+          <Stat label="Discount at target" v={fmtPct(discount)} />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="outline" className="capitalize">{guidance.stance.replace("-", " ")}</Badge>
+          <Badge variant="outline">{guidance.priceBand}</Badge>
+          <span className="inline-flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Underwriting uses the target price, not the lower opening anchor.
+          </span>
+          {!personaPass && <span className="text-amber-700">Current investor criteria do not fully fit this property.</span>}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

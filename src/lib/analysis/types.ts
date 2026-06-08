@@ -111,6 +111,21 @@ export interface NegotiationPoint {
   specOptions?: { rating: "L" | "M" | "H"; label: string; gbp: number }[];
 }
 
+export interface NegotiationGuidance {
+  askingPrice: number;
+  openingOffer: number;
+  targetOffer: number;
+  walkAwayOffer: number;
+  appliedLeverage: number;
+  retainedLeverage: number;
+  fullLeverage: number;
+  credibleDiscountPct: number;
+  maxOpeningDiscountPct: number;
+  priceBand: string;
+  stance: "light" | "standard" | "firm" | "survey-led";
+  warnings: string[];
+}
+
 export interface AnalysisOutput {
   personaMatch: { pass: boolean; reasons: string[] };
   effectiveInputs: {
@@ -125,14 +140,14 @@ export interface AnalysisOutput {
     rent_trustworthy?: boolean;
     rent_range?: { low: number; mid: number; high: number; basis: string; evidence?: string[] } | null;
     refurb_source?: "algo" | "ai" | "persona_buffer" | "override";
-    /** The lender criteria (rate/LTV/stress) derived from the persona's investor type — see ./lender-criteria. */
+    /** The lender criteria (rate/LTV/stress) derived from the criteria profile's investor type — see ./lender-criteria. */
     lender_criteria?: { mortgage_rate: number; ltv: number; stress_rate: number; label: string; description: string };
   };
   strategies: StrategyResult[];
   negotiation: NegotiationPoint[];
-  /** Sum of every justified-adjustment line item in `negotiation` (excludes the "suggested
-   *  opening offer" anchor) — the headline total to show at the foot of the playbook. */
+  /** Sum of every weighted adjustment line item in `negotiation` (excludes the offer-plan anchor). */
   negotiationTotal: number;
+  negotiationGuidance: NegotiationGuidance;
   bestStrategy: StrategyKey;
   overallScore: number;
   riskFlags?: any[];

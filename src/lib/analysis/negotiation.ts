@@ -1,22 +1,74 @@
-import type { PersonaInput, PropertyInput, NegotiationPoint } from "./types";
+import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./types";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
-  /** Algorithmic recommended opening offer — asking less justifiable, evidenced leverage. Drives
-   *  the strategy-comparison baseline; deliberately independent of any persona's target/max budget
-   *  so the recommendation stays grounded in the property itself, not a generic client preference. */
+  /** Algorithmic target accepted offer — deliberately independent of any criteria profile's target/max
+   *  budget so the recommendation stays grounded in the property itself, not a generic client
+   *  preference. The opening bid is lower and lives in `guidance.openingOffer`. */
   suggestedOffer: number;
-  /** Sum of every justified-adjustment line item (excludes the "suggested opening offer" anchor,
-   *  which restates this total as a price) — the headline "total justified reduction" figure. */
+  /** Sum of every weighted, justifiable adjustment line item. These are negotiation impacts, not
+   *  raw repair bills: a £10k defect may justify only £4k-£6k off unless the seller has no better
+   *  buyer pool. */
   totalLeverage: number;
+  guidance: NegotiationGuidance;
 }
 
-// Anchoring far below this reads as not understanding the property — agents/sellers dismiss it
-// outright rather than negotiate. Even a property riddled with justifiable leverage rarely moves
-// further than this in one step; bigger gaps get closed over multiple rounds, not the opener.
-const REALISTIC_OFFER_FLOOR_PCT = 0.75;
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
 
-/** Pure, persona-independent negotiation playbook: what the numbers themselves justify offering. */
+function roundMoney(n: number): number {
+  const step = n < 125_000 ? 500 : 1_000;
+  return Math.round(n / step) * step;
+}
+
+function roundOfferBelowAsking(n: number, asking: number): number {
+  if (asking <= 0) return 0;
+  const step = n < 125_000 ? 500 : 1_000;
+  return Math.max(0, Math.min(asking - step, roundMoney(n)));
+}
+
+function impactPct(asking: number, pct: number, capPct: number): number {
+  return Math.round(Math.min(asking * pct, asking * capPct));
+}
+
+function priceBand(asking: number): { label: string; baseDiscountPct: number } {
+  if (asking < 125_000) return { label: "sub-£125k", baseDiscountPct: 0.075 };
+  if (asking < 250_000) return { label: "£125k-£250k", baseDiscountPct: 0.095 };
+  if (asking < 500_000) return { label: "£250k-£500k", baseDiscountPct: 0.085 };
+  return { label: "£500k+", baseDiscountPct: 0.07 };
+}
+
+function maxCredibleOpeningDiscount(asking: number, points: NegotiationPoint[]): number {
+  if (asking <= 0) return 0;
+  const band = priceBand(asking);
+  const motivation = points
+    .filter((p) => p.category === "leverage")
+    .reduce((s, p) => s + p.gbp_impact, 0) / asking;
+  const defects = points
+    .filter((p) => p.category === "fault" || p.category === "condition" || p.category === "improvement_gap")
+    .reduce((s, p) => s + p.gbp_impact, 0) / asking;
+  const highConfidenceCount = points.filter((p) => p.confidence === "high").length;
+
+  // A normal sub-asking opener lives around the base band. Verified defects and seller motivation
+  // increase the range, but only by part of their value: agents compare against the next buyer, not
+  // against a perfect spreadsheet.
+  const evidenceUplift =
+    Math.min(0.04, motivation * 0.45) +
+    Math.min(0.055, defects * 0.55) +
+    Math.min(0.015, highConfidenceCount * 0.004);
+
+  return clamp(band.baseDiscountPct + evidenceUplift, 0.05, 0.22);
+}
+
+function stanceFor(discountPct: number, points: NegotiationPoint[]): NegotiationGuidance["stance"] {
+  if (points.some((p) => p.category === "fault" && p.confidence !== "low")) return "survey-led";
+  if (discountPct >= 0.13) return "firm";
+  if (discountPct <= 0.055) return "light";
+  return "standard";
+}
+
+/** Pure, criteria-independent negotiation playbook: what the numbers themselves justify offering. */
 export function buildNegotiation(
   prop: PropertyInput,
   refurbCost: number,
@@ -28,20 +80,22 @@ export function buildNegotiation(
 
   // Market signals
   if (pf.multipleReduce && pf.multipleReduce > 1) {
+    const impact = impactPct(asking, 0.015 + Math.min(0.0225, (pf.multipleReduce - 1) * 0.0075), 0.04);
     points.push({
       category: "leverage",
       title: `Price reduced ${pf.multipleReduce} time(s)`,
-      description: `Seller has dropped the price ${pf.multipleReduce}× already — this signals motivation. Open with the recent reduction trend in mind and anchor below current asking.`,
-      gbp_impact: Math.round(asking * 0.04),
+      description: `Seller has already re-tested the price. This is motivation evidence, not a blank cheque: weight it as a modest discount chip and keep the reduction history ready if the agent asks why you are below asking.`,
+      gbp_impact: impact,
       confidence: "high",
     });
   }
   if (pf.multipleBack && pf.multipleBack >= 2) {
+    const impact = impactPct(asking, 0.025 + Math.min(0.03, (pf.multipleBack - 2) * 0.01), 0.055);
     points.push({
       category: "leverage",
       title: `Back on market ${pf.multipleBack}× (chain breaks / withdrawn buyers)`,
-      description: `Listing has fallen through ${pf.multipleBack} times. Underlying issues (survey, finance, condition) likely. Use this to justify a sub-asking offer "to provide certainty".`,
-      gbp_impact: Math.round(asking * 0.05),
+      description: `The listing has fallen through before, so certainty has value. Use this to justify a firmer opener, but do not assume every fall-through was caused by a defect until survey or agent notes confirm it.`,
+      gbp_impact: impact,
       confidence: "high",
     });
   }
@@ -49,14 +103,6 @@ export function buildNegotiation(
   // EPC
   const epc = (prop.epc_rate || "").toUpperCase();
   if (["D", "E", "F", "G"].includes(epc)) {
-    points.push({
-      category: "improvement_gap",
-      title: `EPC ${epc} — below MEES 2030 target`,
-      description: `From 2030 most rentals must be EPC C+. Buying at EPC ${epc} means committing capex (insulation £1.5k–£4k, double glazing top-up £2k–£6k, low-energy boiler £3k). Use this to negotiate a price reduction reflecting that work.`,
-      gbp_impact: epc === "D" ? 3500 : epc === "E" ? 7500 : 12000,
-      confidence: "medium",
-    });
-
     // EPC spend to reach C — a dedicated bill-of-materials line, broken into Low/Medium/High spec
     // tiers so the offer can be framed around "however they want to play it, here's what closing
     // the gap costs". Where the register's own improvement roadmap is available (cumulative cost
@@ -78,13 +124,15 @@ export function buildNegotiation(
       grounded = false;
     }
     const midSpec = Math.round((lowSpec + highSpec) / 2);
+    const recoveryRate = grounded ? 0.5 : epc === "D" ? 0.35 : 0.45;
+    const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
     points.push({
       category: "improvement_gap",
-      title: "EPC spend to reach C",
+      title: `EPC ${epc} spend to reach C`,
       description: grounded
-        ? `The register's own improvement roadmap shows the cumulative cost of the measures needed to lift this property from EPC ${epc} into band C${stepToC?.resultingBand === "C" ? "" : " or better"} (step ${stepToC.sequence ?? "?"}: "${stepToC.title}"). L = cheapest qualifying route, H = full assessor-costed works, M = realistic midpoint — quote M when framing the ask, and hold L/H in reserve to match whatever spec level the seller pushes back with.`
-        : `No assessor-costed roadmap on file for this certificate, so this is a banded estimate from the EPC ${epc} → C gap (insulation, glazing, heating). L = bare-minimum measures to scrape into C, H = full comprehensive works, M = realistic midpoint — quote M, and use L/H as your floor and ceiling depending on how the seller responds.`,
-      gbp_impact: midSpec,
+        ? `The register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint to move toward EPC C. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.`
+        : `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`,
+      gbp_impact: negotiationImpact,
       confidence: grounded ? "high" : "medium",
       specOptions: [
         { rating: "L", label: "Low spec — minimum to qualify", gbp: lowSpec },
@@ -99,11 +147,14 @@ export function buildNegotiation(
     const years = (Date.now() - new Date(pf.lastSold.date).getTime()) / (365.25 * 24 * 3600 * 1000);
     const cagr = Math.pow(asking / pf.lastSold.value, 1 / Math.max(years, 1)) - 1;
     if (cagr > 0.06) {
+      const fairTrendValue = pf.lastSold.value * Math.pow(1.04, Math.max(years, 1));
+      const overTrend = Math.max(0, asking - fairTrendValue);
+      const impact = Math.round(Math.min(overTrend * 0.35, asking * 0.05));
       points.push({
         category: "leverage",
         title: `Ask implies ${(cagr * 100).toFixed(1)}% p.a. since last sale`,
-        description: `Last sold £${pf.lastSold.value.toLocaleString()} in ${new Date(pf.lastSold.date).getFullYear()}. Local long-run growth is ~3–4% p.a.; the ask bakes in optimistic appreciation. Use comparable sold prices to anchor lower.`,
-        gbp_impact: Math.round((cagr - 0.035) * pf.lastSold.value * years * 0.5),
+        description: `Last sold £${pf.lastSold.value.toLocaleString()} in ${new Date(pf.lastSold.date).getFullYear()}. Treat this as a comparable-pricing challenge, not a defect: only part of the gap above a 4% trend line is counted until sold comparables confirm it.`,
+        gbp_impact: impact,
         confidence: "medium",
       });
     }
@@ -114,8 +165,8 @@ export function buildNegotiation(
     points.push({
       category: "leverage",
       title: `Seller has ~${Math.round(pf.equity * 100)}% equity`,
-      description: `Seller likely has strong equity — they can absorb a price reduction without going below their mortgage redemption. Sub-asking offers are realistic.`,
-      gbp_impact: Math.round(asking * 0.03),
+      description: `High equity means the seller may have room to transact, but it does not prove motivation. Keep this as a small confidence chip rather than a headline reason for a deep discount.`,
+      gbp_impact: impactPct(asking, 0.01, 0.0125),
       confidence: "medium",
     });
   }
@@ -124,12 +175,12 @@ export function buildNegotiation(
   // (Reductions already covered above by multipleReduce.)
 
   // Condition / property-detail signals
-  if (typeof pd?.epcEfficiency === "number" && pd.epcEfficiency < 60) {
+  if (!["D", "E", "F", "G"].includes(epc) && typeof pd?.epcEfficiency === "number" && pd.epcEfficiency < 60) {
     points.push({
       category: "condition",
       title: "Low EPC efficiency score",
       description: "Energy efficiency is poor — expect older windows/insulation/boiler. Get quotes from a local heating engineer and factor into your offer.",
-      gbp_impact: 4000,
+      gbp_impact: Math.min(2500, Math.round(asking * 0.015)),
       confidence: "low",
     });
   }
@@ -146,30 +197,63 @@ export function buildNegotiation(
   }
 
   // Refurb-based opening
-  points.push({
-    category: "improvement_gap",
-    title: "Refurb capex offsetting",
-    description: `Your refurb budget is £${refurbCost.toLocaleString()}. Frame your offer as "asking − refurb − margin" so the seller sees the maths, not just a lowball number.`,
-    gbp_impact: Math.round(refurbCost * 0.6),
-    confidence: "high",
-  });
+  if (refurbCost > 2500) {
+    const refurbImpact = Math.round(Math.min(refurbCost * 0.35, asking * 0.07));
+    points.push({
+      category: "improvement_gap",
+      title: "Refurb capex offsetting",
+      description: `Your refurb budget is £${refurbCost.toLocaleString()}. A serious buyer normally asks the seller to share the pain, not fund the entire refurb. This weights £${refurbImpact.toLocaleString()} into the offer and keeps the rest for survey/quote evidence.`,
+      gbp_impact: refurbImpact,
+      confidence: "high",
+    });
+  }
 
-  // Always include "your number" anchor — purely algorithmic: asking less the justified leverage
-  // above, floored so the opener stays credible. No persona target/max feeds into this; an
-  // investor's personal budget says nothing about what THIS seller will realistically accept.
+  // Always include the offer plan anchor. Strategy underwriting uses the target accepted offer,
+  // not the lower opening bid, so the deal does not look artificially strong before negotiation.
   const totalLeverage = points.reduce((s, p) => s + p.gbp_impact, 0);
-  const realisticFloor = Math.round(asking * REALISTIC_OFFER_FLOOR_PCT);
-  const suggestedOffer = Math.max(realisticFloor, Math.round(asking - totalLeverage));
-  const cappedAt = suggestedOffer === realisticFloor && asking - totalLeverage < realisticFloor;
+  const band = priceBand(asking);
+  const maxOpeningDiscountPct = maxCredibleOpeningDiscount(asking, points);
+  const uncappedDiscountPct = asking > 0 ? totalLeverage / asking : 0;
+  const credibleDiscountPct = clamp(Math.min(uncappedDiscountPct, maxOpeningDiscountPct), 0, maxOpeningDiscountPct);
+  const retainedLeverage = Math.max(0, Math.round(totalLeverage - asking * credibleDiscountPct));
+  const openingOffer = credibleDiscountPct > 0 ? roundOfferBelowAsking(asking * (1 - credibleDiscountPct), asking) : asking;
+  const walkAwayDiscountPct = credibleDiscountPct > 0
+    ? clamp(credibleDiscountPct * 0.45, Math.min(0.0125, credibleDiscountPct), Math.max(0.0125, credibleDiscountPct - 0.01))
+    : 0;
+  const walkAwayOffer = asking > 0 && credibleDiscountPct > 0
+    ? roundOfferBelowAsking(Math.max(openingOffer + 500, asking * (1 - walkAwayDiscountPct)), asking)
+    : asking;
+  const targetOffer = asking > 0 && walkAwayOffer > openingOffer
+    ? roundOfferBelowAsking(openingOffer + (walkAwayOffer - openingOffer) * 0.45, asking)
+    : openingOffer;
+  const warnings: string[] = [];
+  if (uncappedDiscountPct > maxOpeningDiscountPct) {
+    warnings.push(`The evidence totals ${(uncappedDiscountPct * 100).toFixed(1)}% of asking, but the credible opening range for a ${band.label} property is capped at ${(maxOpeningDiscountPct * 100).toFixed(1)}% unless survey/legal defects get stronger.`);
+  }
+  if (retainedLeverage > 0) {
+    warnings.push(`Keep £${retainedLeverage.toLocaleString()} of evidence back for counter-offers or survey-stage renegotiation rather than trying to win it all in the first bid.`);
+  }
+  const guidance: NegotiationGuidance = {
+    askingPrice: asking,
+    openingOffer,
+    targetOffer,
+    walkAwayOffer,
+    appliedLeverage: Math.max(0, asking - targetOffer),
+    retainedLeverage,
+    fullLeverage: totalLeverage,
+    credibleDiscountPct,
+    maxOpeningDiscountPct,
+    priceBand: band.label,
+    stance: stanceFor(credibleDiscountPct, points),
+    warnings,
+  };
   points.unshift({
     category: "leverage",
-    title: `Suggested opening offer: £${Math.round(suggestedOffer).toLocaleString()}`,
-    description: cappedAt
-      ? `The justifiable adjustments below total £${totalLeverage.toLocaleString()} — more than asking minus a credible opener. Anchored at ${Math.round(REALISTIC_OFFER_FLOOR_PCT * 100)}% of asking instead; going lower risks the agent or seller writing you off as not understanding the property. Build the rest of your case for follow-up rounds.`
-      : `Asking £${asking.toLocaleString()} less the £${totalLeverage.toLocaleString()} of justifiable adjustments below. Open ~5% lower than this to leave negotiation room — target £${Math.round(suggestedOffer * 0.95).toLocaleString()}.`,
-    gbp_impact: asking - suggestedOffer,
+    title: `Offer plan: open £${openingOffer.toLocaleString()}, target £${targetOffer.toLocaleString()}`,
+    description: `Underwrite the deal at the likely accepted target, not the first bid. Opening at £${openingOffer.toLocaleString()} is the evidence-led anchor; target £${targetOffer.toLocaleString()} is the working purchase price; walk away above £${walkAwayOffer.toLocaleString()} unless fresh evidence improves the deal.`,
+    gbp_impact: asking - targetOffer,
     confidence: "high",
   });
 
-  return { points, suggestedOffer, totalLeverage };
+  return { points, suggestedOffer: targetOffer, totalLeverage, guidance };
 }

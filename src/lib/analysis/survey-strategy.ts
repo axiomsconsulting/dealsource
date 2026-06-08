@@ -73,7 +73,7 @@ function epcTextBlob(prop: PropertyInput): { blob: string; wallDesc?: string; ro
   return { blob, wallDesc, roofDesc, roofEff: roof?.energyEff ?? null };
 }
 
-/** Pure, persona-independent survey/condition leverage: what to brief the surveyor and builder to
+/** Pure, criteria-independent survey/condition leverage: what to brief the surveyor and builder to
  *  dig into, and what a confirmed finding is realistically worth off the price — both as a repair
  *  cost and as a resalability/mortgageability discount that outlasts the repair itself. */
 export function buildSurveyStrategy(prop: PropertyInput): SurveyIssue[] {

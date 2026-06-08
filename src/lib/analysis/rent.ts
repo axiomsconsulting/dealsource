@@ -75,7 +75,7 @@ function labelFor(s: RentSource): string {
     case "csv": return "CSV import";
     case "ai_comparables": return "AI comparables";
     case "manual": return "Manual override";
-    case "persona_default": return "Persona default (estimate)";
+    case "persona_default": return "Criteria default (estimate)";
     default: return "Unknown";
   }
 }

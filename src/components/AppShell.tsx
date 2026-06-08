@@ -24,7 +24,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
               <Bell className="h-4 w-4" /> Searches
             </Link>
             <Link to="/persona" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
-              <Sliders className="h-4 w-4" /> Persona
+              <Sliders className="h-4 w-4" /> Criteria
             </Link>
             <button
               onClick={async () => {

@@ -64,12 +64,11 @@ function isArticle4Partial(status: string | null | undefined): boolean {
   return (status || "").toLowerCase() === "partial";
 }
 
-// NOTE: this is a SUITABILITY check — "would this deal work for this persona/client" — not a
+// NOTE: this is a SUITABILITY check — "would this deal work for this investor criteria profile" — not a
 // pricing input. The recommended offer is what the property and playbook justify regardless of who
-// might buy it; a persona's budget only tells us whether THIS deal fits THAT client (or a different
-// one would be a better match), per the deal sourcer's actual job of finding properties and then
-// matching them to clients.
-function evalPersonaMatch(p: PropertyInput, persona: PersonaInput, recommendedOffer: number): { pass: boolean; reasons: string[] } {
+// might buy it; a criteria budget only tells us whether THIS deal fits THIS investor (or a different
+// profile would be a better match).
+function evalPersonaMatch(p: PropertyInput, persona: PersonaInput, targetOffer: number): { pass: boolean; reasons: string[] } {
   const reasons: string[] = [];
   if (p.beds != null && (p.beds < persona.min_beds || p.beds > persona.max_beds)) {
     reasons.push(`Beds ${p.beds} outside target ${persona.min_beds}-${persona.max_beds}`);
@@ -82,8 +81,8 @@ function evalPersonaMatch(p: PropertyInput, persona: PersonaInput, recommendedOf
   if (persona.require_parking && keywords.length && !keywords.some((k) => k.includes("parking") || k.includes("garage") || k.includes("driveway"))) {
     reasons.push("No parking mentioned in listing");
   }
-  if (recommendedOffer > persona.max_offer_gbp) {
-    reasons.push(`Recommended offer £${Math.round(recommendedOffer).toLocaleString()} exceeds this persona's max budget of £${persona.max_offer_gbp.toLocaleString()} — better matched to a higher-budget client`);
+  if (targetOffer > persona.max_offer_gbp) {
+    reasons.push(`Target offer £${Math.round(targetOffer).toLocaleString()} exceeds this criteria profile's max budget of £${persona.max_offer_gbp.toLocaleString()} — better matched to a higher-budget investor`);
   }
   return { pass: reasons.length === 0, reasons };
 }
@@ -428,15 +427,14 @@ export function analyseProperty(
   const refurb_source: "algo" | "ai" | "persona_buffer" | "override" =
     overrides.refurb_cost != null ? "override" : refurb_default_source;
 
-  // Offer price — driven by the negotiation playbook's algorithmic read of THIS property (asking
-  // less evidenced, justifiable leverage), never by a persona's generic target/max budget. Marking
-  // a property down to fit an investor's preferred number — rather than what the listing itself
-  // supports — reads as not understanding the property and burns credibility with agents/sellers.
+  // Offer price — driven by the negotiation playbook's algorithmic read of THIS property. The
+  // strategy baseline uses the target accepted offer, not the lowest opening bid, so the deal is
+  // underwritten at a price a seller might realistically agree to after a few rounds.
   const negotiation = buildNegotiation(prop, refurb_cost);
   const offer_price_default = negotiation.suggestedOffer;
   const offer_price = overrides.offer_price ?? offer_price_default;
 
-  // Rent resolution — driven by AI surveyor / comparables first, persona target as fallback
+  // Rent resolution — driven by AI surveyor / comparables first, criteria target as fallback
   const rent = resolveMonthlyRent(prop, persona);
   const monthly_rent_default = rent.pcm ?? persona.target_rent_gbp;
   const monthly_rent = overrides.monthly_rent ?? monthly_rent_default;
@@ -445,7 +443,7 @@ export function analyseProperty(
   const rent_range = proposeRentRange(prop, persona);
 
   // Lender criteria flow from HOW this investor borrows (personal name, Ltd co/SPV, portfolio,
-  // etc.) rather than from a rate/LTV the persona guesses at upfront — different structures face
+  // etc.) rather than from a rate/LTV the criteria profile guesses at upfront — different structures face
   // materially different lender appetite, pricing and stress methodology for the same property.
   const lenderCriteria = deriveLenderCriteria(persona.investor_type);
   const mortgage_rate = overrides.mortgage_rate ?? lenderCriteria.mortgage_rate;
@@ -530,6 +528,7 @@ export function analyseProperty(
     strategies,
     negotiation: negotiation.points,
     negotiationTotal: negotiation.totalLeverage,
+    negotiationGuidance: negotiation.guidance,
     bestStrategy: best.key as StrategyKey,
     overallScore,
     riskFlags: riskFlags as any[],

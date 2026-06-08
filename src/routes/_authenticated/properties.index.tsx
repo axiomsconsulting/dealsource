@@ -105,8 +105,7 @@ function PropertiesPage() {
     return data.map((p) => {
       const a = activePersona ? analyseProperty(p, activePersona as any) : null;
       const sev = maxRiskSeverity(a?.riskFlags as any);
-      // Best-fit persona = highest-scoring persona this property actually passes the match for —
-      // the deal sourcer's job is finding properties THEN matching them to the right client.
+      // Best-fit criteria = highest-scoring criteria profile this property actually passes.
       let bestFit: { name: string; score: number; strategy: string } | null = null;
       for (const per of personas) {
         const an = analyseProperty(p, per as any);
@@ -325,7 +324,7 @@ function PropertiesPage() {
               {personas.length > 0 && (
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <Checkbox checked={personaFitOnly} onCheckedChange={(b) => setPersonaFitOnly(!!b)} />
-                  Only properties that fit at least one client persona
+                  Only properties that fit at least one criteria profile
                 </label>
               )}
 
@@ -405,7 +404,7 @@ function PropertiesPage() {
                           ◆ {bestFit.name}
                         </Badge>
                       ) : personas.length > 0 ? (
-                        <Badge variant="outline" className="text-amber-700">No persona fit</Badge>
+                        <Badge variant="outline" className="text-amber-700">No criteria fit</Badge>
                       ) : null}
                       {p.source_link && (
                         <a href={p.source_link} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground">
@@ -417,7 +416,7 @@ function PropertiesPage() {
                     <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <span>Asking {fmtGBP(p.asking_price_gbp)}</span>
                       {a && <span>Best: <span className="font-medium text-foreground">{best?.name}</span> · {best?.dealScore}/100</span>}
-                      {a && !a.personaMatch.pass && <span className="text-amber-700">Persona mismatch</span>}
+                      {a && !a.personaMatch.pass && <span className="text-amber-700">Criteria mismatch</span>}
                       {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
                     </div>
                     {a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
