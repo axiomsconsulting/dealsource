@@ -185,15 +185,15 @@ const HmoLayoutSchema = z.object({
     approxSqm: z.number().min(0).max(100).optional(),
     meetsMinStandard: z.boolean().optional(),
     ensuitePossible: z.boolean().optional(),
-    notes: z.string().max(300).optional(),
+    notes: z.string().max(1000).optional(),
   })).max(20).optional(),
   saUnits: z.array(z.object({
     label: z.string(),
     approxSqm: z.number().min(0).max(150).optional(),
     ensuiteAndKitchenettePossible: z.boolean().optional(),
-    notes: z.string().max(300).optional(),
+    notes: z.string().max(1000).optional(),
   })).max(10).optional(),
-  caveats: z.string().max(500).optional(),
+  caveats: z.string().max(2000).optional(),
 });
 
 /** Floor-plan-driven HMO/SA layout assessment — two layers, kept clearly separate so the user

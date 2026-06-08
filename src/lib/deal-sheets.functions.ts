@@ -32,15 +32,37 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
       .from("photos").select("id, storage_path, caption, is_exterior").eq("property_id", data.propertyId);
 
     const analysis = analyseProperty(prop as any, persona as any, (data.overrides as any) ?? {});
+    const priceHistory = extractPriceHistory(prop as any);
+    const { extractMarketDataFromPfJson } = await import("@/lib/parsers/json");
+    const pfLight = (prop as any).pf_json?.propertyLight ?? {};
+    const pfDetail = (prop as any).pf_json?.propertyDetail ?? {};
+    const marketData = extractMarketDataFromPfJson(pfLight, pfDetail);
+    const epcRaw = (prop as any).epc_data as any;
     const snapshot = {
       property: {
         address: prop.address, postcode: prop.postcode, city: prop.city,
         beds: prop.beds, baths: prop.baths, property_type: prop.property_type,
         epc_rate: prop.epc_rate, tenure: prop.tenure, area_sqm: prop.area_sqm,
         asking_price_gbp: prop.asking_price_gbp, source_link: prop.source_link,
+        article4_status: (prop as any).article4_status ?? null,
+        epc_data: epcRaw ? {
+          currentRating: epcRaw.currentRating ?? null,
+          currentScore: epcRaw.currentScore ?? null,
+          potentialRating: epcRaw.potentialRating ?? null,
+          potentialScore: epcRaw.potentialScore ?? null,
+          source: epcRaw.source ?? null,
+        } : null,
+        signals: {
+          priceReductions: pfLight.multipleReduce ?? null,
+          backOnMarket: pfLight.multipleBack ?? null,
+          lastSold: pfLight.lastSold ?? null,
+          daysOnMarket: pfLight.daysOnMarket ?? pfLight.totalDays ?? null,
+        },
+        refurb_estimate: data.include_refurb_breakdown !== false ? ((prop as any).refurb_estimate ?? null) : null,
+        market_data: marketData,
       },
       analysis,
-      priceHistory: extractPriceHistory(prop as any),
+      priceHistory,
       ai: aiRow?.ai_notes ?? null,
       photoIds: (photos ?? []).map((p) => p.id),
       generatedAt: new Date().toISOString(),
