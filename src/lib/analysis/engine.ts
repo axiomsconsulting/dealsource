@@ -234,19 +234,40 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
   const nightly = overrides.sa_nightly ?? defaults.sa_nightly;
   const occ = overrides.sa_occupancy ?? defaults.sa_occupancy;
   const monthlyRevenue = nightly * 30 * occ;
-  const opex = monthlyRevenue * 0.45; // cleaning, utilities, platform, supplies
+  const beds = Math.max(1, p.beds ?? 1);
   const purchase = eff.offer_price;
   const loan = purchase * eff.ltv;
   const monthlyInt = interestOnlyMonthly(loan, eff.mortgage_rate);
+
+  // Running costs, itemised against what an SA host actually pays for — rather than one blended
+  // "opex %" that hides whether cleaning, platform commissions or bills are what's eating the
+  // margin (and so can't be sanity-checked against real operator numbers).
+  const bills = 130 + beds * 35; // gas/electric/water/council tax/broadband/TV licence — scales with bedrooms
+  const turnoversPerMonth = (30 * occ) / 4; // ~4-night average UK short-let stay
+  const cleaning = turnoversPerMonth * (40 + beds * 12); // changeover clean + laundry per turnover, scaled by bedrooms/linen volume
+  const platformFees = monthlyRevenue * 0.15; // blended Airbnb host fee (~3%) + Booking.com commission (~15%) across both channels
+  const channelManager = 35; // multi-channel listing sync / PMS (e.g. Smoobu, Hostfully, Guesty)
+  const consumables = 30 * occ * (6 + beds * 1.5); // toiletries, welcome packs, teas/coffees, amenity restocking — per occupied night, scaled by bedrooms
+  const opex = bills + cleaning + platformFees + channelManager + consumables;
   const monthlyCashflow = monthlyRevenue - opex - monthlyInt;
+
   const sdlt = SDLT_INVESTOR(purchase);
-  const refurb = eff.refurb_cost + 12000; // furniture
+  // One-off setup, folded into cash-in: furnishing every room to a quality short-let standard
+  // (beds, sofas, wardrobes, soft furnishings, kitchenware) plus smart locks for keyless
+  // check-in — both scale with bedroom count rather than a flat one-size figure.
+  const furnishings = 3000 + beds * 2200;
+  const smartLocks = 150 + beds * 60;
+  const refurb = eff.refurb_cost + furnishings + smartLocks;
   const cashIn = purchase * (1 - eff.ltv) + sdlt + 4000 + refurb;
   const annualROI = (monthlyCashflow * 12) / cashIn;
 
   const article4Status = p.article4_status ?? (p as any).ai_payload?.article4?.status ?? p.pf_json?.propertyLight?.article4Status ?? null;
   if (isArticle4Inside(article4Status)) reasons.push("Article 4 area — short-let (sui generis) use class change may require planning permission");
   if (p.tenure === "Leasehold") reasons.push("Leasehold — check short-let permitted");
+  const layout: any = (p as any).ai_payload?.hmoLayout;
+  if (layout?.saUnits?.some((u: any) => u.ensuiteAndKitchenettePossible)) {
+    reasons.push("Floor-plan assessment flags space for a self-contained ensuite + kitchenette unit — that's structural conversion cost on top of the furnishing/setup figures here, not included below.");
+  }
 
   const scoreBreakdown = [
     { label: "Net cashflow", points: Math.round(monthlyCashflow / 10), detail: `£${Math.round(monthlyCashflow)}/mo ÷ 10 — uncapped, then summed and clamped to 0-100` },
@@ -264,15 +285,20 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
     dealScore: score,
     scoreBreakdown,
     scoreFormula: "Net cashflow ÷ 10 + Annual ROI × 2, summed and clamped to 0-100",
-    summary: `£${Math.round(monthlyRevenue)}/mo revenue at ${Math.round(occ * 100)}% occ × £${nightly}. £${Math.round(monthlyCashflow)} net.`,
+    summary: `£${Math.round(monthlyRevenue)}/mo revenue at ${Math.round(occ * 100)}% occ × £${nightly}. £${Math.round(monthlyCashflow)} net after bills, cleaning, platform commissions & channel-manager fees.`,
     numbers: [
       tunable("Nightly rate", nightly, "gbp", "sa_nightly", overrides, defaults),
-      tunable("Occupancy", occ, "pct", "sa_occupancy", overrides, defaults),
+      tunable("Occupancy", occ, "pct", "sa_occupancy", overrides, defaults,
+        "Already nets out void periods between bookings — UK short-lets typically run 60-75% occupancy"),
       { label: "Monthly revenue", value: monthlyRevenue, format: "gbp", hint: "nightly × 30 nights × occupancy" },
-      { label: "Opex (45%)", value: opex, format: "gbp", hint: "cleaning, platform fees, utilities, supplies" },
+      { label: "Bills", value: bills, format: "gbp", hint: "gas/electric/water/council tax/broadband/TV licence" },
+      { label: "Cleaning & laundry", value: cleaning, format: "gbp", hint: `~${turnoversPerMonth.toFixed(1)} changeovers/mo at an assumed ~4-night average stay` },
+      { label: "Platform commissions", value: platformFees, format: "gbp", hint: "blended Airbnb host fee + Booking.com commission, ~15% of revenue" },
+      { label: "Channel manager", value: channelManager, format: "gbp", hint: "multi-channel listing sync / PMS" },
+      { label: "Consumables & amenities", value: consumables, format: "gbp", hint: "toiletries, welcome packs, restocking — per occupied night, scaled by bedrooms" },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
-      { label: "Cash in (incl. furniture £12k)", value: cashIn, format: "gbp" },
+      { label: "Cash in (incl. furnishings & smart locks)", value: cashIn, format: "gbp", hint: `£${Math.round(furnishings).toLocaleString()} furnishings + £${Math.round(smartLocks).toLocaleString()} smart locks for ${beds} bedroom(s)` },
       { label: "Annual ROI", value: annualROI, format: "pct" },
     ],
   };
@@ -303,6 +329,17 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const areaEstimate = estimateMaxHmoRoomsByArea(p.area_sqm);
   if (areaEstimate && rooms > areaEstimate.maxRooms) {
     reasons.push(`At the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m²), ${p.area_sqm}m² total only realistically supports ~${areaEstimate.maxRooms} lettable room(s) after kitchen/bathroom/communal space — ${rooms} may not be achievable without an extension.`);
+  }
+
+  // Layout-grounded ceiling: existing bedrooms plus the reception rooms a property of this type
+  // can plausibly give up to conversion while keeping the kitchen as the only shared space —
+  // not a number floor-area arithmetic alone can be trusted to produce (see room_count_default).
+  if (p.beds != null) {
+    const isFlat = (p.property_type || "").toLowerCase().includes("flat");
+    const layoutCeiling = p.beds + (isFlat ? 1 : 2);
+    if (rooms > layoutCeiling) {
+      reasons.push(`This is a ${p.beds}-bed ${isFlat ? "flat" : "house"} — converting every realistic reception room${isFlat ? " (lounge)" : " (lounge + dining room)"} while keeping the kitchen as the only shared space tops out around ${layoutCeiling} lettable room(s); ${rooms} would likely need an extension or loft conversion.`);
+    }
   }
 
   const scoreBreakdown = [
@@ -528,14 +565,22 @@ export function analyseProperty(
     rent_range, lender_criteria: lenderCriteria,
   };
 
-  // Room-count default: when we know the floor area, ground it in the statutory minimum
-  // bedroom size for licensed HMOs (6.51m², after reserving space for kitchen/bathrooms/
-  // circulation) rather than guessing off the listed bedroom count — "how many rooms are
-  // technically possible" is a floor-area question, not a "beds + 1" heuristic. Falls back to
-  // the bedroom-count heuristic only when no floor area is on file.
+  // Room-count default: grounded in the property's actual room composition, not raw floor-area
+  // division — dividing total area by the statutory minimum bedroom size alone can suggest an
+  // "8-room HMO" out of a 2-bed terrace, which is fiction (it ignores that most of that area is
+  // already the existing bedrooms, kitchen, hallway and bathroom(s), not free space to carve up).
+  // The realistic ceiling is the existing bedrooms PLUS the reception rooms a property of this
+  // type can plausibly sacrifice to conversion while keeping the kitchen as the only remaining
+  // shared space — a 2-bed terrace (lounge + dining + kitchen) tops out at 2 + 2 = 4. Flats
+  // rarely have a separate dining room to give up, so they get one fewer. The floor-area figure
+  // is kept only as a hard physical ceiling on top of that — it can shrink the layout estimate
+  // (a tiny flat can't fit 4 statutory-minimum bedrooms even if "beds + 2" says so) but never
+  // inflate it.
+  const isFlat = (prop.property_type || "").toLowerCase().includes("flat");
+  const roomsByLayout = prop.beds != null ? prop.beds + (isFlat ? 1 : 2) : null;
   const roomsByArea = estimateMaxHmoRoomsByArea(prop.area_sqm)?.maxRooms ?? null;
-  const roomsByBeds = prop.beds ? prop.beds + (prop.beds >= 3 ? 1 : 0) : 4;
-  const room_count_default = roomsByArea != null ? Math.max(1, Math.min(roomsByArea, OVERRIDE_BOUNDS.room_count.max)) : roomsByBeds;
+  const layoutCeiling = roomsByLayout != null && roomsByArea != null ? Math.min(roomsByLayout, roomsByArea) : (roomsByLayout ?? roomsByArea ?? 4);
+  const room_count_default = Math.max(1, Math.min(layoutCeiling, OVERRIDE_BOUNDS.room_count.max));
 
   // Baselines for every slider-tunable lever — what the engine would compute with zero overrides.
   // These drive each number cell's "reset to default" target and its "overridden" badge.
@@ -561,15 +606,23 @@ export function analyseProperty(
     titleSplitAnalysis(prop, persona, eff),
   ];
 
-  // HMO Article 4 — hmoAnalysis() already marks itself infeasible & explains why when "inside";
-  // here we additionally cap its score so it can never outrank genuinely-feasible strategies,
-  // and flag "partial" areas as a watch-out without blocking the strategy outright.
+  // HMO Article 4 — councils overwhelmingly use Article 4 directions specifically to restrict
+  // HMO concentration, and frequently pair them with additional/selective licensing schemes
+  // that make NEW HMO licences very hard to obtain regardless of whether change-of-use planning
+  // permission is the binding constraint on this exact street. So both "inside" and "partial"
+  // postcode hits are treated as "don't recommend this strategy here": HMO stays visible with
+  // full numbers (so the user can still sanity-check it against a council that turns out to be
+  // permissive) but is marked infeasible and score-capped, which keeps it out of `best` below —
+  // hmoAnalysis() already explains "inside" via its own reasons; we add the licensing-risk
+  // framing for "partial" here since that's a postcode-level signal, not a property one.
   if (isArticle4Inside(article4Status)) {
     strategies = strategies.map((s) => s.key === "HMO" ? { ...s, dealScore: Math.min(s.dealScore, 35) } : s);
   } else if (isArticle4Partial(article4Status)) {
     strategies = strategies.map((s) => s.key === "HMO" ? {
       ...s,
-      reasons: [...(s.reasons ?? []), "Partial Article 4 in this postcode — verify the exact street before assuming permitted development."],
+      feasible: false,
+      dealScore: Math.min(s.dealScore, 35),
+      reasons: [...(s.reasons ?? []), "Partial Article 4 in this postcode — councils typically draw these directions to manage HMO concentration and commonly run additional/selective licensing alongside them, so a new HMO licence here is likely to be hard-won even where this exact street turns out to sit outside the boundary. Verify with the council before relying on this strategy."],
     } : s);
   }
 

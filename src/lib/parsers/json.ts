@@ -13,6 +13,47 @@ export interface ParsedJsonProperty {
   rent_source: string | null;
   lease_years_remaining: number | null;
   pf_json: any;
+  /** Lightweight EPC snapshot from the listing JSON — current/potential band and SAP score,
+   *  without the improvement roadmap that only the government register provides. Present when
+   *  the listing JSON carries EPC data; null otherwise. */
+  epc_from_json: EpcFromJson | null;
+  /** Sold comparables and area statistics from the listing JSON — for price benchmarking
+   *  without a separate API call. Present when the JSON contains sold data; null otherwise. */
+  market_data: MarketData | null;
+}
+
+export interface EpcFromJson {
+  source: "pf_json";
+  currentRating: string | null;
+  currentScore: number | null;
+  potentialRating: string | null;
+  potentialScore: number | null;
+  co2Current: number | null;
+  co2Potential: number | null;
+}
+
+export interface SoldComparable {
+  address: string | null;
+  price: number | null;
+  date: string | null;
+  propertyType: string | null;
+  beds: number | null;
+  distanceMiles: number | null;
+}
+
+export interface MarketData {
+  source: "pf_json";
+  extractedAt: string;
+  soldComparables: SoldComparable[];
+  /** Median / average sold price stats for the immediate area, if the listing feed includes them. */
+  areaStats: {
+    medianSoldPrice?: number | null;
+    averageSoldPrice?: number | null;
+    sampleSize?: number | null;
+    periodLabel?: string | null;
+  } | null;
+  /** The subject property's own last-sold record, lifted from propertyLight.lastSold. */
+  subjectLastSold: { value: number; date: string } | null;
 }
 
 const TYPE_MAP: Record<string, string> = {
@@ -62,6 +103,105 @@ export function parsePropertyFilterJson(input: string | any): ParsedJsonProperty
     rent_source: rent ? "pf_json" : null,
     lease_years_remaining: leaseYrs ? Number(leaseYrs) : null,
     pf_json: obj,
+    epc_from_json: extractEpcFromPfJson(light, detail),
+    market_data: extractMarketDataFromPfJson(light, detail),
+  };
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function bandLetter(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim().toUpperCase();
+  return /^[A-G]$/.test(s) ? s : null;
+}
+
+/** Extracts EPC scores and bands from the listing JSON without requiring an EPC register call.
+ *  Field paths tried (in order) for each value — add variants here if a feed uses different names:
+ *    currentScore  : propertyDetail.epcEfficiency | epcCurrentScore | epcCurrentEfficiency | epcSapScore
+ *    potentialScore: propertyDetail.epcPotential  | epcPotentialScore | epcPotentialEfficiency
+ *    currentRating : propertyLight.epcRate | propertyDetail.epcCurrentBand | epcBand | epcRating
+ *    potentialRating: propertyDetail.epcPotentialBand | epcPotentialRating
+ */
+function extractEpcFromPfJson(light: any, detail: any): EpcFromJson | null {
+  const currentScore = numOrNull(
+    detail?.epcEfficiency ?? detail?.epcCurrentScore ?? detail?.epcCurrentEfficiency ?? detail?.epcSapScore,
+  );
+  const potentialScore = numOrNull(
+    detail?.epcPotential ?? detail?.epcPotentialScore ?? detail?.epcPotentialEfficiency ?? detail?.epcPotentialSapScore,
+  );
+  const currentRating =
+    bandLetter(light?.epcRate) ??
+    bandLetter(detail?.epcCurrentBand) ??
+    bandLetter(detail?.epcBand) ??
+    bandLetter(detail?.epcRating) ??
+    bandLetter(detail?.epcCurrentRating) ??
+    null;
+  const potentialRating =
+    bandLetter(detail?.epcPotentialBand) ??
+    bandLetter(detail?.epcPotentialRating) ??
+    null;
+  const co2Current = numOrNull(detail?.co2EmissionsCurrent ?? detail?.epcCo2Current ?? detail?.co2Current);
+  const co2Potential = numOrNull(detail?.co2EmissionsPotential ?? detail?.epcCo2Potential ?? detail?.co2Potential);
+
+  if (!currentRating && currentScore == null) return null;
+  return { source: "pf_json", currentRating, currentScore, potentialRating, potentialScore, co2Current, co2Potential };
+}
+
+/** Extracts sold comparables and area stats from the listing JSON.
+ *  Field paths tried for comparables array:
+ *    propertyDetail.soldComparables | comparables | soldPrices | nearbyComparables | soldProperties
+ *  Each entry is normalised to a common shape — add extra source fields in the mapping below
+ *  if your feed uses different keys inside each comparable object.
+ */
+function extractMarketDataFromPfJson(light: any, detail: any): MarketData | null {
+  const rawComps: any[] =
+    detail?.soldComparables ??
+    detail?.comparables ??
+    detail?.soldPrices ??
+    detail?.nearbyComparables ??
+    detail?.soldProperties ??
+    [];
+
+  const soldComparables: SoldComparable[] = (Array.isArray(rawComps) ? rawComps : [])
+    .slice(0, 30)
+    .map((c: any) => ({
+      address: c.address ?? c.fullAddress ?? c.displayAddress ?? null,
+      price: numOrNull(c.price ?? c.soldPrice ?? c.salePrice ?? c.value),
+      date: c.date ?? c.soldDate ?? c.saleDate ?? null,
+      propertyType: c.propertyType ?? c.type ?? null,
+      beds: numOrNull(c.beds ?? c.bedsCount ?? c.bedrooms) ?? null,
+      distanceMiles: numOrNull(c.distanceMiles ?? c.distance) ?? null,
+    }))
+    .filter((c: SoldComparable) => c.price != null);
+
+  // Area statistics — median/average sold prices for the immediate area
+  const rawArea = detail?.areaStats ?? detail?.marketData ?? detail?.localStats ?? detail?.priceStats ?? null;
+  const areaStats = rawArea
+    ? {
+        medianSoldPrice: numOrNull(rawArea.medianSoldPrice ?? rawArea.median ?? rawArea.medianPrice),
+        averageSoldPrice: numOrNull(rawArea.averageSoldPrice ?? rawArea.average ?? rawArea.avgPrice),
+        sampleSize: numOrNull(rawArea.sampleSize ?? rawArea.count ?? rawArea.total),
+        periodLabel: rawArea.period ?? rawArea.periodLabel ?? rawArea.label ?? null,
+      }
+    : null;
+
+  const subjectLastSold =
+    light?.lastSold?.value && light?.lastSold?.date
+      ? { value: Number(light.lastSold.value), date: String(light.lastSold.date) }
+      : null;
+
+  if (!soldComparables.length && !areaStats && !subjectLastSold) return null;
+  return {
+    source: "pf_json",
+    extractedAt: new Date().toISOString(),
+    soldComparables,
+    areaStats: areaStats ?? null,
+    subjectLastSold,
   };
 }
 

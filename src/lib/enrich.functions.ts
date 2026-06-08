@@ -80,7 +80,36 @@ export const enrichFromPfJson = createServerFn({ method: "POST" })
     if (merged.length !== oldImgs.length) patch.image_urls = merged;
     patch.pf_json = parsed.pf_json;
 
+    // EPC data from the listing JSON — saves current/potential band and SAP score into epc_data
+    // WITHOUT overwriting a richer register fetch already on file (cert number + improvement
+    // roadmap). The register fetch later enriches this entry rather than replacing it wholesale.
+    if (parsed.epc_from_json) {
+      const existingEpc = existing.epc_data;
+      const hasRegisterData = existingEpc && existingEpc.source !== "pf_json" && existingEpc.certificateNumber;
+      if (!hasRegisterData) {
+        // Merge: if register data exists (cert + recommendations) keep those, only update scores/bands
+        patch.epc_data = hasRegisterData
+          ? { ...existingEpc, ...parsed.epc_from_json, certificateNumber: existingEpc.certificateNumber, certificateUrl: existingEpc.certificateUrl, recommendations: existingEpc.recommendations, elements: existingEpc.elements }
+          : { ...parsed.epc_from_json, certificateNumber: null, certificateUrl: null, recommendations: [], elements: [] };
+        if (!existing.epc_fetched_at) patch.epc_fetched_at = new Date().toISOString();
+      }
+    }
+
+    // Market data — sold comparables and area statistics from the listing JSON, always refreshed
+    // from the latest pf_json paste (the feed may include updated sold comparables each time).
+    if (parsed.market_data) {
+      patch.market_data = parsed.market_data;
+    }
+
     const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
     if (error) throw new Error(error.message);
-    return { ok: true, fieldsUpdated: Object.keys(patch).filter((k) => k !== "pf_json"), imageCount: parsed.image_urls.length, totalImages: merged.length };
+    const countedFields = Object.keys(patch).filter((k) => k !== "pf_json");
+    return {
+      ok: true,
+      fieldsUpdated: countedFields,
+      imageCount: parsed.image_urls.length,
+      totalImages: merged.length,
+      epcFromJson: !!parsed.epc_from_json,
+      marketComparables: parsed.market_data?.soldComparables.length ?? 0,
+    };
   });

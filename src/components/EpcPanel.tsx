@@ -93,14 +93,16 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
           {credQ.isSuccess && configured && (
             <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => { setCandidates(null); mut.mutate(); }}>
               <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
-              {epc ? "Refetch from register" : "Fetch from EPC register"}
+              {epc?.source === "pf_json" ? "Enrich from EPC register" : epc ? "Refetch from register" : "Fetch from EPC register"}
             </Button>
           )}
         </CardTitle>
         <CardDescription>
-          {epc
-            ? <>From the government EPC register — matched on the exact registered address{epc.matchedManually ? " (you confirmed this one)" : ""}{fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}</>
-            : "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."}
+          {epc?.source === "pf_json"
+            ? <>Band and SAP score from the listing JSON — fetching from the register adds the full element-by-element breakdown, assessor-costed improvement roadmap, and official certificate link.</>
+            : epc
+              ? <>From the government EPC register — matched on the exact registered address{epc.matchedManually ? " (you confirmed this one)" : ""}{fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}</>
+              : "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."}
         </CardDescription>
       </CardHeader>
       <CardContent className={epc || candidates ? "border-b pb-6" : undefined}>

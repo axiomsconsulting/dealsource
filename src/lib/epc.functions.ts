@@ -239,8 +239,16 @@ async function loadCertificateAndPersist(context: any, propertyId: string, certi
   const cert = certRes?.data;
   if (!cert) throw new Error("EPC register did not return certificate detail for that certificate number");
 
+  // Read the existing row so we can preserve any pf_json-sourced scores if the register
+  // record doesn't have them (shouldn't happen, but defensive); the register data always wins.
+  const { data: existingRow } = await context.supabase
+    .from("properties").select("epc_data").eq("id", propertyId).eq("user_id", context.userId).maybeSingle();
+  const prev = existingRow?.epc_data ?? null;
+
   const stepTitles = await fetchStepTitles(certificateNumber);
-  const epc_data = { ...buildEpcData(cert, certificateNumber, stepTitles), matchedByAddress: true, matchedManually };
+  const registerData = buildEpcData(cert, certificateNumber, stepTitles);
+  // Merge: register is authoritative for everything it provides; keep source flag clear.
+  const epc_data = { ...prev, ...registerData, source: "register", matchedByAddress: true, matchedManually };
   const epc_fetched_at = new Date().toISOString();
   const { error: updErr } = await context.supabase
     .from("properties").update({ epc_data, epc_fetched_at }).eq("id", propertyId).eq("user_id", context.userId);

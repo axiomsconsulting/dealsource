@@ -28,6 +28,7 @@ import { ImageLibrary } from "@/components/ImageLibrary";
 import { ImageCarousel } from "@/components/ImageCarousel";
 import { HmoLayoutPanel } from "@/components/HmoLayoutPanel";
 import { SurveyStrategyPanel } from "@/components/SurveyStrategyPanel";
+import { MarketComparablesPanel } from "@/components/MarketComparablesPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -380,6 +381,12 @@ function PropertyDetail() {
           </Card>
         )}
 
+        {(p as any).market_data && (
+          <MarketComparablesPanel
+            marketData={(p as any).market_data}
+            askingPrice={p.asking_price_gbp}
+          />
+        )}
         <PhotosPanel propertyId={id} />
         <EpcPanel propertyId={id} />
         <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
