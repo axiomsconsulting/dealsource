@@ -1,6 +1,6 @@
 import type {
   PersonaInput, PropertyInput, SliderOverrides, OverrideKey,
-  StrategyResult, StrategyNumber, AnalysisOutput, StrategyKey,
+  StrategyResult, StrategyNumber, AnalysisOutput, StrategyKey, DealIndicator,
 } from "./types";
 import { OVERRIDE_BOUNDS } from "./types";
 import { buildNegotiation } from "./negotiation";
@@ -126,12 +126,13 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const stressDSCR = (monthlyRent * 0.75) / stressInt; // 75% rent cover test (lender style)
   if (stressDSCR < 1.25) reasons.push(`Fails 125% DSCR at ${(eff.stress_rate * 100).toFixed(1)}% stress (got ${stressDSCR.toFixed(2)}x)`);
 
-  let score = 0;
-  score += Math.min(40, grossYield * 100 * 5);            // yield ~8% = 40pts
-  score += Math.min(30, annualROI * 100 * 3);             // ROI ~10% = 30pts
-  score += monthlyCashflow > 200 ? 20 : monthlyCashflow > 0 ? 10 : 0;
-  score += stressDSCR >= 1.25 ? 10 : 0;
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  const scoreBreakdown = [
+    { label: "Gross yield", points: Math.round(Math.min(40, grossYield * 100 * 5)), max: 40, detail: `${(grossYield * 100).toFixed(1)}% yield × 5, capped at 40` },
+    { label: "Annual ROI", points: Math.round(Math.min(30, annualROI * 100 * 3)), max: 30, detail: `${(annualROI * 100).toFixed(1)}% ROI × 3, capped at 30` },
+    { label: "Net cashflow", points: monthlyCashflow > 200 ? 20 : monthlyCashflow > 0 ? 10 : 0, max: 20, detail: `£${Math.round(monthlyCashflow)}/mo — 20 if over £200, 10 if positive, 0 otherwise` },
+    { label: "Stress test", points: stressDSCR >= 1.25 ? 10 : 0, max: 10, detail: `DSCR ${stressDSCR.toFixed(2)}x at ${(eff.stress_rate * 100).toFixed(1)}% stress — 10 if ≥1.25x, 0 otherwise` },
+  ];
+  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
 
   return {
     key: "BTL",
@@ -142,6 +143,8 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     monthlyCashflow,
     annualROI,
     dealScore: score,
+    scoreBreakdown,
+    scoreFormula: "Gross yield + Annual ROI + Net cashflow + Stress test (each capped, then summed and clamped to 0-100)",
     summary: `${(grossYield * 100).toFixed(1)}% gross yield, £${Math.round(monthlyCashflow)}/mo cashflow, ${(annualROI * 100).toFixed(1)}% ROI on £${Math.round(cashIn)} in`,
     numbers: [
       tunable("Offer price", purchase, "gbp", "offer_price", overrides, defaults),
@@ -190,12 +193,14 @@ function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
   const monthlyCashflow = monthlyRent * 0.80 - monthlyInt;
   const annualROI = cashLeftIn > 100 ? (monthlyCashflow * 12) / cashLeftIn : monthlyCashflow > 0 ? 999 : 0;
 
-  let score = 0;
-  score += cashLeftIn <= 5000 ? 40 : cashLeftIn <= 15000 ? 25 : cashLeftIn <= 30000 ? 10 : 0;
-  score += monthlyCashflow > 200 ? 25 : monthlyCashflow > 0 ? 10 : 0;
-  score += arv - purchase - refurb > 20000 ? 25 : arv - purchase - refurb > 0 ? 10 : 0;
-  score += monthlyCashflow > 0 && cashLeftIn < persona.cash_available_gbp ? 10 : 0;
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  const refurbUplift = arv - purchase - refurb;
+  const scoreBreakdown = [
+    { label: "Capital recycled", points: cashLeftIn <= 5000 ? 40 : cashLeftIn <= 15000 ? 25 : cashLeftIn <= 30000 ? 10 : 0, max: 40, detail: `£${Math.round(cashLeftIn)} left in — 40 if ≤£5k, 25 if ≤£15k, 10 if ≤£30k, 0 otherwise` },
+    { label: "Net cashflow", points: monthlyCashflow > 200 ? 25 : monthlyCashflow > 0 ? 10 : 0, max: 25, detail: `£${Math.round(monthlyCashflow)}/mo post-refi — 25 if over £200, 10 if positive, 0 otherwise` },
+    { label: "Refurb uplift", points: refurbUplift > 20000 ? 25 : refurbUplift > 0 ? 10 : 0, max: 25, detail: `ARV − purchase − refurb = £${Math.round(refurbUplift)} — 25 if over £20k, 10 if positive, 0 otherwise` },
+    { label: "Within cash budget", points: monthlyCashflow > 0 && cashLeftIn < persona.cash_available_gbp ? 10 : 0, max: 10, detail: `10 if cashflow positive and cash left in is under your available £${persona.cash_available_gbp.toLocaleString()}, 0 otherwise` },
+  ];
+  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
 
   return {
     key: "BRRR",
@@ -206,6 +211,8 @@ function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
     monthlyCashflow,
     annualROI,
     dealScore: score,
+    scoreBreakdown,
+    scoreFormula: "Capital recycled + Net cashflow + Refurb uplift + Within cash budget (each capped, then summed and clamped to 0-100)",
     summary: `Recycle ${cashLeftIn <= 5000 ? "all" : `£${Math.round(cashOut)}`} of capital. £${Math.round(monthlyCashflow)}/mo cashflow after refi.`,
     numbers: [
       tunable("Purchase", purchase, "gbp", "offer_price", overrides, defaults),
@@ -241,7 +248,11 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
   if (isArticle4Inside(article4Status)) reasons.push("Article 4 area — short-let (sui generis) use class change may require planning permission");
   if (p.tenure === "Leasehold") reasons.push("Leasehold — check short-let permitted");
 
-  let score = Math.round(Math.min(100, monthlyCashflow / 10 + annualROI * 100 * 2));
+  const scoreBreakdown = [
+    { label: "Net cashflow", points: Math.round(monthlyCashflow / 10), detail: `£${Math.round(monthlyCashflow)}/mo ÷ 10 — uncapped, then summed and clamped to 0-100` },
+    { label: "Annual ROI", points: Math.round(annualROI * 100 * 2), detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100` },
+  ];
+  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
   return {
     key: "SA",
     name: "Serviced Accommodation",
@@ -250,7 +261,9 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
     cashLeftIn: cashIn,
     monthlyCashflow,
     annualROI,
-    dealScore: Math.max(0, Math.min(100, score)),
+    dealScore: score,
+    scoreBreakdown,
+    scoreFormula: "Net cashflow ÷ 10 + Annual ROI × 2, summed and clamped to 0-100",
     summary: `£${Math.round(monthlyRevenue)}/mo revenue at ${Math.round(occ * 100)}% occ × £${nightly}. £${Math.round(monthlyCashflow)} net.`,
     numbers: [
       tunable("Nightly rate", nightly, "gbp", "sa_nightly", overrides, defaults),
@@ -292,7 +305,11 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     reasons.push(`At the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m²), ${p.area_sqm}m² total only realistically supports ~${areaEstimate.maxRooms} lettable room(s) after kitchen/bathroom/communal space — ${rooms} may not be achievable without an extension.`);
   }
 
-  const score = Math.max(0, Math.min(100, Math.round(monthlyCashflow / 15 + annualROI * 100 * 2)));
+  const scoreBreakdown = [
+    { label: "Net cashflow", points: Math.round(monthlyCashflow / 15), detail: `£${Math.round(monthlyCashflow)}/mo ÷ 15 — uncapped, then summed and clamped to 0-100` },
+    { label: "Annual ROI", points: Math.round(annualROI * 100 * 2), detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100` },
+  ];
+  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
   return {
     key: "HMO",
     name: "HMO",
@@ -302,6 +319,8 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     monthlyCashflow,
     annualROI,
     dealScore: score,
+    scoreBreakdown,
+    scoreFormula: "Net cashflow ÷ 15 + Annual ROI × 2, summed and clamped to 0-100",
     summary: `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
     numbers: [
       tunable("Rooms", rooms, "count", "room_count", overrides, defaults,
@@ -332,7 +351,11 @@ function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
   const reasons: string[] = [];
   if (margin < 0.15) reasons.push(`Margin ${(margin * 100).toFixed(1)}% below 15% rule of thumb`);
   if (profit < 20000) reasons.push("Profit below £20k benchmark");
-  const score = Math.max(0, Math.min(100, Math.round(margin * 100 * 4 + Math.min(40, profit / 1000))));
+  const scoreBreakdown = [
+    { label: "Margin on GDV", points: Math.round(margin * 100 * 4), detail: `${(margin * 100).toFixed(1)}% margin × 4 — uncapped, then summed and clamped to 0-100` },
+    { label: "Profit", points: Math.round(Math.min(40, profit / 1000)), max: 40, detail: `£${Math.round(profit)} profit ÷ 1,000, capped at 40` },
+  ];
+  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
   return {
     key: "FLIP",
     name: "Flip",
@@ -341,6 +364,8 @@ function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
     monthlyCashflow: 0,
     annualROI: roi,
     dealScore: score,
+    scoreBreakdown,
+    scoreFormula: "Margin on GDV × 4 + min(Profit ÷ 1,000, 40), summed and clamped to 0-100",
     summary: `£${Math.round(profit)} profit at ${(margin * 100).toFixed(1)}% margin`,
     numbers: [
       tunable("Purchase", purchase, "gbp", "offer_price", overrides, defaults),
@@ -372,6 +397,10 @@ function titleSplitAnalysis(p: PropertyInput, persona: PersonaInput, eff: Analys
     feasible,
     reasons,
     dealScore: feasible ? 60 : 5,
+    scoreBreakdown: [
+      { label: "Eligibility check", points: feasible ? 60 : 5, max: 60, detail: feasible ? "Meets the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 60" : "Doesn't meet the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 5" },
+    ],
+    scoreFormula: "Fixed score: 60 if the freehold/beds/area rule of thumb is met, otherwise 5",
     summary: feasible
       ? `Potential ~£${uplift} uplift by splitting into 2 dwellings (planning required)`
       : "Not suitable for title splitting",
@@ -381,6 +410,47 @@ function titleSplitAnalysis(p: PropertyInput, persona: PersonaInput, eff: Analys
       { label: "Net est.", value: uplift, format: "gbp" },
     ],
   };
+}
+
+// Plain-language read on what the headline numbers mean — three short badges that sit beside
+// the deal score so "62/100" comes with a "why". Each is derived straight from figures already
+// computed elsewhere (risk severity, the lead strategy's cashflow/key, the overall score) —
+// nothing here is a separate model, just a translation of numbers already on screen into words.
+function deriveDealIndicators(riskFlags: any[], best: StrategyResult, overallScore: number): DealIndicator[] {
+  const red = riskFlags.filter((f) => f.severity === "red").length;
+  const amber = riskFlags.filter((f) => f.severity === "amber").length;
+
+  let risk: DealIndicator;
+  if (red > 0) {
+    risk = { key: "risk", label: "Risk", value: "High risk", tone: "bad", detail: `${red} red flag${red > 1 ? "s" : ""}${amber ? ` and ${amber} amber` : ""} on file — see the risk breakdown for what to verify.` };
+  } else if (amber > 0) {
+    risk = { key: "risk", label: "Risk", value: "Moderate risk", tone: "warn", detail: `${amber} amber flag${amber > 1 ? "s" : ""} on file, no red flags — see the risk breakdown for what to verify.` };
+  } else {
+    risk = { key: "risk", label: "Risk", value: "Low risk", tone: "good", detail: "No risk flags raised against this listing." };
+  }
+
+  const cashflow = best.monthlyCashflow ?? 0;
+  let income: DealIndicator;
+  if (best.key === "FLIP" || best.key === "TITLE_SPLIT") {
+    income = { key: "income", label: "Income", value: "Capital growth play", tone: "neutral", detail: `${best.name} is a one-off profit play rather than a monthly-income strategy — see its own numbers for projected proceeds.` };
+  } else if (cashflow > 200) {
+    income = { key: "income", label: "Income", value: "Steady income", tone: "good", detail: `£${Math.round(cashflow)}/mo net cashflow projected on the lead strategy (${best.name}).` };
+  } else if (cashflow > 0) {
+    income = { key: "income", label: "Income", value: "Tight margins", tone: "neutral", detail: `Only £${Math.round(cashflow)}/mo net cashflow projected on ${best.name} — a thin buffer against voids or rate rises.` };
+  } else {
+    income = { key: "income", label: "Income", value: "Negative cashflow", tone: "bad", detail: `${best.name} projects a £${Math.round(Math.abs(cashflow))}/mo shortfall at these numbers — you'd be funding the gap each month.` };
+  }
+
+  let reward: DealIndicator;
+  if (overallScore >= 70) {
+    reward = { key: "reward", label: "Reward", value: "Strong upside", tone: "good", detail: `Deal score ${overallScore}/100 — one of the stronger reads this engine produces; lead strategy ${best.name} scores ${best.dealScore}/100.` };
+  } else if (overallScore >= 45) {
+    reward = { key: "reward", label: "Reward", value: "Moderate upside", tone: "neutral", detail: `Deal score ${overallScore}/100 — workable but unremarkable; lead strategy ${best.name} scores ${best.dealScore}/100.` };
+  } else {
+    reward = { key: "reward", label: "Reward", value: "Limited upside", tone: "warn", detail: `Deal score ${overallScore}/100 — the numbers are weak at the current price; even the lead strategy (${best.name}) only scores ${best.dealScore}/100.` };
+  }
+
+  return [risk, income, reward];
 }
 
 export function analyseProperty(
@@ -517,10 +587,27 @@ export function analyseProperty(
   // prefer the highest-scoring FEASIBLE strategy, only falling back to the raw top score if none qualify.
   const feasiblePool = strategies.filter((s) => s.feasible);
   const best = (feasiblePool.length ? feasiblePool : strategies).reduce((a, b) => (b.dealScore > a.dealScore ? b : a));
-  let overallScore = Math.round(strategies.reduce((s, x) => s + x.dealScore, 0) / strategies.length);
+  // Overall score = the plain mean of the six strategy scores, rounded — then optionally
+  // capped by the worst risk-flag severity on file. Both steps are recorded in
+  // `overallScoreBreakdown` so the headline number can be hand-checked against the strategy
+  // scores shown right below it.
+  const rawAverage = strategies.reduce((s, x) => s + x.dealScore, 0) / strategies.length;
+  const uncappedScore = Math.round(rawAverage);
+  let overallScore = uncappedScore;
   const sev = maxRiskSeverity(riskFlags as any);
   if (sev === "red") overallScore = Math.min(overallScore, 20);
   else if (sev === "amber") overallScore = Math.min(overallScore, 55);
+
+  const overallScoreBreakdown: AnalysisOutput["overallScoreBreakdown"] = {
+    strategyScores: strategies.map((s) => ({ key: s.key, name: s.name, score: s.dealScore })),
+    average: Math.round(rawAverage * 10) / 10,
+    ...(overallScore < uncappedScore ? {
+      cappedAt: overallScore,
+      capReason: sev === "red"
+        ? "One or more red risk flags on file — overall score capped at 20 regardless of the strategy average."
+        : "Amber risk flags on file — overall score capped at 55 regardless of the strategy average.",
+    } : {}),
+  };
 
   return {
     personaMatch: evalPersonaMatch(prop, persona, offer_price_default),
@@ -531,6 +618,8 @@ export function analyseProperty(
     negotiationGuidance: negotiation.guidance,
     bestStrategy: best.key as StrategyKey,
     overallScore,
+    overallScoreBreakdown,
+    dealIndicators: deriveDealIndicators(riskFlags as any[], best, overallScore),
     riskFlags: riskFlags as any[],
     article4: article4Status ? { status: String(article4Status), council: article4Council } : null,
   };

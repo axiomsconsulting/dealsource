@@ -21,6 +21,8 @@ import { EpcPanel } from "@/components/EpcPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { RefurbPanel } from "@/components/RefurbPanel";
 import { RiskChips } from "@/components/RiskChips";
+import { DealScoreInfo } from "@/components/DealScoreInfo";
+import { DealIndicators } from "@/components/DealIndicators";
 import { NegotiationPanel } from "@/components/NegotiationPanel";
 import { ImageLibrary } from "@/components/ImageLibrary";
 import { ImageCarousel } from "@/components/ImageCarousel";
@@ -130,7 +132,13 @@ function PropertyDetail() {
         </div>
         <div className="text-right">
           <div className="text-5xl font-bold text-primary">{analysis.overallScore}</div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Deal score</div>
+          <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wide text-muted-foreground">
+            Deal score
+            <DealScoreInfo overallScore={analysis.overallScore} breakdown={analysis.overallScoreBreakdown} best={best} />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <DealIndicators indicators={analysis.dealIndicators} />
+          </div>
           <div className="mt-2">
             <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
               <SelectTrigger className="h-8 w-[220px]"><SelectValue /></SelectTrigger>
