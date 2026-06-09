@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DealSheetRouteImport } from './routes/deal-sheet'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -23,6 +24,11 @@ import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$toke
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
 import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
 
+const DealSheetRoute = DealSheetRouteImport.update({
+  id: '/deal-sheet',
+  path: '/deal-sheet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -95,6 +101,7 @@ const AuthenticatedPropertiesIdGuideRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/deal-sheet': typeof DealSheetRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/searches': typeof AuthenticatedSearchesRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/deal-sheet': typeof DealSheetRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/searches': typeof AuthenticatedSearchesRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/deal-sheet': typeof DealSheetRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
   '/_authenticated/searches': typeof AuthenticatedSearchesRoute
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/deal-sheet'
     | '/dashboard'
     | '/persona'
     | '/searches'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/deal-sheet'
     | '/dashboard'
     | '/persona'
     | '/searches'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/deal-sheet'
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
     | '/_authenticated/searches'
@@ -186,6 +198,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DealSheetRoute: typeof DealSheetRoute
   DealTokenRoute: typeof DealTokenRoute
   ApiDealPdfTokenRoute: typeof ApiDealPdfTokenRoute
   ApiPublicRunSearchAlertsRoute: typeof ApiPublicRunSearchAlertsRoute
@@ -193,6 +206,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/deal-sheet': {
+      id: '/deal-sheet'
+      path: '/deal-sheet'
+      fullPath: '/deal-sheet'
+      preLoaderRoute: typeof DealSheetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -314,6 +334,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  DealSheetRoute: DealSheetRoute,
   DealTokenRoute: DealTokenRoute,
   ApiDealPdfTokenRoute: ApiDealPdfTokenRoute,
   ApiPublicRunSearchAlertsRoute: ApiPublicRunSearchAlertsRoute,
