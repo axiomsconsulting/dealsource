@@ -5,6 +5,7 @@ import { computeRiskFlags } from "./analysis/risk";
 import { lookupArticle4WithClient } from "./analysis/article4";
 import { estimateRefurb } from "./analysis/refurb";
 import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
+import { mergePriceReductionIntoPfJson } from "./enrich.functions";
 
 const PropertyInputSchema = z.object({
   address: z.string().min(1).max(500),
@@ -80,6 +81,9 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
       source: "url_scrape",
       source_link: data.url,
     };
+    if (scraped.price_reduced_date) {
+      propInput.pf_json = mergePriceReductionIntoPfJson(null, scraped.price_reduced_date, scraped.asking_price_gbp);
+    }
     const risks = computeRiskFlags(propInput);
     const a4 = await lookupArticle4WithClient(context.supabase, propInput.postcode ?? null);
     const refurb = estimateRefurb(propInput, "medium");

@@ -4,6 +4,23 @@ import { z } from "zod";
 import { parsePropertyFilterJson } from "./parsers/json";
 import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
 
+/** Folds a Rightmove "Reduced on dd/mm/yyyy" date (lifted from PAGE_MODEL by `scrapeListing`)
+ *  into the `pf_json` shape `buildNegotiation` already reads (`propertyLight.multipleReduce`,
+ *  `propertyDetail.pricesHisto`) — so a property added/enriched purely from a URL gets the same
+ *  "price reduced — motivation evidence" negotiation point as one imported via Property Filter
+ *  JSON, without a parallel code path. */
+export function mergePriceReductionIntoPfJson(existingPfJson: any, reducedDate: string, currentPriceGbp: number | null): any {
+  const pf = existingPfJson && typeof existingPfJson === "object" ? existingPfJson : {};
+  const propertyLight = { ...(pf.propertyLight ?? {}) };
+  const propertyDetail = { ...(pf.propertyDetail ?? {}) };
+  propertyLight.multipleReduce = Math.max(1, Number(propertyLight.multipleReduce) || 0);
+  const existingHisto: any[] = Array.isArray(propertyDetail.pricesHisto) ? propertyDetail.pricesHisto : [];
+  if (currentPriceGbp != null && !existingHisto.some((e) => e?.date === reducedDate)) {
+    propertyDetail.pricesHisto = [...existingHisto, { value: currentPriceGbp, date: reducedDate }];
+  }
+  return { ...pf, propertyLight, propertyDetail };
+}
+
 export const enrichFromUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid(), url: z.string().url() }).parse(i))
@@ -27,6 +44,12 @@ export const enrichFromUrl = createServerFn({ method: "POST" })
     patch.source_link = data.url;
 
     if (!Object.keys(patch).length) throw new Error("Could not extract listing data from that URL.");
+
+    if (scraped.price_reduced_date) {
+      const { data: existing } = await context.supabase
+        .from("properties").select("pf_json").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+      patch.pf_json = mergePriceReductionIntoPfJson((existing as any)?.pf_json, scraped.price_reduced_date, scraped.asking_price_gbp ?? patch.asking_price_gbp);
+    }
 
     const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
     if (error) throw new Error(error.message);

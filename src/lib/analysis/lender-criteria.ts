@@ -9,6 +9,10 @@ export interface LenderCriteria {
   mortgage_rate: number;
   ltv: number;
   stress_rate: number;
+  /** Minimum interest-coverage-ratio (rent ÷ stressed interest) lenders require — 125% for Ltd
+   *  company / basic-rate borrowers, 145% for personal-name higher-rate taxpayers. Matches the
+   *  two thresholds Property Filter's stress-test calculator checks against. */
+  icr_threshold: number;
   label: string;
   description: string;
 }
@@ -23,6 +27,7 @@ export const LENDER_CRITERIA: Record<InvestorType, LenderCriteria> = {
     mortgage_rate: 0.0525,
     ltv: 0.75,
     stress_rate: 0.055,
+    icr_threshold: 1.45,
     label: "Personal name (individual)",
     description:
       "Widest lender choice and the cheapest headline rates, up to ~75-80% LTV. Higher-rate taxpayers face a tougher 145% rent-cover stress test (vs 125% for Ltd co or basic-rate borrowers) and lose full mortgage-interest relief.",
@@ -31,6 +36,7 @@ export const LENDER_CRITERIA: Record<InvestorType, LenderCriteria> = {
     mortgage_rate: 0.0575,
     ltv: 0.75,
     stress_rate: 0.05,
+    icr_threshold: 1.25,
     label: "Limited company (SPV)",
     description:
       "Rates and product fees typically run ~0.25-0.75pts above personal lending and the lender pool is narrower, but you keep full mortgage-interest relief and a flat 125% stress test regardless of tax band — often the cheaper route overall for higher-rate taxpayers.",
@@ -39,6 +45,7 @@ export const LENDER_CRITERIA: Record<InvestorType, LenderCriteria> = {
     mortgage_rate: 0.06,
     ltv: 0.70,
     stress_rate: 0.055,
+    icr_threshold: 1.45,
     label: "Group / holding structure",
     description:
       "Multi-SPV or parent-company structures narrow the lender pool further still — expect a rate premium, a lower max LTV (~70%), and full underwriting of group accounts and inter-company loans before any offer is made.",
@@ -47,6 +54,7 @@ export const LENDER_CRITERIA: Record<InvestorType, LenderCriteria> = {
     mortgage_rate: 0.0575,
     ltv: 0.70,
     stress_rate: 0.06,
+    icr_threshold: 1.45,
     label: "Portfolio landlord (4+ mortgaged BTLs)",
     description:
       "PRA portfolio rules mean the lender stress-tests your whole portfolio, not just this loan — expect a lower max LTV (~70%), heavier paperwork (full schedule, business plan), and a modest rate premium versus a one-off BTL.",
@@ -55,6 +63,7 @@ export const LENDER_CRITERIA: Record<InvestorType, LenderCriteria> = {
     mortgage_rate: 0.055,
     ltv: 0.75,
     stress_rate: 0.055,
+    icr_threshold: 1.45,
     label: "First-time landlord",
     description:
       "Fewer lenders will take on a first BTL — typically capped at ~75% LTV, and some require an existing residential mortgage or a minimum personal income (~£25k/yr) before they'll lend.",

@@ -1,6 +1,7 @@
 import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./types";
 import { extractPriceHistory, summarisePriceHistory } from "./price-history";
 import { buildSurveyNegotiationPoints } from "./survey-strategy";
+import { estimateLeaseExtensionPremium } from "./lease-extension";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
@@ -158,6 +159,29 @@ export function buildNegotiation(
         { rating: "H", label: "High spec — full works", gbp: highSpec },
       ],
     });
+  }
+
+  // Short lease — extending it is a buyer cost, not a discussion point, and most lenders
+  // decline anything under ~80 years. Estimated using the same ground-rent-loss +
+  // reversionary-interest (+ marriage value below 80 years) structure as Property Filter's
+  // lease-extension calculator.
+  if ((prop.tenure || "").toLowerCase().includes("leasehold")) {
+    const leaseYrs = (prop as any).lease_years_remaining ?? prop.pf_json?.propertyLight?.leaseYearsRemaining ?? prop.pf_json?.propertyDetail?.leaseYearsRemaining ?? null;
+    if (typeof leaseYrs === "number" && leaseYrs > 0 && leaseYrs < 90 && asking > 0) {
+      const ASSUMED_GROUND_RENT_PA = 250; // typical modern flat ground rent — refine once the lease/title is seen
+      const lease = estimateLeaseExtensionPremium(leaseYrs, ASSUMED_GROUND_RENT_PA, asking);
+      if (lease) {
+        const impact = Math.round(Math.min(lease.premiumMid * 0.5, asking * 0.06));
+        points.push({
+          category: "improvement_gap",
+          title: `Short lease (${leaseYrs}y) — extension premium`,
+          description: `Estimated lease-extension premium ~£${lease.premiumLow.toLocaleString()}-£${lease.premiumHigh.toLocaleString()} (ground-rent loss + reversionary interest${lease.hasMarriageValue ? " + marriage value, since the term is under 80 years" : ""}), assuming a typical £${ASSUMED_GROUND_RENT_PA}/yr ground rent — confirm the actual ground rent from the lease. ${leaseYrs < 80 ? "Under 80 years, the cost roughly doubles once marriage value applies — this only gets more expensive the longer it's left." : "Most mainstream lenders are uneasy below ~80-85 years remaining, so factor the extension into your numbers even though marriage value doesn't yet apply."} Only part of this is treated as opening leverage; the rest is reserve for survey-stage negotiation.`,
+          gbp_impact: impact,
+          confidence: "medium",
+        });
+      }
+    }
+    // leaseYrs == null is already surfaced via the "leasehold_unknown_term" risk flag.
   }
 
   // Landlord-readiness costing (5b) — statutory compliance items every let property needs,

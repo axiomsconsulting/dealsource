@@ -7,7 +7,7 @@ import { buildNegotiation } from "./negotiation";
 import { computeRiskFlags, strategiesBlockedByRisk, maxRiskSeverity } from "./risk";
 import { resolveMonthlyRent, proposeRentRange } from "./rent";
 import { deriveLenderCriteria } from "./lender-criteria";
-import { estimateRefurb, tierFromConditionScore } from "./refurb";
+import { estimateRefurb, tierFromConditionScore, locationModifier } from "./refurb";
 import { estimateInsurance } from "./insurance";
 import { estimateMaxHmoRoomsByArea } from "./hmo-layout";
 
@@ -126,16 +126,18 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const annualCashflow = monthlyCashflow * 12;
   const annualROI = cashIn > 0 ? annualCashflow / cashIn : 0;
 
-  // stress test
+  // stress test — ICR threshold (rent ÷ stressed interest) varies by lending structure: 125%
+  // for Ltd company / basic-rate borrowers, 145% for personal-name higher-rate taxpayers.
+  const icrThreshold = eff.lender_criteria?.icr_threshold ?? 1.25;
   const stressInt = interestOnlyMonthly(loan, eff.stress_rate);
-  const stressDSCR = (monthlyRent * 0.75) / stressInt; // 75% rent cover test (lender style)
-  if (stressDSCR < 1.25) reasons.push(`Fails 125% DSCR at ${(eff.stress_rate * 100).toFixed(1)}% stress (got ${stressDSCR.toFixed(2)}x)`);
+  const stressICR = monthlyRent / stressInt;
+  if (stressICR < icrThreshold) reasons.push(`Fails ${Math.round(icrThreshold * 100)}% ICR at ${(eff.stress_rate * 100).toFixed(1)}% stress (got ${stressICR.toFixed(2)}x)`);
 
   const scoreBreakdown = [
     { label: "Gross yield", points: Math.round(Math.min(40, grossYield * 100 * 5)), max: 40, detail: `${(grossYield * 100).toFixed(1)}% yield × 5, capped at 40` },
     { label: "Annual ROI", points: Math.round(Math.min(30, annualROI * 100 * 3)), max: 30, detail: `${(annualROI * 100).toFixed(1)}% ROI × 3, capped at 30` },
     { label: "Net cashflow", points: monthlyCashflow > 200 ? 20 : monthlyCashflow > 0 ? 10 : 0, max: 20, detail: `£${Math.round(monthlyCashflow)}/mo — 20 if over £200, 10 if positive, 0 otherwise` },
-    { label: "Stress test", points: stressDSCR >= 1.25 ? 10 : 0, max: 10, detail: `DSCR ${stressDSCR.toFixed(2)}x at ${(eff.stress_rate * 100).toFixed(1)}% stress — 10 if ≥1.25x, 0 otherwise` },
+    { label: "Stress test", points: stressICR >= icrThreshold ? 10 : 0, max: 10, detail: `ICR ${stressICR.toFixed(2)}x at ${(eff.stress_rate * 100).toFixed(1)}% stress — 10 if ≥${Math.round(icrThreshold * 100)}%, 0 otherwise` },
   ];
   const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
 
@@ -170,7 +172,7 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
       { label: "Monthly cashflow (net)", value: monthlyCashflow, format: "gbp", hint: "after mgmt 10%, voids 5%, maintenance 5%, insurance" },
       { label: "Gross yield", value: grossYield, format: "pct" },
       { label: "Annual ROI", value: annualROI, format: "pct" },
-      { label: `DSCR @ ${(eff.stress_rate * 100).toFixed(1)}% stress`, value: stressDSCR, format: "num", hint: "≥1.25 needed by most lenders" },
+      { label: `ICR @ ${(eff.stress_rate * 100).toFixed(1)}% stress`, value: stressICR, format: "num", hint: `≥${Math.round(icrThreshold * 100)}% needed for ${eff.lender_criteria?.label ?? "this lending structure"}` },
     ],
   };
 }
@@ -330,6 +332,18 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const cashIn = purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCost;
   const annualROI = (monthlyCashflow * 12) / cashIn;
 
+  // Commercial (NOI ÷ yield) valuation — "the same formula RICS surveyors use" for HMOs, per
+  // Property Filter's HMO valuation calculator. 23% operating costs is its self-managed default;
+  // the 8-12% yield band is mapped from the refurb location modifier (cheaper regions command
+  // higher HMO yields, London-type areas the lowest), giving a region-aware figure without a
+  // separate yield dataset.
+  const { mod: regionMod } = locationModifier(p.postcode);
+  const hmoOpexPct = 0.23;
+  const investmentYieldPct = Math.max(0.08, Math.min(0.12, 0.12 - ((regionMod - 0.9) / 0.65) * 0.04));
+  const noi = monthlyRevenue * 12 * (1 - hmoOpexPct);
+  const commercialValuation = noi / investmentYieldPct;
+  const valueUplift = commercialValuation - purchase;
+
   if (rooms >= 5) reasons.push("Mandatory HMO licence required (5+ rooms)");
   const article4Status = p.article4_status ?? (p as any).ai_payload?.article4?.status ?? p.pf_json?.propertyLight?.article4Status ?? null;
   const article4Blocks = isArticle4Inside(article4Status);
@@ -380,6 +394,8 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
       { label: "Cash in", value: cashIn, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
       { label: "Annual ROI", value: annualROI, format: "pct" },
+      { label: "Commercial valuation (NOI ÷ yield)", value: commercialValuation, format: "gbp", hint: `NOI £${Math.round(noi).toLocaleString()} ÷ ${(investmentYieldPct * 100).toFixed(1)}% yield — RICS-style HMO valuation, not a bricks-and-mortar comparable` },
+      { label: "Value uplift vs purchase", value: valueUplift, format: "gbp", hint: "Commercial valuation minus purchase price — potential refinance headroom on an HMO valuation basis" },
     ],
   };
 }

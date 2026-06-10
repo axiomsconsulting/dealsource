@@ -90,6 +90,8 @@ function PropertyDetail() {
     onSuccess: (r: any) => { toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.imageCount} images`); setEnrichUrl(""); qc.invalidateQueries({ queryKey: ["property", id] }); },
     onError: (e: any) => toast.error(e.message),
   });
+  const [editingAsking, setEditingAsking] = useState(false);
+  const [askingDraft, setAskingDraft] = useState("");
   const [pfJsonText, setPfJsonText] = useState("");
   const [heroOpenIndex, setHeroOpenIndex] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<"photos" | "refurb" | "library" | "enrich" | null>(null);
@@ -152,7 +154,55 @@ function PropertyDetail() {
             {p.epc_rate && <Badge variant="outline">EPC {p.epc_rate}</Badge>}
             {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
             {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
-            <Badge>Asking {fmtGBP(p.asking_price_gbp)}</Badge>
+            {editingAsking ? (
+              <span className="inline-flex items-center gap-1">
+                <Input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={askingDraft}
+                  onChange={(e) => setAskingDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const n = Number(askingDraft);
+                      if (n > 0) { updateMut.mutate({ asking_price_gbp: n }); setEditingAsking(false); }
+                    } else if (e.key === "Escape") {
+                      setEditingAsking(false);
+                    }
+                  }}
+                  placeholder="Asking price (£)"
+                  className="h-7 w-32 text-sm"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={!(Number(askingDraft) > 0)}
+                  onClick={() => { const n = Number(askingDraft); updateMut.mutate({ asking_price_gbp: n }); setEditingAsking(false); }}
+                >
+                  Save
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingAsking(false)}>Cancel</Button>
+              </span>
+            ) : p.asking_price_gbp > 0 ? (
+              <button
+                type="button"
+                onClick={() => { setAskingDraft(String(p.asking_price_gbp)); setEditingAsking(true); }}
+                title="Click to edit asking price"
+              >
+                <Badge className="cursor-pointer hover:opacity-80">Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" /></Badge>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setAskingDraft(""); setEditingAsking(true); }}
+                title="Asking price is missing — click to enter it"
+              >
+                <Badge variant="outline" className="cursor-pointer border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100">
+                  <AlertTriangle className="mr-1 h-3 w-3" /> Set asking price
+                </Badge>
+              </button>
+            )}
             {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — inside</Badge>}
             {p.article4_status === "partial" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — partial</Badge>}
             {!p.article4_status && p.pf_json?.propertyLight?.article4Status && (

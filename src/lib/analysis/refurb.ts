@@ -45,12 +45,18 @@ const PER_SQM = {
   epc_upgrade: { light: [0, 0, 0], medium: [10, 18, 30], heavy: [25, 40, 60], full_gut: [40, 60, 90] },
 };
 
+// Regional multiplier endpoints (London 1.55x, North East/NI 0.90x, West Midlands 1.00x
+// benchmark) follow Property Filter's published refurbishment cost calculator
+// (https://property-filter.co.uk/free-calculators/refurbishment-cost-calculator); the bands
+// in between are interpolated against that range.
 const LOCATION_MOD: { match: RegExp; mod: number; name: string }[] = [
-  { match: /^(W|WC|EC|E|N|NW|SE|SW|KT|TW|HA|UB|EN|IG|RM|BR|CR|DA|SM)/, mod: 1.25, name: "London / commuter" },
-  { match: /^(GU|RH|RG|SL|MK|HP|OX|CB|SG|AL|LU|CM|CO|IP|BN|TN|PO|SO|BH|DT|SP|PE)/, mod: 1.12, name: "South / South-East" },
-  { match: /^(BS|BA|GL|EX|TQ|PL|TR|CF|NP|SA|LD|SY|HR|WR|DY|B|CV|WS|WV|ST|TF)/, mod: 1.02, name: "South-West / Midlands" },
-  { match: /^(NG|LE|DE|PE|NN|LN|S|DN|HU|YO|HG|HX|HD|WF|LS|BD|BB|PR|FY|L|CH|WA|M|OL|BL|SK|CW)/, mod: 0.96, name: "Midlands / NW / Yorks" },
-  { match: /^(NE|SR|DH|DL|TS|CA|LA)/, mod: 0.9, name: "North-East / Cumbria" },
+  { match: /^(W|WC|EC|E|N|NW)/, mod: 1.55, name: "London" },
+  { match: /^(SE|SW|KT|TW|HA|UB|EN|IG|RM|BR|CR|DA|SM|GU|RH)/, mod: 1.30, name: "London commuter belt" },
+  { match: /^(RG|SL|MK|HP|OX|CB|SG|AL|LU|CM|CO|IP|BN|TN|PO|SO|BH|DT|SP)/, mod: 1.15, name: "South / South-East" },
+  { match: /^(BS|BA|GL|EX|TQ|PL|TR)/, mod: 1.10, name: "South-West" },
+  { match: /^(CF|NP|SA|LD|SY|HR|WR|DY|B|CV|WS|WV|ST|TF|NG|LE|DE|PE|NN)/, mod: 1.00, name: "Midlands" },
+  { match: /^(LN|S|DN|HU|YO|HG|HX|HD|WF|LS|BD|BB|PR|FY|L|CH|WA|M|OL|BL|SK|CW)/, mod: 0.95, name: "North-West / Yorkshire" },
+  { match: /^(NE|SR|DH|DL|TS|CA|LA)/, mod: 0.90, name: "North-East / Cumbria" },
 ];
 
 export function locationModifier(postcode: string | null | undefined): { mod: number; name: string } {

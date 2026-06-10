@@ -13,6 +13,10 @@ export interface ScrapedListing {
   area_sqm: number | null;
   agent_name: string | null;
   image_urls: string[];
+  /** ISO date (yyyy-mm-dd) of the most recent "Reduced on dd/mm/yyyy" badge, lifted from
+   *  Rightmove's embedded PAGE_MODEL data — used as price-reduction evidence in the negotiation
+   *  playbook (mirrors `pf_json.propertyLight.multipleReduce`). Null if not a reduced listing. */
+  price_reduced_date: string | null;
 }
 
 export function assertSupportedListingUrl(url: string) {
@@ -61,7 +65,7 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       url,
-      formats: ["markdown", "links", { type: "json", prompt: EXTRACT_PROMPT }],
+      formats: ["markdown", "links", "rawHtml", { type: "json", prompt: EXTRACT_PROMPT }],
       onlyMainContent: true,
     }),
   });
@@ -69,14 +73,20 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
   const body = await res.json();
   const root = body?.data ?? body;
   const j = root?.json ?? root?.extract ?? {};
+  const pm = deriveFromRightmovePageModel(extractRightmovePageModel(root?.rawHtml ?? root?.html));
 
-  const address = j.address ? String(j.address) : deriveAddressFromText(root);
-  const postcode = j.postcode ? String(j.postcode).toUpperCase() : derivePostcodeFromText(root, address);
+  const address = j.address ? String(j.address) : (pm?.address ?? deriveAddressFromText(root));
+  const postcode = j.postcode
+    ? String(j.postcode).toUpperCase()
+    : (pm?.postcode ?? derivePostcodeFromText(root, address));
 
   return {
     address,
     postcode,
-    asking_price_gbp: numOrNull(j.price ?? j.asking_price ?? j.asking_price_gbp),
+    // Rightmove's price often doesn't survive the markdown/LLM extraction (it's rendered as a
+    // styled element rather than plain text) — PAGE_MODEL.propertyData.prices.primaryPrice is the
+    // ground-truth figure straight from the page's own data, so it takes priority here.
+    asking_price_gbp: pm?.asking_price_gbp ?? numOrNull(j.price ?? j.asking_price ?? j.asking_price_gbp),
     property_type: (j.property_type ?? j.type) ? String(j.property_type ?? j.type) : null,
     beds: numOrNull(j.bedrooms ?? j.beds),
     baths: numOrNull(j.bathrooms ?? j.baths),
@@ -86,7 +96,74 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
     area_sqm: numOrNull(j.area_sqm ?? j.area),
     agent_name: (j.agent ?? j.agent_name) ? String(j.agent ?? j.agent_name) : null,
     image_urls: collectImages(root, j),
+    price_reduced_date: pm?.price_reduced_date ?? null,
   };
+}
+
+/** Extracts the `window.PAGE_MODEL = {...}` JSON blob Rightmove embeds in every property page's
+ *  source — this is the same structured data the page's own React app renders from, so it
+ *  carries the full display address, exact price and "Reduced on dd/mm/yyyy" listing-history
+ *  reason without any of the markdown/LLM-extraction guesswork. Returns null for non-Rightmove
+ *  pages or if Firecrawl didn't return raw HTML. */
+function extractRightmovePageModel(html: string | null | undefined): any | null {
+  if (!html) return null;
+  const marker = "window.PAGE_MODEL";
+  const markerIdx = html.indexOf(marker);
+  if (markerIdx === -1) return null;
+  const eqIdx = html.indexOf("=", markerIdx);
+  const openIdx = html.indexOf("{", eqIdx);
+  if (eqIdx === -1 || openIdx === -1) return null;
+
+  let depth = 0, inString = false, quote = "", escaped = false;
+  for (let i = openIdx; i < html.length; i++) {
+    const c = html[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === quote) inString = false;
+      continue;
+    }
+    if (c === '"' || c === "'") { inString = true; quote = c; continue; }
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(html.slice(openIdx, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+const FULL_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+
+function deriveFromRightmovePageModel(pageModel: any): {
+  address: string | null;
+  postcode: string | null;
+  asking_price_gbp: number | null;
+  price_reduced_date: string | null;
+} | null {
+  const pd = pageModel?.propertyData;
+  if (!pd) return null;
+
+  const address = pd.address?.displayAddress ? String(pd.address.displayAddress) : null;
+
+  const outcode = pd.address?.outcode ? String(pd.address.outcode) : null;
+  const incode = pd.address?.incode ? String(pd.address.incode) : null;
+  let postcode = outcode && incode ? `${outcode} ${incode}`.toUpperCase() : null;
+  if (!postcode || !FULL_POSTCODE_RE.test(postcode)) postcode = derivePostcodeFromText(null, address) ?? postcode;
+
+  const priceStr = pd.prices?.primaryPrice ?? pd.prices?.displayPrice;
+  const asking_price_gbp = priceStr != null ? numOrNull(String(priceStr).replace(/[^0-9.]/g, "")) : null;
+
+  let price_reduced_date: string | null = null;
+  const reason = pageModel?.propertyData?.listingHistory?.listingUpdateReason;
+  if (typeof reason === "string" && /reduced/i.test(reason)) {
+    const m = reason.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) price_reduced_date = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+
+  return { address, postcode, asking_price_gbp, price_reduced_date };
 }
 
 function numOrNull(v: any): number | null {

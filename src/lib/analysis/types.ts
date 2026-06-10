@@ -201,7 +201,7 @@ export interface AnalysisOutput {
     rent_range?: { low: number; mid: number; high: number; basis: string; evidence?: string[] } | null;
     refurb_source?: "algo" | "ai" | "persona_buffer" | "override";
     /** The lender criteria (rate/LTV/stress) derived from the criteria profile's investor type — see ./lender-criteria. */
-    lender_criteria?: { mortgage_rate: number; ltv: number; stress_rate: number; label: string; description: string };
+    lender_criteria?: { mortgage_rate: number; ltv: number; stress_rate: number; icr_threshold: number; label: string; description: string };
   };
   strategies: StrategyResult[];
   negotiation: NegotiationPoint[];
