@@ -6,7 +6,11 @@ import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
-import type { NegotiationGuidance, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
+import type { AnalysisOutput, NegotiationGuidance, NegotiationPoint, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
+import { OVERRIDE_BOUNDS } from "@/lib/analysis/types";
+import { buildTalkingPointsScript } from "@/lib/analysis/talking-points";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractPriceHistory, fmtHistoryDate } from "@/lib/analysis/price-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +26,7 @@ import { DealSheetPanel } from "@/components/DealSheetPanel";
 import { RefurbPanel } from "@/components/RefurbPanel";
 import { RiskChips } from "@/components/RiskChips";
 import { DealScoreInfo } from "@/components/DealScoreInfo";
+import { InsuranceInfo } from "@/components/InsuranceInfo";
 import { DealIndicators } from "@/components/DealIndicators";
 import { NegotiationPanel } from "@/components/NegotiationPanel";
 import { ImageLibrary } from "@/components/ImageLibrary";
@@ -36,8 +41,9 @@ import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { lookupArticle4ByPostcode } from "@/lib/article4.functions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
+import { bestOfSelected, strategiesInScope, useStrategyFilter } from "@/lib/strategy-filter";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin } from "lucide-react";
+import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -61,10 +67,13 @@ function PropertyDetail() {
   const [personaId, setPersonaId] = useState<string | null>(null);
   const persona = useMemo(() => personas.find((p) => p.id === personaId) ?? personas.find((p) => p.is_default) ?? personas[0], [personas, personaId]);
 
+  const { selected: lensSelected } = useStrategyFilter();
   const [over, setOver] = useState<SliderOverrides>({});
   const tune = (key: OverrideKey, value: number) => setOver((o) => ({ ...o, [key]: value }));
   const resetOne = (key: OverrideKey) => setOver((o) => { const { [key]: _drop, ...rest } = o; return rest; });
   const resetAll = () => setOver({});
+  const toggleSourcingBuffer = (enabled: boolean) =>
+    setOver((o) => enabled ? { ...o, sourcingBufferEnabled: true } : (() => { const { sourcingBufferEnabled: _drop, ...rest } = o; return rest; })());
 
   const analysis = useMemo(() => {
     if (!prop.data || !persona) return null;
@@ -82,13 +91,13 @@ function PropertyDetail() {
     onError: (e: any) => toast.error(e.message),
   });
   const [pfJsonText, setPfJsonText] = useState("");
-  const [pfDialogOpen, setPfDialogOpen] = useState(false);
   const [heroOpenIndex, setHeroOpenIndex] = useState<number | null>(null);
+  const [activePanel, setActivePanel] = useState<"photos" | "refurb" | "library" | "enrich" | null>(null);
   const enrichJsonMut = useMutation({
     mutationFn: (json: string) => enrichJson({ data: { propertyId: id, json } }),
     onSuccess: (r: any) => {
       toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.totalImages} images`);
-      setPfJsonText(""); setPfDialogOpen(false);
+      setPfJsonText(""); setActivePanel(null);
       qc.invalidateQueries({ queryKey: ["property", id] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -112,7 +121,12 @@ function PropertyDetail() {
 
   const p = prop.data as any;
   const eff = analysis.effectiveInputs;
-  const best = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
+  const inScopeStrategies = strategiesInScope(analysis.strategies, lensSelected);
+  const bestInScope = bestOfSelected(analysis.strategies, lensSelected);
+  const overallBest = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
+  const best = bestInScope ?? overallBest;
+  const noLensFit = !bestInScope;
+  const defaultStrategyTab = (inScopeStrategies.find((s) => s.key === best.key) ?? inScopeStrategies[0] ?? best).key;
   const allImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
   const { photos: heroImagesRaw, floorPlans } = partitionImageUrls(allImages);
   const heroImages = Array.from(new Set(heroImagesRaw));
@@ -175,9 +189,6 @@ function PropertyDetail() {
             Deal score
             <DealScoreInfo overallScore={analysis.overallScore} breakdown={analysis.overallScoreBreakdown} best={best} />
           </div>
-          <div className="mt-2 flex justify-end">
-            <DealIndicators indicators={analysis.dealIndicators} />
-          </div>
           <div className="mt-2">
             <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
               <SelectTrigger className="h-8 w-[220px]"><SelectValue /></SelectTrigger>
@@ -201,6 +212,8 @@ function PropertyDetail() {
         </div>
       </div>
 
+      <BottomLineCard analysis={analysis} best={best} />
+
       {heroImages.length > 0 && (
         <Card className="mb-4 overflow-hidden p-0">
           <div className="grid grid-cols-4 gap-1">
@@ -218,9 +231,9 @@ function PropertyDetail() {
               <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length} photos
             </button>
             {heroImages.length > 5 && (
-              <a href="#image-library" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                +{heroImages.length - 5} more — open in image library ↓
-              </a>
+              <button onClick={() => setActivePanel("library")} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                +{heroImages.length - 5} more — open in image library
+              </button>
             )}
           </div>
         </Card>
@@ -246,37 +259,73 @@ function PropertyDetail() {
 
       <HmoLayoutPanel propertyId={id} hasFloorPlan={floorPlans.length > 0} />
 
-      <Card className="mb-4">
-        <CardContent className="flex flex-wrap items-center gap-2 py-3">
-          <Link2 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Enrich from listing URL</span>
-          <Input
-            placeholder="https://www.rightmove.co.uk/properties/..."
-            value={enrichUrl}
-            onChange={(e) => setEnrichUrl(e.target.value)}
-            className="h-8 flex-1 min-w-[260px]"
-          />
-          <Button size="sm" disabled={!enrichUrl || enrichMut.isPending} onClick={() => enrichMut.mutate(enrichUrl)}>
-            {enrichMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Home className="mr-2 h-4 w-4" />}
-            Pull details + images
-          </Button>
-          <Dialog open={pfDialogOpen} onOpenChange={setPfDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline"><FileJson className="mr-2 h-4 w-4" />Paste PF JSON</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl">
-              <DialogHeader><DialogTitle>Enrich from Property Filter JSON</DialogTitle></DialogHeader>
-              <p className="text-sm text-muted-foreground">Paste the full JSON object from Property Filter. Existing fields are kept; only missing fields are filled. New image URLs are appended.</p>
-              <Textarea value={pfJsonText} onChange={(e) => setPfJsonText(e.target.value)} placeholder='{"propertyLight":{...},"propertyDetail":{...}}' className="h-64 font-mono text-xs" />
-              <Button onClick={() => enrichJsonMut.mutate(pfJsonText)} disabled={!pfJsonText.trim() || enrichJsonMut.isPending}>
-                {enrichJsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enrich now
-              </Button>
-            </DialogContent>
-          </Dialog>
-          <p className="basis-full text-xs text-muted-foreground">Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in Connectors.</p>
-        </CardContent>
-      </Card>
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <button onClick={() => setActivePanel("photos")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Camera className="h-4 w-4 text-muted-foreground" /> Photos</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Run AI condition scan</p>
+        </button>
+        <button onClick={() => setActivePanel("refurb")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> AI condition report</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Refurb estimate from photos</p>
+        </button>
+        <button onClick={() => setActivePanel("library")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Images className="h-4 w-4 text-muted-foreground" /> Image library</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{heroImages.length} photo{heroImages.length === 1 ? "" : "s"}, organised by room</p>
+        </button>
+        <button onClick={() => setActivePanel("enrich")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Link2 className="h-4 w-4 text-muted-foreground" /> Enrich from listing URL</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Pull details, images or PF JSON</p>
+        </button>
+      </div>
+
+      <Dialog open={activePanel === "photos"} onOpenChange={(o) => setActivePanel(o ? "photos" : null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Photos</DialogTitle></DialogHeader>
+          <PhotosPanel propertyId={id} listingImageCount={heroImages.length} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activePanel === "refurb"} onOpenChange={(o) => setActivePanel(o ? "refurb" : null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>AI condition report</DialogTitle></DialogHeader>
+          <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activePanel === "library"} onOpenChange={(o) => setActivePanel(o ? "library" : null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader><DialogTitle>Image library</DialogTitle></DialogHeader>
+          <ImageLibrary propertyId={id} urls={heroImages} defaultExpanded />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activePanel === "enrich"} onOpenChange={(o) => setActivePanel(o ? "enrich" : null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Enrich from listing URL</DialogTitle></DialogHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="https://www.rightmove.co.uk/properties/..."
+              value={enrichUrl}
+              onChange={(e) => setEnrichUrl(e.target.value)}
+              className="h-8 flex-1 min-w-[260px]"
+            />
+            <Button size="sm" disabled={!enrichUrl || enrichMut.isPending} onClick={() => enrichMut.mutate(enrichUrl)}>
+              {enrichMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Home className="mr-2 h-4 w-4" />}
+              Pull details + images
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in Connectors.</p>
+          <div className="border-t pt-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-medium"><FileJson className="h-4 w-4" /> Paste PF JSON</p>
+            <p className="mb-2 text-sm text-muted-foreground">Paste the full JSON object from Property Filter. Existing fields are kept; only missing fields are filled. New image URLs are appended.</p>
+            <Textarea value={pfJsonText} onChange={(e) => setPfJsonText(e.target.value)} placeholder='{"propertyLight":{...},"propertyDetail":{...}}' className="h-48 font-mono text-xs" />
+            <Button className="mt-2" onClick={() => enrichJsonMut.mutate(pfJsonText)} disabled={!pfJsonText.trim() || enrichJsonMut.isPending}>
+              {enrichJsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Enrich now
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {!analysis.personaMatch.pass && (
         <Card className="mb-4 border-amber-300 bg-amber-50">
@@ -293,17 +342,30 @@ function PropertyDetail() {
       )}
 
       <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Best strategy: {best.name}</span>
-              <Badge className="bg-primary">{best.dealScore}/100</Badge>
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">{best.summary}</p>
-          </CardHeader>
-        </Card>
-
-        <OfferPlanCard guidance={analysis.negotiationGuidance} personaPass={analysis.personaMatch.pass} />
+        {noLensFit && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="flex items-start gap-3 py-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+              <p className="text-sm text-amber-900">
+                No selected strategy in your lens is feasible for this property. Showing the overall best strategy
+                ({best.name}) instead — adjust the strategy lens in the top nav to broaden the view.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        <OfferPlanCard
+          guidance={analysis.negotiationGuidance}
+          negotiation={analysis.negotiation}
+          personaPass={analysis.personaMatch.pass}
+          sourcingBufferEnabled={!!over.sourcingBufferEnabled}
+          onToggleSourcingBuffer={toggleSourcingBuffer}
+          arv={analysis.effectiveInputs.arv}
+          arvOverridden={over.arv !== undefined}
+          sourcingProfitPct={over.sourcingProfitPct ?? 0.25}
+          sourcingFeeGbp={over.sourcingFeeGbp ?? 5000}
+          onTune={tune}
+          onResetOne={resetOne}
+        />
 
         <Card>
           <CardHeader>
@@ -311,7 +373,7 @@ function PropertyDetail() {
             <p className="text-sm text-muted-foreground">Weighted evidence to take to the agent. Full costs are shown where useful, but only the defensible share is counted into the offer.</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {analysis.negotiation.map((n, i) => (
+            {analysis.negotiation.filter((n) => n.gbp_impact > 250).map((n, i) => (
               <div key={i} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -339,6 +401,28 @@ function PropertyDetail() {
                 </div>
               </div>
             ))}
+            {analysis.negotiation.some((n) => n.gbp_impact <= 250) && (
+              <TooltipProvider delayDuration={120}>
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed p-2.5">
+                  <span className="mr-1 text-xs text-muted-foreground">Also factored in:</span>
+                  {analysis.negotiation.filter((n) => n.gbp_impact <= 250).map((n, i) => (
+                    <Tooltip key={i}>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="cursor-default gap-1 text-xs font-normal">
+                          {n.title} <span className="font-semibold text-primary">−{fmtGBP(n.gbp_impact)}</span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[300px] text-xs">{n.description}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </TooltipProvider>
+            )}
+            {!p.ai_payload?.landlordReadiness && (
+              <p className="text-xs text-muted-foreground">
+                Run AI photo analysis (Photos &amp; AI condition report, above) to also factor white-goods and garden-clearance costs into this offer.
+              </p>
+            )}
             <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
               <p className="text-sm font-medium">Weighted leverage used by the model</p>
               <p className="text-lg font-bold text-primary">−{fmtGBP(analysis.negotiationTotal)}</p>
@@ -378,15 +462,15 @@ function PropertyDetail() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue={best.key}>
+            <Tabs defaultValue={defaultStrategyTab}>
               <TabsList className="flex w-full flex-wrap">
-                {analysis.strategies.map((s) => (
+                {inScopeStrategies.map((s) => (
                   <TabsTrigger key={s.key} value={s.key} className="flex-1">
                     {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
-              {analysis.strategies.map((s) => (
+              {inScopeStrategies.map((s) => (
                 <TabsContent key={s.key} value={s.key} className="pt-4">
                   <StrategyView s={s} onTune={tune} onReset={resetOne} />
                 </TabsContent>
@@ -420,10 +504,7 @@ function PropertyDetail() {
             askingPrice={p.asking_price_gbp}
           />
         )}
-        <PhotosPanel propertyId={id} />
         <EpcPanel propertyId={id} />
-        <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
-        <ImageLibrary propertyId={id} urls={heroImages} />
         <SurveyStrategyPanel property={p} />
         <DealSheetPanel propertyId={id} overrides={over} />
       </div>
@@ -431,13 +512,95 @@ function PropertyDetail() {
   );
 }
 
-function OfferPlanCard({ guidance, personaPass }: { guidance: NegotiationGuidance; personaPass: boolean }) {
+function BottomLineCard({ analysis, best }: { analysis: AnalysisOutput; best: StrategyResult }) {
+  const g = analysis.negotiationGuidance;
+  return (
+    <Card className="mb-4 border-primary/30 bg-primary/[0.03]">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Bottom line</span>
+          <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <DealIndicators indicators={analysis.dealIndicators} />
+        <div className="grid gap-3 md:grid-cols-4">
+          <Stat label="Opening bid" v={fmtGBP(g.openingOffer)} />
+          <Stat label="Target deal price" v={fmtGBP(g.targetOffer)} />
+          <Stat label="Walk-away ceiling" v={fmtGBP(g.walkAwayOffer)} />
+          <div className="rounded-md bg-muted/50 p-2.5">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Insurance (est.)</p>
+              <InsuranceInfo insurance={analysis.insurance} />
+            </div>
+            <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationGuidance; negotiation: NegotiationPoint[] }) {
+  const [copied, setCopied] = useState(false);
+  const script = useMemo(() => buildTalkingPointsScript(guidance, negotiation), [guidance, negotiation]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(script);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
+          <MessageSquareText className="h-3.5 w-3.5" /> Talking points
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-96 p-0" align="end">
+        <div className="flex items-center justify-between gap-2 border-b p-3">
+          <p className="text-sm font-medium">What to say to the agent / seller</p>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={copy}>
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-muted-foreground">{script}</pre>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function OfferPlanCard({
+  guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
+  arv, arvOverridden, sourcingProfitPct, sourcingFeeGbp, onTune, onResetOne,
+}: {
+  guidance: NegotiationGuidance;
+  negotiation: NegotiationPoint[];
+  personaPass: boolean;
+  sourcingBufferEnabled: boolean;
+  onToggleSourcingBuffer: (enabled: boolean) => void;
+  arv: number;
+  arvOverridden: boolean;
+  sourcingProfitPct: number;
+  sourcingFeeGbp: number;
+  onTune: (key: OverrideKey, v: number) => void;
+  onResetOne: (key: OverrideKey) => void;
+}) {
   const discount = guidance.askingPrice > 0 ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice : 0;
+  const sb = guidance.sourcingBuffer;
   return (
     <Card className="border-primary/30 bg-primary/[0.03]">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Target className="h-4 w-4 text-primary" /> Offer plan
+        <CardTitle className="flex items-center justify-between gap-2 text-base">
+          <span className="flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Offer plan</span>
+          <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -455,6 +618,101 @@ function OfferPlanCard({ guidance, personaPass }: { guidance: NegotiationGuidanc
             Underwriting uses the target price, not the lower opening anchor.
           </span>
           {!personaPass && <span className="text-amber-700">Current investor criteria do not fully fit this property.</span>}
+        </div>
+        {guidance.epcToCCost != null && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away ceiling above — required to let from 2030 under MEES rules.
+          </p>
+        )}
+        <div className="mt-4 rounded-md border bg-background/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Sourcing buffer</p>
+              <p className="text-xs text-muted-foreground">
+                {sb
+                  ? `Opening bid recomputed from post-refurb GDV ${fmtGBP(sb.gdv)} × ${fmtPct(1 - sb.profitPct)} (after ${fmtPct(sb.profitPct)} profit) − refurb − ${fmtGBP(sb.sourcingFeeGbp)} sourcing fee = ${fmtGBP(sb.computedOffer)}.`
+                  : "Recompute the opening bid from a GDV basis: post-refurb GDV × (1 − target profit %) − refurb cost − sourcing fee."}
+              </p>
+            </div>
+            <Switch checked={sourcingBufferEnabled} onCheckedChange={onToggleSourcingBuffer} />
+          </div>
+          {sourcingBufferEnabled && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">GDV (post-refurb ARV)</p>
+                  {!arvOverridden && <span className="text-[10px] uppercase text-muted-foreground">est. (offer × 1.18)</span>}
+                </div>
+                <p className="text-base font-semibold">{fmtGBP(arv)}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Slider
+                    value={[arv]}
+                    min={OVERRIDE_BOUNDS.arv.min}
+                    max={OVERRIDE_BOUNDS.arv.max}
+                    step={OVERRIDE_BOUNDS.arv.step}
+                    onValueChange={([v]) => onTune("arv", v)}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onResetOne("arv")}
+                    disabled={!arvOverridden}
+                    title="Reset to estimated GDV"
+                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Set this to a comparable-evidenced post-refurb valuation, not the asking price.</p>
+              </div>
+              <div className="rounded-md border p-2.5">
+                <p className="text-xs text-muted-foreground">Target profit margin</p>
+                <p className="text-base font-semibold">{fmtPct(sourcingProfitPct)}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Slider
+                    value={[sourcingProfitPct * 100]}
+                    min={OVERRIDE_BOUNDS.sourcingProfitPct.min}
+                    max={OVERRIDE_BOUNDS.sourcingProfitPct.max}
+                    step={OVERRIDE_BOUNDS.sourcingProfitPct.step}
+                    onValueChange={([v]) => onTune("sourcingProfitPct", v / 100)}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onResetOne("sourcingProfitPct")}
+                    disabled={sourcingProfitPct === 0.25}
+                    title="Reset to 25%"
+                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-md border p-2.5">
+                <p className="text-xs text-muted-foreground">Sourcing / packaging fee</p>
+                <p className="text-base font-semibold">{fmtGBP(sourcingFeeGbp)}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Slider
+                    value={[sourcingFeeGbp]}
+                    min={OVERRIDE_BOUNDS.sourcingFeeGbp.min}
+                    max={OVERRIDE_BOUNDS.sourcingFeeGbp.max}
+                    step={OVERRIDE_BOUNDS.sourcingFeeGbp.step}
+                    onValueChange={([v]) => onTune("sourcingFeeGbp", v)}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onResetOne("sourcingFeeGbp")}
+                    disabled={sourcingFeeGbp === 5000}
+                    title="Reset to £5,000"
+                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

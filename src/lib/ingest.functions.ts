@@ -138,7 +138,12 @@ export const getProperty = createServerFn({ method: "GET" })
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!row) throw new Error("Property not found");
-    return row;
+
+    // Negotiation playbook reads ai_payload.landlordReadiness (white goods / garden clearance,
+    // from analysePhotosForRefurb) — it lives on the analyses row, not properties.
+    const { data: analysis } = await context.supabase
+      .from("analyses").select("ai_payload").eq("property_id", data.id).eq("user_id", context.userId).maybeSingle();
+    return { ...row, ai_payload: analysis?.ai_payload ?? null };
   });
 
 export const updateProperty = createServerFn({ method: "POST" })

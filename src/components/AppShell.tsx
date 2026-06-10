@@ -1,13 +1,24 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { PlusCircle, ListChecks, LogOut, Sliders, Bell, Home } from "lucide-react";
+import { PlusCircle, ListChecks, LogOut, Sliders, Bell, Home, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReactNode } from "react";
 import { AppFooter } from "@/components/AppFooter";
 import { AddPropertyDialog } from "@/components/AddPropertyDialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ALL_STRATEGY_KEYS, STRATEGY_LABELS, useStrategyFilter } from "@/lib/strategy-filter";
 
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const router = useRouter();
+  const { selected, toggle, setAll } = useStrategyFilter();
+  const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b bg-card sticky top-0 z-30">
@@ -35,6 +46,26 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             <Link to="/persona" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
               <Sliders className="h-4 w-4" /> Investment
             </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-normal text-foreground hover:bg-muted">
+                  <Filter className="h-4 w-4" /> Strategy lens{!allSelected && ` (${selected.length})`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Show recommendations for</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {ALL_STRATEGY_KEYS.map((key) => (
+                  <DropdownMenuCheckboxItem key={key} checked={selected.includes(key)} onCheckedChange={() => toggle(key)} onSelect={(e) => e.preventDefault()}>
+                    {STRATEGY_LABELS[key]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={allSelected} onCheckedChange={() => setAll(allSelected ? [] : ALL_STRATEGY_KEYS)} onSelect={(e) => e.preventDefault()}>
+                  All strategies
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               onClick={async () => {
                 await supabase.auth.signOut();

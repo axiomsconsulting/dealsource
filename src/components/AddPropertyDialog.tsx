@@ -9,14 +9,47 @@ import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { bulkIngestProperties, ingestFromUrl } from "@/lib/ingest.functions";
 import { parsePropertyFilterCsv } from "@/lib/parsers/csv";
-import { parsePropertyFilterJson } from "@/lib/parsers/json";
+import { parsePropertyFilterJson, type ParsedJsonProperty } from "@/lib/parsers/json";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2 } from "lucide-react";
+import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ChevronDown, ChevronUp, AlertCircle, Image as ImageIcon } from "lucide-react";
+
+/** Splits concatenated JSON objects/array text into individual raw objects — same tolerant
+ *  parsing `jsonMut` uses for ingestion, reused here so the live preview matches what submit does. */
+function splitJsonObjects(text: string): any[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return trimmed.split(/}\s*\n\s*{/).map((s, i, arr) => {
+      let chunk = s;
+      if (i > 0) chunk = "{" + chunk;
+      if (i < arr.length - 1) chunk = chunk + "}";
+      return JSON.parse(chunk);
+    });
+  }
+}
+
+const PARSED_KEYS = new Set(["propertyLight", "propertyDetail", "selectedList"]);
+
+/** Live, instant validation preview for pasted JSON — parses each object and summarises the
+ *  fields the importer will pick up, plus any unrecognised top-level keys. Throws (caught by
+ *  caller) on malformed JSON so the UI can show an inline error. */
+function previewJson(text: string): { item: ParsedJsonProperty; extraKeys: string[] }[] {
+  const objs = splitJsonObjects(text);
+  return objs.map((obj) => {
+    const item = parsePropertyFilterJson(obj);
+    if (!item) throw new Error("Not a recognised Property Filter JSON (missing propertyLight.address)");
+    const extraKeys = Object.keys(obj).filter((k) => !PARSED_KEYS.has(k));
+    return { item, extraKeys };
+  });
+}
 
 /** Modal "Add property" flow — CSV / JSON / URL / Manual, in one place so it can be triggered
  *  from the nav and from the properties page without navigating away from what you're doing. */
-export function AddPropertyDialog({ trigger, defaultTab = "csv" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "manual" }) {
+export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "manual" }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const qc = useQueryClient();
@@ -28,6 +61,30 @@ export function AddPropertyDialog({ trigger, defaultTab = "csv" }: { trigger: Re
   const [listingUrl, setListingUrl] = useState("");
   const csvFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
+  const jsonTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [jsonPreview, setJsonPreview] = useState<{ item: ParsedJsonProperty; extraKeys: string[] }[] | null>(null);
+  const [jsonPreviewError, setJsonPreviewError] = useState<string | null>(null);
+
+  const runJsonPreview = (text: string) => {
+    if (!text.trim()) {
+      setJsonPreview(null);
+      setJsonPreviewError(null);
+      return;
+    }
+    try {
+      setJsonPreview(previewJson(text));
+      setJsonPreviewError(null);
+    } catch (e: any) {
+      setJsonPreview(null);
+      setJsonPreviewError(e.message || "Couldn't parse this as Property Filter JSON");
+    }
+  };
+
+  const onJsonPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    const merged = jsonText ? `${jsonText}\n${pasted}` : pasted;
+    runJsonPreview(merged);
+  };
 
   const csvMut = useMutation({
     mutationFn: async (text: string) => {
@@ -71,6 +128,8 @@ export function AddPropertyDialog({ trigger, defaultTab = "csv" }: { trigger: Re
       toast.success(`Ingested ${r.inserted.length} properties`);
       qc.invalidateQueries({ queryKey: ["properties"] });
       setJsonText("");
+      setJsonPreview(null);
+      setJsonPreviewError(null);
       setOpen(false);
     },
     onError: (e: any) => toast.error(e.message),
@@ -94,13 +153,23 @@ export function AddPropertyDialog({ trigger, defaultTab = "csv" }: { trigger: Re
   };
   const onJsonFiles = async (files: FileList) => {
     const texts = await Promise.all(Array.from(files).map((f) => f.text()));
-    jsonMut.mutate(texts.join("\n"));
+    const joined = texts.join("\n");
+    setJsonText(joined);
+    runJsonPreview(joined);
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        onOpenAutoFocus={(e) => {
+          if (defaultTab === "json") {
+            e.preventDefault();
+            jsonTextareaRef.current?.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Add property</DialogTitle>
         </DialogHeader>
@@ -157,7 +226,22 @@ export function AddPropertyDialog({ trigger, defaultTab = "csv" }: { trigger: Re
               />
             </div>
             <div className="text-center text-xs text-muted-foreground">— or paste JSON —</div>
-            <Textarea rows={10} placeholder='Paste {"propertyLight":...} or [{...},{...}]' value={jsonText} onChange={(e) => setJsonText(e.target.value)} />
+            <Textarea
+              ref={jsonTextareaRef}
+              autoFocus={defaultTab === "json"}
+              rows={10}
+              placeholder='Paste {"propertyLight":...} or [{...},{...}]'
+              value={jsonText}
+              onChange={(e) => { setJsonText(e.target.value); runJsonPreview(e.target.value); }}
+              onPaste={onJsonPaste}
+            />
+            {jsonPreviewError && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{jsonPreviewError}</span>
+              </div>
+            )}
+            {jsonPreview && <JsonPreviewTree items={jsonPreview} />}
             <Button disabled={!jsonText || jsonMut.isPending} onClick={() => jsonMut.mutate(jsonText)}>
               {jsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Ingest JSON
             </Button>
@@ -236,6 +320,76 @@ function ManualForm({ onDone }: { onDone: () => void }) {
           {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add property
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Instant tree-structure summary of pasted/uploaded JSON — one expandable block per property,
+ *  showing the key details the importer will use plus any unrecognised top-level keys. */
+function JsonPreviewTree({ items }: { items: { item: ParsedJsonProperty; extraKeys: string[] }[] }) {
+  const [openIdx, setOpenIdx] = useState<Set<number>>(new Set([0]));
+  const toggle = (i: number) => setOpenIdx((s) => {
+    const next = new Set(s);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
+
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+      <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {items.length === 1 ? "1 property detected" : `${items.length} properties detected`}
+      </p>
+      {items.map(({ item, extraKeys }, i) => {
+        const open = openIdx.has(i);
+        return (
+          <div key={i} className="rounded-md border bg-background">
+            <button
+              type="button"
+              onClick={() => toggle(i)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50"
+            >
+              <span className="truncate font-medium">{item.address}</span>
+              {open ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
+            </button>
+            {open && (
+              <div className="space-y-1.5 border-t px-3 py-2 text-xs">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                  <PreviewField label="Postcode" value={item.postcode} />
+                  <PreviewField label="Asking price" value={item.asking_price_gbp ? `£${item.asking_price_gbp.toLocaleString()}` : null} />
+                  <PreviewField label="Type" value={item.property_type} />
+                  <PreviewField label="Beds / baths" value={item.beds != null ? `${item.beds} bed${item.baths != null ? ` / ${item.baths} bath` : ""}` : null} />
+                  <PreviewField label="EPC" value={item.epc_rate} />
+                  <PreviewField label="Tenure" value={item.tenure} />
+                  <PreviewField label="Area" value={item.area_sqm ? `${item.area_sqm} m²` : null} />
+                  <PreviewField label="Rent estimate" value={item.estimated_rent_pcm ? `£${item.estimated_rent_pcm.toLocaleString()} pcm` : null} />
+                  <PreviewField label="Lease remaining" value={item.lease_years_remaining ? `${item.lease_years_remaining} yrs` : null} />
+                </div>
+                <div className="flex items-center gap-1.5 pt-1 text-muted-foreground">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  {item.image_urls.length} photo{item.image_urls.length === 1 ? "" : "s"}
+                  {item.market_data?.soldComparables.length ? ` · ${item.market_data.soldComparables.length} sold comparable(s)` : ""}
+                  {item.epc_from_json ? " · EPC data in JSON" : ""}
+                </div>
+                {extraKeys.length > 0 && (
+                  <div className="pt-1 text-muted-foreground">
+                    Also present in this JSON (not used by the importer): {extraKeys.join(", ")}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PreviewField({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div>
+      <span className="text-muted-foreground">{label}: </span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }

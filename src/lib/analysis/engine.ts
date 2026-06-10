@@ -8,6 +8,7 @@ import { computeRiskFlags, strategiesBlockedByRisk, maxRiskSeverity } from "./ri
 import { resolveMonthlyRent, proposeRentRange } from "./rent";
 import { deriveLenderCriteria } from "./lender-criteria";
 import { estimateRefurb, tierFromConditionScore } from "./refurb";
+import { estimateInsurance } from "./insurance";
 import { estimateMaxHmoRoomsByArea } from "./hmo-layout";
 
 const SDLT_INVESTOR = (price: number) => {
@@ -118,7 +119,7 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const mgmt = monthlyRent * 0.10;
   const voids = monthlyRent * 0.05;
   const maint = monthlyRent * 0.05;
-  const insurance = 25;
+  const insurance = estimateInsurance(p, "BTL").monthlyPremiumGbp;
   const monthlyCashflow = monthlyRent - monthlyInt - mgmt - voids - maint - insurance;
 
   const grossYield = (monthlyRent * 12) / purchase;
@@ -165,6 +166,7 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
           ? `Proposed range £${eff.rent_range.low.toLocaleString()}-£${eff.rent_range.high.toLocaleString()}/mo · ${eff.rent_range.basis}`
           : undefined),
       { label: "Interest-only payment", value: monthlyInt, format: "gbp" },
+      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "Estimated from rebuild cost, age, location and risk factors — see Insurance breakdown" },
       { label: "Monthly cashflow (net)", value: monthlyCashflow, format: "gbp", hint: "after mgmt 10%, voids 5%, maintenance 5%, insurance" },
       { label: "Gross yield", value: grossYield, format: "pct" },
       { label: "Annual ROI", value: annualROI, format: "pct" },
@@ -252,7 +254,8 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
   const platformFees = monthlyRevenue * 0.15; // blended Airbnb host fee (~3%) + Booking.com commission (~15%) across both channels
   const channelManager = 35; // multi-channel listing sync / PMS (e.g. Smoobu, Hostfully, Guesty)
   const consumables = 30 * occ * (6 + beds * 1.5); // toiletries, welcome packs, teas/coffees, amenity restocking — per occupied night, scaled by bedrooms
-  const opex = bills + cleaning + platformFees + channelManager + consumables;
+  const insurance = estimateInsurance(p, "SA").monthlyPremiumGbp;
+  const opex = bills + cleaning + platformFees + channelManager + consumables + insurance;
   const monthlyCashflow = monthlyRevenue - opex - monthlyInt;
 
   const sdlt = SDLT_INVESTOR(purchase);
@@ -300,6 +303,7 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
       { label: "Platform commissions", value: platformFees, format: "gbp", hint: "blended Airbnb host fee + Booking.com commission, ~15% of revenue" },
       { label: "Channel manager", value: channelManager, format: "gbp", hint: "multi-channel listing sync / PMS" },
       { label: "Consumables & amenities", value: consumables, format: "gbp", hint: "toiletries, welcome packs, restocking — per occupied night, scaled by bedrooms" },
+      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "Short-let/SA landlord policy — see Insurance breakdown" },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
       { label: "Cash in (incl. furnishings & smart locks)", value: cashIn, format: "gbp", hint: `£${Math.round(furnishings).toLocaleString()} furnishings + £${Math.round(smartLocks).toLocaleString()} smart locks for ${beds} bedroom(s)` },
@@ -316,10 +320,11 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const rentPerRoom = overrides.rent_per_room ?? defaults.rent_per_room;
   const monthlyRevenue = rooms * rentPerRoom;
   const opex = 350 + monthlyRevenue * 0.08; // bills + mgmt
+  const insurance = estimateInsurance(p, "HMO").monthlyPremiumGbp;
   const purchase = eff.offer_price;
   const loan = purchase * eff.ltv;
   const monthlyInt = interestOnlyMonthly(loan, eff.mortgage_rate);
-  const monthlyCashflow = monthlyRevenue - opex - monthlyInt;
+  const monthlyCashflow = monthlyRevenue - opex - insurance - monthlyInt;
   const conversionCost = (rooms >= 5 ? 25000 : 12000);
   const sdlt = SDLT_INVESTOR(purchase);
   const cashIn = purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCost;
@@ -369,6 +374,7 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
       tunable("Rent per room", rentPerRoom, "gbp", "rent_per_room", overrides, defaults),
       { label: "Monthly revenue", value: monthlyRevenue, format: "gbp" },
       { label: "Bills + mgmt", value: opex, format: "gbp" },
+      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "HMO landlord policy — see Insurance breakdown" },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "HMO conversion cost", value: conversionCost, format: "gbp" },
       { label: "Cash in", value: cashIn, format: "gbp" },
@@ -572,6 +578,45 @@ export function analyseProperty(
     rent_range, lender_criteria: lenderCriteria,
   };
 
+  // 5d: sourcing-buffer toggle — recompute the offer plan from a GDV basis (post-refurb ARV ×
+  // (1 − target profit %), less refurb cost and a sourcing fee) and shift the whole offer plan
+  // by the same amount so the gaps between opening/target/walk-away are preserved. GDV here is
+  // `eff.arv` — the SAME after-refurb-value figure used elsewhere (default = offer × 1.18, but
+  // overridable via the ARV slider so the user can plug in an independently-sourced comparable
+  // valuation rather than relying on a figure derived from the offer itself).
+  if (overrides.sourcingBufferEnabled && negotiation.guidance.askingPrice > 0) {
+    const asking = negotiation.guidance.askingPrice;
+    const sourcingProfitPct = overrides.sourcingProfitPct ?? 0.25;
+    const sourcingFeeGbp = overrides.sourcingFeeGbp ?? 5000;
+    const gdv = eff.arv;
+    const sourcingOffer = Math.max(0, Math.min(asking, Math.round(gdv * (1 - sourcingProfitPct) - eff.refurb_cost - sourcingFeeGbp)));
+    const delta = sourcingOffer - negotiation.guidance.openingOffer;
+    negotiation.guidance.openingOffer = sourcingOffer;
+    negotiation.guidance.targetOffer = Math.max(0, Math.min(asking, negotiation.guidance.targetOffer + delta));
+    negotiation.guidance.walkAwayOffer = Math.max(0, Math.min(asking, negotiation.guidance.walkAwayOffer + delta));
+    negotiation.guidance.appliedLeverage = Math.max(0, asking - negotiation.guidance.targetOffer);
+    negotiation.guidance.sourcingBuffer = {
+      enabled: true,
+      gdv,
+      profitPct: sourcingProfitPct,
+      sourcingFeeGbp,
+      computedOffer: sourcingOffer,
+    };
+    // GDV defaults to offer × 1.18 (a proxy, not an independent valuation) — if the offer this
+    // is based on is already a steep discount, that proxy compounds into an unrealistically low
+    // sourcing offer. Flag it so the user verifies GDV against real comparables before quoting it.
+    if (overrides.arv == null) {
+      negotiation.guidance.warnings.push(
+        `Sourcing buffer GDV (£${gdv.toLocaleString()}) is an estimate (offer price × 1.18), not an independent post-refurb valuation — adjust the GDV slider to a comparable-evidenced figure before relying on this offer.`
+      );
+    }
+    if (sourcingOffer < negotiation.guidance.walkAwayOffer * 0.85) {
+      negotiation.guidance.warnings.push(
+        `Sourcing buffer offer (£${sourcingOffer.toLocaleString()}) is well below the walk-away ceiling (£${negotiation.guidance.walkAwayOffer.toLocaleString()}) — a reduction this large needs strong, evidenced justification (e.g. confirmed refurb scope + comparable GDV) to put to an agent.`
+      );
+    }
+  }
+
   // Room-count default: grounded in the property's actual room composition, not raw floor-area
   // division — dividing total area by the statutory minimum bedroom size alone can suggest an
   // "8-room HMO" out of a 2-bed terrace, which is fiction (it ignores that most of that area is
@@ -602,6 +647,9 @@ export function analyseProperty(
     rent_per_room: 525,
     sa_nightly: Math.max(85, monthly_rent / 12),
     sa_occupancy: 0.65,
+    sourcingBufferEnabled: false,
+    sourcingProfitPct: 0.25,
+    sourcingFeeGbp: 5000,
   };
 
   let strategies: StrategyResult[] = [
@@ -687,5 +735,6 @@ export function analyseProperty(
     dealIndicators: deriveDealIndicators(riskFlags as any[], best, overallScore),
     riskFlags: riskFlags as any[],
     article4: article4Status ? { status: String(article4Status), council: article4Council } : null,
+    insurance: estimateInsurance(prop, best.key as StrategyKey),
   };
 }

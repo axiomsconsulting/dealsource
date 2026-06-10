@@ -16,6 +16,7 @@ import { analyseProperty } from "@/lib/analysis/engine";
 import type { StrategyKey, StrategyResult } from "@/lib/analysis/types";
 import { fmtGBP } from "@/lib/format";
 import { getGreeting } from "@/lib/greeting";
+import { useStrategyFilter } from "@/lib/strategy-filter";
 import {
   Sunrise, Sun, Sunset, Moon, Snowflake, Flower2, Leaf,
   ListChecks, Link2, Shuffle, Lightbulb, ArrowRight, Trophy, PartyPopper,
@@ -62,6 +63,7 @@ function WelcomePage() {
 
   const [tipSeed, setTipSeed] = useState(0);
 
+  const { selected: lensSelected } = useStrategyFilter();
   const personas = (personasQ.data ?? []) as any[];
   const activePersona = personas.find((p) => p.is_default) ?? personas[0];
   const properties = (propsQ.data ?? []) as any[];
@@ -77,12 +79,15 @@ function WelcomePage() {
     const out: Partial<Record<StrategyKey, { property: any; result: StrategyResult }>> = {};
     for (const { p, a } of analysed) {
       for (const sr of a.strategies) {
+        if (!lensSelected.includes(sr.key)) continue;
         const cur = out[sr.key];
         if (!cur || sr.dealScore > cur.result.dealScore) out[sr.key] = { property: p, result: sr };
       }
     }
     return out;
-  }, [analysed]);
+  }, [analysed, lensSelected]);
+
+  const strategyOrderInScope = useMemo(() => STRATEGY_ORDER.filter((k) => lensSelected.includes(k)), [lensSelected]);
 
   const tip = useMemo<Tip | null>(() => {
     const candidates: Tip[] = [];
@@ -221,14 +226,14 @@ function WelcomePage() {
         <CollapsibleCard
           icon={<Trophy className="h-5 w-5 text-primary" />}
           title="Top property by strategy"
-          summary={`${Object.keys(topByStrategy).length} of ${STRATEGY_ORDER.length} strategies covered`}
+          summary={`${Object.keys(topByStrategy).length} of ${strategyOrderInScope.length} strategies covered`}
         >
           {!activePersona && !loading && (
             <p className="text-sm text-muted-foreground">Set up an investment profile to see strategy scores.</p>
           )}
           {activePersona && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {STRATEGY_ORDER.map((key) => {
+              {strategyOrderInScope.map((key) => {
                 const top = topByStrategy[key];
                 const tile = (
                   <div className="flex h-full flex-col justify-between rounded-lg border p-4 transition-colors hover:border-primary/40 hover:bg-muted/30">

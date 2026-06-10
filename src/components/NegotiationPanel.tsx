@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { fmtGBP } from "@/lib/format";
 import { Handshake, Sparkles, Loader2, TrendingDown } from "lucide-react";
-import { SELLER_CIRCUMSTANCES, circumstanceFlexPct, type SellerContext } from "@/lib/seller-context";
+import { SELLER_CIRCUMSTANCES, circumstanceFlexPct, inferSellerCircumstances, type SellerContext } from "@/lib/seller-context";
 import { estimateSellerFlex } from "@/lib/ai.functions";
 import { updateProperty } from "@/lib/ingest.functions";
 import { toast } from "sonner";
@@ -28,7 +28,13 @@ export function NegotiationPanel({
   const update = useServerFn(updateProperty);
   const [flex, setFlex] = useState<any>(null);
   const ctx: SellerContext = (property.seller_context as any) ?? {};
-  const [local, setLocal] = useState<SellerContext>(ctx);
+  // Pre-tick circumstances inferred from the listing description/keywords — only for
+  // circumstances the user hasn't already reviewed (toggled on/off or annotated), so a manual
+  // un-tick sticks across reloads while still-unreviewed signals stay surfaced.
+  const [local, setLocal] = useState<SellerContext>(() => {
+    const inferred = inferSellerCircumstances(property);
+    return { ...ctx, circumstances: { ...inferred, ...(ctx.circumstances ?? {}) } };
+  });
 
   const flexMut = useMutation({
     mutationFn: () => flexFn({ data: { propertyId: property.id } }),

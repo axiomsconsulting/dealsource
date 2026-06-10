@@ -11,9 +11,9 @@ import { toast } from "sonner";
 
 const ROOM_ORDER = ["lounge", "dining", "kitchen", "bedroom", "bathroom", "garden", "landing", "exterior", "other"] as const;
 
-export function ImageLibrary({ propertyId, urls }: { propertyId: string; urls: string[] }) {
+export function ImageLibrary({ propertyId, urls, defaultExpanded = false }: { propertyId: string; urls: string[]; defaultExpanded?: boolean }) {
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const tagFn = useServerFn(categoriseListingImages);

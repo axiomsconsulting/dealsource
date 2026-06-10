@@ -22,7 +22,7 @@ const RE = {
   retirement: /over\s*55|over\s*60|over\s*65|retirement\s+(home|apartment|flat)|sheltered\s+(housing|accommodation)|age\s+restricted/i,
 };
 
-function textPool(p: PropertyInput): string {
+export function textPool(p: PropertyInput): string {
   const pf = p.pf_json ?? {};
   return [
     p.address,

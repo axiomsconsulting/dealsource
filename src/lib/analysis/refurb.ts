@@ -53,7 +53,7 @@ const LOCATION_MOD: { match: RegExp; mod: number; name: string }[] = [
   { match: /^(NE|SR|DH|DL|TS|CA|LA)/, mod: 0.9, name: "North-East / Cumbria" },
 ];
 
-function locationModifier(postcode: string | null | undefined): { mod: number; name: string } {
+export function locationModifier(postcode: string | null | undefined): { mod: number; name: string } {
   const out = (postcode || "").toUpperCase().replace(/\s+/g, "");
   for (const r of LOCATION_MOD) if (r.match.test(out)) return { mod: r.mod, name: r.name };
   return { mod: 1.0, name: "UK average" };

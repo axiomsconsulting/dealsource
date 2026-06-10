@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { fmtGBP } from "@/lib/format";
 import JSZip from "jszip";
 
-export function PhotosPanel({ propertyId }: { propertyId: string }) {
+export function PhotosPanel({ propertyId, listingImageCount = 0 }: { propertyId: string; listingImageCount?: number }) {
   const qc = useQueryClient();
   const list = useServerFn(listPhotos);
   const add = useServerFn(addPhotoRecords);
@@ -23,6 +23,10 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
 
   const photos = useQuery({ queryKey: ["photos", propertyId], queryFn: () => list({ data: { propertyId } }) });
   const ai = useQuery({ queryKey: ["ai", propertyId], queryFn: () => getAI({ data: { propertyId } }) });
+
+  // AI analysis works from uploaded photos OR the listing photos pulled in via JSON import —
+  // either is enough to run a vision pass.
+  const hasAnyPhotos = (photos.data?.length ?? 0) > 0 || listingImageCount > 0;
 
   const fileRef = useRef<HTMLInputElement>(null);
   const zipRef = useRef<HTMLInputElement>(null);
@@ -115,7 +119,7 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
           <div className="flex gap-2">
             <Button
               size="sm" variant="outline"
-              disabled={!photos.data?.length || refurbMut.isPending}
+              disabled={!hasAnyPhotos || refurbMut.isPending}
               onClick={() => refurbMut.mutate()}
               title="Vision-only refurb pass — populates the estimator from photos"
             >
@@ -124,7 +128,7 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
             </Button>
             <Button
               size="sm" variant="default"
-              disabled={!photos.data?.length || aiMut.isPending}
+              disabled={!hasAnyPhotos || aiMut.isPending}
               onClick={() => aiMut.mutate()}
             >
               {aiMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -147,6 +151,12 @@ export function PhotosPanel({ propertyId }: { propertyId: string }) {
           <input type="file" accept=".zip" hidden ref={zipRef}
             onChange={(e) => e.target.files?.[0] && onZip(e.target.files[0])} />
         </div>
+
+        {!photos.data?.length && listingImageCount > 0 && (
+          <p className="text-xs text-muted-foreground">
+            No photos uploaded yet — AI analysis will use the {listingImageCount} listing photo{listingImageCount === 1 ? "" : "s"} pulled in from JSON import.
+          </p>
+        )}
 
         {photos.data && photos.data.length > 0 && (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">

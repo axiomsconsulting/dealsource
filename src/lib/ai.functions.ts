@@ -105,6 +105,10 @@ const PhotoRefurbSchema = z.object({
     estimateGbp: z.number().min(0).max(80000),
     photoIndex: z.number().int().min(0).optional(),
   })).max(40).optional(),
+  landlordReadiness: z.object({
+    whiteGoodsMissing: z.array(z.enum(["fridge/freezer", "washing machine", "oven/hob"])).max(3).optional(),
+    gardenNeedsClearance: z.boolean().optional(),
+  }).optional(),
 });
 
 export const analysePhotosForRefurb = createServerFn({ method: "POST" })
@@ -130,7 +134,8 @@ export const analysePhotosForRefurb = createServerFn({ method: "POST" })
     const model = provider("google/gemini-2.5-flash");
 
     const system = `You are a UK property surveyor. Look at the provided photos and produce a refurbishment issue list. Output STRICT JSON only, matching:
-{"summary":"...","conditionScore":0-10,"items":[{"category":"kitchen|bathroom|rewire|replumb|boiler|windows|roof|external|damp|plaster_decor|flooring|epc_upgrade|structural|other","issue":"short description","severity":"low|medium|high","estimateGbp":0,"photoIndex":0}]}
+{"summary":"...","conditionScore":0-10,"items":[{"category":"kitchen|bathroom|rewire|replumb|boiler|windows|roof|external|damp|plaster_decor|flooring|epc_upgrade|structural|other","issue":"short description","severity":"low|medium|high","estimateGbp":0,"photoIndex":0}],"landlordReadiness":{"whiteGoodsMissing":["fridge/freezer","washing machine","oven/hob"],"gardenNeedsClearance":true|false}}
+For landlordReadiness: only list a white good in whiteGoodsMissing if a kitchen/utility photo is visible AND that appliance is clearly absent — omit the field entirely if no kitchen photo is present. Set gardenNeedsClearance true only if an exterior/garden/yard photo shows it overgrown, cluttered or full of debris.
 Use UK 2026 trade prices. Be conservative.`;
 
     const content: any[] = [
@@ -166,6 +171,12 @@ Use UK 2026 trade prices. Be conservative.`;
           ...items.map((i: any) => ({ category: i.category, issue: i.issue, estimateGbp: i.estimateGbp })),
         ],
       },
+      ...(parsed.landlordReadiness ? {
+        landlordReadiness: {
+          ...(prev.landlordReadiness ?? {}),
+          ...parsed.landlordReadiness,
+        },
+      } : {}),
     };
     const row = { ai_payload: merged, ai_version: AI_VERSION, ai_used_at: new Date().toISOString() };
     if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);

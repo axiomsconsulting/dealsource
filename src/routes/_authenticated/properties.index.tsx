@@ -25,6 +25,7 @@ import { useMemo, useState } from "react";
 import { BatchAIDialog } from "@/components/BatchAIDialog";
 import { AddPropertyDialog } from "@/components/AddPropertyDialog";
 import { rowsToCSV, downloadCSV, type ExportRow } from "@/lib/export";
+import { bestOfSelected, useStrategyFilter } from "@/lib/strategy-filter";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/")({
@@ -57,6 +58,7 @@ function PropertiesPage() {
   const list = useServerFn(listProperties);
   const personasFn = useServerFn(listPersonas);
   const del = useServerFn(deleteProperty);
+  const { selected: lensSelected } = useStrategyFilter();
   const props = useQuery({ queryKey: ["properties"], queryFn: () => list() });
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => personasFn({ data: {} } as any) });
   const personas = useMemo(() => (personasQ.data ?? []) as any[], [personasQ.data]);
@@ -378,7 +380,7 @@ function PropertiesPage() {
       ) : (
         <div className="grid gap-4">
           {rows.map(({ p, a, bestFit }) => {
-            const best = a?.strategies.find((s) => s.key === a.bestStrategy);
+            const best = a ? bestOfSelected(a.strategies, lensSelected) : undefined;
             const hero = (p.image_urls?.[0]) ?? null;
             return (
               <Card key={p.id} className="overflow-hidden p-0">
@@ -418,7 +420,9 @@ function PropertiesPage() {
                     {a?.riskFlags?.length ? <div className="mt-2"><RiskChips flags={a.riskFlags as any} /></div> : null}
                     <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <span>Asking {fmtGBP(p.asking_price_gbp)}</span>
-                      {a && <span>Best: <span className="font-medium text-foreground">{best?.name}</span> · {best?.dealScore}/100</span>}
+                      {a && (best
+                        ? <span>Best: <span className="font-medium text-foreground">{best.name}</span> · {best.dealScore}/100</span>
+                        : <span className="text-amber-700">No selected strategy fits</span>)}
                       {a && !a.personaMatch.pass && <span className="text-amber-700">Criteria mismatch</span>}
                       {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
                     </div>

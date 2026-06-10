@@ -1,5 +1,7 @@
 import type { InvestorType } from "./lender-criteria";
+import type { InsuranceEstimate } from "./insurance";
 export type { InvestorType } from "./lender-criteria";
+export type { InsuranceEstimate, InsuranceFactor } from "./insurance";
 
 export type StrategyKey = "BTL" | "BRRR" | "SA" | "HMO" | "FLIP" | "TITLE_SPLIT";
 
@@ -51,9 +53,15 @@ export interface SliderOverrides {
   rent_per_room?: number;
   sa_nightly?: number;
   sa_occupancy?: number;
+  /** GDV-based sourcing offer: openingOffer = ARV × (1 − profit%) − refurb − sourcing fee. */
+  sourcingBufferEnabled?: boolean;
+  /** Target post-refurb profit margin used by the sourcing buffer (fraction, e.g. 0.25 = 25%). */
+  sourcingProfitPct?: number;
+  /** Sourcing/packaging fee deducted by the sourcing buffer (£). */
+  sourcingFeeGbp?: number;
 }
 
-export type OverrideKey = keyof SliderOverrides;
+export type OverrideKey = Exclude<keyof SliderOverrides, "sourcingBufferEnabled">;
 
 // Slider bounds in DISPLAY units (i.e. the same scale the value is rendered at —
 // percentages for "pct"-formatted numbers, raw £/counts otherwise).
@@ -68,6 +76,8 @@ export const OVERRIDE_BOUNDS: Record<OverrideKey, { min: number; max: number; st
   rent_per_room: { min: 300, max: 900, step: 5 },
   sa_nightly: { min: 50, max: 300, step: 5 },
   sa_occupancy: { min: 30, max: 95, step: 1 },
+  sourcingProfitPct: { min: 10, max: 40, step: 1 },
+  sourcingFeeGbp: { min: 0, max: 15000, step: 250 },
 };
 
 export interface StrategyNumber {
@@ -160,6 +170,19 @@ export interface NegotiationGuidance {
   priceBand: string;
   stance: "light" | "standard" | "firm" | "survey-led";
   warnings: string[];
+  /** Estimated cost to bring this property's EPC up to band C (MEES 2030 minimum for let
+   *  properties), at the medium-spec figure — null if EPC is already C or better. This is
+   *  also baked into `walkAwayOffer` as an additional ceiling reduction. */
+  epcToCCost: number | null;
+  /** GDV-based sourcing offer, present when `overrides.sourcingBufferEnabled` is set —
+   *  shows the working behind the recomputed `openingOffer`. */
+  sourcingBuffer?: {
+    enabled: boolean;
+    gdv: number;
+    profitPct: number;
+    sourcingFeeGbp: number;
+    computedOffer: number;
+  };
 }
 
 export interface AnalysisOutput {
@@ -190,4 +213,6 @@ export interface AnalysisOutput {
   dealIndicators: DealIndicator[];
   riskFlags?: any[];
   article4?: { status: string; council: string | null } | null;
+  /** Estimated landlord buildings-insurance premium for the lead strategy — see ./insurance. */
+  insurance: InsuranceEstimate;
 }

@@ -33,11 +33,15 @@ function impactPct(asking: number, pct: number, capPct: number): number {
   return Math.round(Math.min(asking * pct, asking * capPct));
 }
 
+// UK deal-sourcing convention: packaged "BMV" deals are typically marketed at 15-25% below
+// market value as the baseline qualifying threshold for sourcing investors, with
+// highly-motivated-seller deals reaching 25-35%. These bands are tuned for a sourcing-investor
+// opener, not a polite first offer.
 function priceBand(asking: number): { label: string; baseDiscountPct: number } {
-  if (asking < 125_000) return { label: "sub-£125k", baseDiscountPct: 0.075 };
-  if (asking < 250_000) return { label: "£125k-£250k", baseDiscountPct: 0.095 };
-  if (asking < 500_000) return { label: "£250k-£500k", baseDiscountPct: 0.085 };
-  return { label: "£500k+", baseDiscountPct: 0.07 };
+  if (asking < 125_000) return { label: "sub-£125k", baseDiscountPct: 0.12 };
+  if (asking < 250_000) return { label: "£125k-£250k", baseDiscountPct: 0.15 };
+  if (asking < 500_000) return { label: "£250k-£500k", baseDiscountPct: 0.13 };
+  return { label: "£500k+", baseDiscountPct: 0.11 };
 }
 
 function maxCredibleOpeningDiscount(asking: number, points: NegotiationPoint[]): number {
@@ -59,7 +63,7 @@ function maxCredibleOpeningDiscount(asking: number, points: NegotiationPoint[]):
     Math.min(0.055, defects * 0.55) +
     Math.min(0.015, highConfidenceCount * 0.004);
 
-  return clamp(band.baseDiscountPct + evidenceUplift, 0.05, 0.22);
+  return clamp(band.baseDiscountPct + evidenceUplift, 0.05, 0.30);
 }
 
 function stanceFor(discountPct: number, points: NegotiationPoint[]): NegotiationGuidance["stance"] {
@@ -106,7 +110,11 @@ export function buildNegotiation(
     });
   }
 
-  // EPC
+  // EPC — also tracked outside the points array so it can additionally tighten the walk-away
+  // ceiling below (5c): MEES requires band C to let from 2030, so this is a hard cost a buyer
+  // will need to cover regardless of how the rest of the negotiation goes.
+  let epcToCCost: number | null = null;
+  let epcRecoveryAmount = 0;
   const epc = (prop.epc_rate || "").toUpperCase();
   if (["D", "E", "F", "G"].includes(epc)) {
     // EPC spend to reach C — a dedicated bill-of-materials line, broken into Low/Medium/High spec
@@ -132,12 +140,15 @@ export function buildNegotiation(
     const midSpec = Math.round((lowSpec + highSpec) / 2);
     const recoveryRate = grounded ? 0.5 : epc === "D" ? 0.35 : 0.45;
     const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
+    epcToCCost = midSpec;
+    epcRecoveryAmount = Math.round(midSpec * recoveryRate);
     points.push({
       category: "improvement_gap",
       title: `EPC ${epc} spend to reach C`,
-      description: grounded
+      description: (grounded
         ? `The register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint to move toward EPC C. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.`
-        : `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`,
+        : `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`)
+        + ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`,
       gbp_impact: negotiationImpact,
       confidence: grounded ? "high" : "medium",
       specOptions: [
@@ -145,6 +156,56 @@ export function buildNegotiation(
         { rating: "M", label: "Medium spec — realistic midpoint", gbp: midSpec },
         { rating: "H", label: "High spec — full works", gbp: highSpec },
       ],
+    });
+  }
+
+  // Landlord-readiness costing (5b) — statutory compliance items every let property needs,
+  // plus AI-detected gaps from photo analysis. These are routine pre-letting costs a buyer
+  // factors into their opening number, not survey-stage surprises.
+  const newBuildSignal =
+    /new[\s-]?build/i.test(`${prop.property_type ?? ""} ${pf.description ?? pd?.description ?? ""}`) ||
+    (typeof pd?.yearBuilt === "number" && pd.yearBuilt >= 2020);
+  if (!newBuildSignal) {
+    points.push({
+      category: "improvement_gap",
+      title: "EICR (Electrical Installation Condition Report)",
+      description: "A valid EICR is a legal requirement before letting. Budget ~£150-250 for a fresh report (plus any remedial work it flags). Treat this as a routine compliance line in your opening number, not a point to debate.",
+      gbp_impact: 200,
+      confidence: "high",
+    });
+  }
+
+  const heatingText = `${pd?.heating ?? pf?.heating ?? ""}`.toLowerCase();
+  const electricOnly = heatingText.includes("electric") && !heatingText.includes("gas");
+  if (!electricOnly) {
+    points.push({
+      category: "improvement_gap",
+      title: "CP12 (Gas Safety Certificate)",
+      description: "An annual CP12 gas safety check is a legal requirement for let properties with gas appliances. Budget ~£80-120 for the check (more if remedial work is needed) — a routine compliance cost to fold into your opening number.",
+      gbp_impact: 100,
+      confidence: heatingText.includes("gas") ? "high" : "medium",
+    });
+  }
+
+  const landlordReadiness = (prop as any).ai_payload?.landlordReadiness;
+  const whiteGoodsMissing: string[] = Array.isArray(landlordReadiness?.whiteGoodsMissing) ? landlordReadiness.whiteGoodsMissing : [];
+  if (whiteGoodsMissing.length > 0) {
+    const perItem = 450;
+    points.push({
+      category: "improvement_gap",
+      title: `White goods missing: ${whiteGoodsMissing.join(", ")}`,
+      description: `AI photo analysis found no ${whiteGoodsMissing.join("/")} in the kitchen photos. As a landlord you'll need to supply these — budget ~£300-600 each (£${perItem.toLocaleString()} used here per item). Fold this into your opening number rather than treating it as a survey-stage surprise.`,
+      gbp_impact: whiteGoodsMissing.length * perItem,
+      confidence: "medium",
+    });
+  }
+  if (landlordReadiness?.gardenNeedsClearance) {
+    points.push({
+      category: "improvement_gap",
+      title: "Garden / yard clearance",
+      description: "AI photo analysis flagged the garden or front yard as overgrown or cluttered. Budget ~£300-800 for clearance before the property is lettable — a routine pre-letting cost worth weighting into your opening number.",
+      gbp_impact: 550,
+      confidence: "low",
     });
   }
 
@@ -226,9 +287,15 @@ export function buildNegotiation(
   const walkAwayDiscountPct = credibleDiscountPct > 0
     ? clamp(credibleDiscountPct * 0.45, Math.min(0.0125, credibleDiscountPct), Math.max(0.0125, credibleDiscountPct - 0.01))
     : 0;
-  const walkAwayOffer = asking > 0 && credibleDiscountPct > 0
+  const walkAwayOfferBeforeEpc = asking > 0 && credibleDiscountPct > 0
     ? roundOfferBelowAsking(Math.max(openingOffer + 500, asking * (1 - walkAwayDiscountPct)), asking)
     : asking;
+  // 5c: even if the rest of the negotiation goes the seller's way, don't pay more than the
+  // walk-away ceiling minus what reaching EPC band C will cost — MEES makes this a hard
+  // requirement to let the property from 2030, not a discussion point.
+  const walkAwayOffer = epcRecoveryAmount > 0
+    ? roundOfferBelowAsking(Math.max(openingOffer, walkAwayOfferBeforeEpc - epcRecoveryAmount), asking)
+    : walkAwayOfferBeforeEpc;
   const targetOffer = asking > 0 && walkAwayOffer > openingOffer
     ? roundOfferBelowAsking(openingOffer + (walkAwayOffer - openingOffer) * 0.45, asking)
     : openingOffer;
@@ -238,6 +305,9 @@ export function buildNegotiation(
   }
   if (retainedLeverage > 0) {
     warnings.push(`Keep £${retainedLeverage.toLocaleString()} of evidence back for counter-offers or survey-stage renegotiation rather than trying to win it all in the first bid.`);
+  }
+  if (epcRecoveryAmount > 0) {
+    warnings.push(`Walk-away ceiling reduced by £${epcRecoveryAmount.toLocaleString()} to cover bringing the EPC up to band C — required to let the property under MEES rules from 2030.`);
   }
   const guidance: NegotiationGuidance = {
     askingPrice: asking,
@@ -252,6 +322,7 @@ export function buildNegotiation(
     priceBand: band.label,
     stance: stanceFor(credibleDiscountPct, points),
     warnings,
+    epcToCCost,
   };
   points.unshift({
     category: "leverage",
