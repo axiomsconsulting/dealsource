@@ -1,5 +1,6 @@
 import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./types";
 import { extractPriceHistory, summarisePriceHistory } from "./price-history";
+import { buildSurveyNegotiationPoints } from "./survey-strategy";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
@@ -262,6 +263,12 @@ export function buildNegotiation(
       confidence: "medium",
     });
   }
+
+  // Survey-confirmed condition findings (checkboxes + severity in the Survey & condition
+  // leverage panel) — these are the strongest possible evidence (a surveyor has actually looked),
+  // so they're added as high-confidence "fault" points and feed straight into the offer plan
+  // and talking points alongside everything else.
+  points.push(...buildSurveyNegotiationPoints(prop));
 
   // Refurb-based opening
   if (refurbCost > 2500) {

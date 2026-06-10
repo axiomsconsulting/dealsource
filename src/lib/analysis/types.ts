@@ -2,6 +2,7 @@ import type { InvestorType } from "./lender-criteria";
 import type { InsuranceEstimate } from "./insurance";
 export type { InvestorType } from "./lender-criteria";
 export type { InsuranceEstimate, InsuranceFactor } from "./insurance";
+export type { SurveyIssue, SurveyIssueKey, SurveyFindings, SurveyFindingState, SurveySeverity } from "./survey-strategy";
 
 export type StrategyKey = "BTL" | "BRRR" | "SA" | "HMO" | "FLIP" | "TITLE_SPLIT";
 

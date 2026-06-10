@@ -1,7 +1,26 @@
+import type { NegotiationPoint } from "./types";
 import type { PropertyInput } from "./types";
 
+export type SurveyIssueKey =
+  | "structural" | "roof" | "asbestos" | "non_standard_construction"
+  | "damp" | "timber_decay" | "windows_joinery" | "drainage_rainwater"
+  | "electrics_plumbing" | "insulation_energy" | "japanese_knotweed" | "external_grounds";
+
+export type SurveySeverity = "low" | "medium" | "high";
+
+/** A confirmed survey finding for one issue, as logged by the user against `SurveyIssue.key` —
+ *  `severity` selects where on the issue's `markdownLowPct..markdownHighPct` range the
+ *  resulting negotiation leverage sits (low = bottom of range, high = top). */
+export interface SurveyFindingState {
+  active: boolean;
+  severity: SurveySeverity;
+  note?: string;
+}
+
+export type SurveyFindings = Record<string, SurveyFindingState>;
+
 export interface SurveyIssue {
-  key: "structural" | "roof" | "asbestos" | "non_standard_construction";
+  key: SurveyIssueKey;
   title: string;
   /** "flagged" = the data itself points at this; "watch" = plausible but unconfirmed; "routine" =
    *  worth checking on every purchase regardless of what the listing says. */
@@ -59,27 +78,30 @@ function descriptionText(raw: unknown): string | undefined {
   return undefined;
 }
 
-function epcTextBlob(prop: PropertyInput): { blob: string; wallDesc?: string; roofDesc?: string; roofEff?: string | null } {
+function epcTextBlob(prop: PropertyInput): { blob: string; wallDesc?: string; roofDesc?: string; roofEff?: string | null; windowDesc?: string } {
   const epc: any = (prop as any).epc_data ?? null;
   if (!epc) return { blob: "" };
   const elements: any[] = Array.isArray(epc.elements) ? epc.elements : [];
   const wall = elements.find((e) => e?.key === "walls");
   const roof = elements.find((e) => e?.key === "roofs");
+  const windows = elements.find((e) => e?.key === "windows");
   const wallDesc = descriptionText(wall?.description);
   const roofDesc = descriptionText(roof?.description);
-  const blob = [epc.propertyType, epc.builtForm, wallDesc, roofDesc, epc.lodgementDate, epc.inspectionDate]
+  const windowDesc = descriptionText(windows?.description);
+  const blob = [epc.propertyType, epc.builtForm, wallDesc, roofDesc, windowDesc, epc.lodgementDate, epc.inspectionDate]
     .filter(Boolean)
     .join(" — ");
-  return { blob, wallDesc, roofDesc, roofEff: roof?.energyEff ?? null };
+  return { blob, wallDesc, roofDesc, roofEff: roof?.energyEff ?? null, windowDesc };
 }
 
 /** Pure, criteria-independent survey/condition leverage: what to brief the surveyor and builder to
  *  dig into, and what a confirmed finding is realistically worth off the price — both as a repair
  *  cost and as a resalability/mortgageability discount that outlasts the repair itself. */
 export function buildSurveyStrategy(prop: PropertyInput): SurveyIssue[] {
-  const { blob, wallDesc, roofDesc, roofEff } = epcTextBlob(prop);
+  const { blob, wallDesc, roofDesc, roofEff, windowDesc } = epcTextBlob(prop);
   const nonStandardHit = NON_STANDARD_PATTERNS.find((re) => re.test(blob));
   const eraHit = PRE_2000_ERA_PATTERNS.find((re) => re.test(blob));
+  const singleGlazedHit = windowDesc ? /single\s*glaz/i.test(windowDesc) : false;
 
   const issues: SurveyIssue[] = [];
 
@@ -142,5 +164,147 @@ export function buildSurveyStrategy(prop: PropertyInput): SurveyIssue[] {
     markdownHighPct: 0.05,
   });
 
+  // Damp — rising/penetrating damp is a near-universal Level 3 finding worth a dedicated brief;
+  // not derivable from EPC data, so always "routine".
+  issues.push({
+    key: "damp",
+    title: "Damp (rising, penetrating & condensation)",
+    signal: "routine",
+    surveyorBrief: "Ask for damp-meter readings room-by-room (not just a generic 'elevated readings in places' note), and a written opinion on the likely SOURCE — bridged/missing DPC, defective render or pointing, leaking gutters/downpipes, or condensation from inadequate ventilation. Source determines whether this is a £200 fix or a £5k+ remedial damp-proofing job.",
+    builderBrief: "Where the surveyor flags damp, get the builder to quote for the most likely fix (re-pointing, DPC injection, extractor fans, render repairs) so you have a real number rather than the survey's generic 'monitor and treat' wording.",
+    markdownNote: "Confirmed damp justifies a markdown covering the diagnosed remedial works plus redecoration of affected rooms — and where it's affected timber or plaster, factor in drying-out time before refurb can start, which has knock-on cost if you're financing the purchase.",
+    markdownLowPct: 0.01,
+    markdownHighPct: 0.04,
+  });
+
+  // Timber decay — woodworm, wet rot, dry rot. Always routine to brief.
+  issues.push({
+    key: "timber_decay",
+    title: "Timber defects (woodworm, wet & dry rot)",
+    signal: "routine",
+    surveyorBrief: "Ask the surveyor to specifically check roof timbers, floor joists (especially near bathrooms/kitchens and external walls), and any exposed structural timber for active woodworm, wet rot or dry rot — and to distinguish 'historic, treated' from 'active, untreated'. Dry rot in particular can spread well beyond the visibly affected area.",
+    builderBrief: "If active rot or live infestation is flagged, get a specialist timber treatment quote (not a general builder estimate) — dry rot remediation often requires removing affected masonry/plaster well beyond the visible outbreak, which a general quote will under-price.",
+    markdownNote: "Confirmed active timber decay justifies a markdown covering specialist treatment plus replacement of affected structural timber — dry rot findings in particular should be treated as a stop-the-clock issue until scope and cost are confirmed by a specialist.",
+    markdownLowPct: 0.01,
+    markdownHighPct: 0.035,
+  });
+
+  // Windows & external joinery — flagged where the EPC register itself describes single glazing.
+  issues.push({
+    key: "windows_joinery",
+    title: "Windows, doors & external joinery",
+    signal: singleGlazedHit ? "flagged" : "routine",
+    evidence: singleGlazedHit
+      ? `EPC register window description: "${windowDesc}" — single glazing increases heat loss, noise transmission and condensation risk, and is a routine like-for-like replacement item buyers price in.`
+      : windowDesc
+        ? `EPC register window description: "${windowDesc}".`
+        : undefined,
+    surveyorBrief: "Ask the surveyor to note the condition (not just the glazing type) of every external door, window frame and sill — rotten timber sills/frames, failed double-glazed unit seals (visible misting) and doors that no longer close/seal properly are common and easy to under-notice on a walk-round.",
+    builderBrief: "Get a per-unit quote for replacing the worst-condition windows/doors flagged, plus a blended figure for a fuller like-for-like replacement programme if the property is older stock — this is one of the easiest line items to get a hard, comparable quote for.",
+    markdownNote: "Confirmed window/door condition issues justify a like-for-like markdown using the builder's per-unit quote — frame rot and failed glazing units are routine pre-letting costs that buyers expect to negotiate, not defects to argue line-by-line.",
+    markdownLowPct: 0.01,
+    markdownHighPct: 0.03,
+  });
+
+  // Drainage & rainwater goods — below-ground drainage and gutters/downpipes.
+  issues.push({
+    key: "drainage_rainwater",
+    title: "Drainage & rainwater goods",
+    signal: "routine",
+    surveyorBrief: "A standard Level 3 survey won't lift manhole covers or run a CCTV drain survey — ask the surveyor for their visual opinion on gutters, downpipes and visible manhole covers, and recommend (in writing) whether a specialist CCTV drainage survey is warranted given the property's age and any damp findings.",
+    builderBrief: "If gutters/downpipes are visibly damaged, blocked or poorly aligned, get a quote for full replacement/clearance — these are cheap to fix but expensive to ignore, since persistent overflow is a leading cause of penetrating damp and foundation saturation.",
+    markdownNote: "Confirmed drainage/rainwater defects justify a modest markdown covering repair or clearance — but if a CCTV survey reveals a collapsed or root-infiltrated run, that's a much larger (often £2k-£6k+) excavation and relining cost that should be separately quoted and negotiated once known.",
+    markdownLowPct: 0.005,
+    markdownHighPct: 0.02,
+  });
+
+  // Electrics & plumbing/heating — beyond the statutory EICR/CP12 certificates already costed
+  // in the negotiation playbook, this covers visible system age/condition (consumer unit type,
+  // visible wiring, boiler age, radiators, visible pipework).
+  issues.push({
+    key: "electrics_plumbing",
+    title: "Electrical & plumbing/heating systems (condition & age)",
+    signal: "routine",
+    surveyorBrief: "Ask the surveyor for their opinion on the visible age/type of the consumer unit and wiring (e.g. rewireable fuses or pre-1960s wiring colours are a red flag regardless of what an EICR says about safety), and the apparent age and condition of the boiler, cylinder, radiators and visible pipework — a system that's 'safe' can still be at the end of its useful life.",
+    builderBrief: "Where the consumer unit/wiring or heating system looks dated, get a quote for a full rewire and/or boiler + system replacement — these are five-figure jobs on an older property and should be priced in before you commit, not discovered after exchange.",
+    markdownNote: "Confirmed end-of-life electrical or heating systems justify a markdown toward the replacement quote — a rewire or new heating system is disruptive and typically needs to happen before (or very early in) any refurb, so it shapes both your budget and your project sequencing.",
+    markdownLowPct: 0.01,
+    markdownHighPct: 0.035,
+  });
+
+  // Insulation / energy efficiency shortfalls beyond what the EPC headline rating already prices.
+  issues.push({
+    key: "insulation_energy",
+    title: "Insulation shortfalls (loft, cavity & floor)",
+    signal: "routine",
+    surveyorBrief: "Ask the surveyor to note whether loft insulation depth, cavity wall fill and underfloor insulation appear adequate by current standards (loft: ~270mm) — these are cheap, high-impact upgrades that are often skipped by sellers and easy to overlook against bigger-ticket items.",
+    builderBrief: "Get a quote for topping up loft insulation and, if the property has an unfilled cavity suitable for retrofit, cavity wall insulation — both are typically inexpensive relative to the EPC and running-cost improvement they deliver.",
+    markdownNote: "Confirmed insulation shortfalls justify a small markdown covering topping-up costs — low individual cost, but worth logging since it also feeds directly into the EPC-improvement costing used elsewhere in this playbook.",
+    markdownLowPct: 0.005,
+    markdownHighPct: 0.015,
+  });
+
+  // Japanese knotweed / invasive species — never derivable from listing data, always "watch".
+  issues.push({
+    key: "japanese_knotweed",
+    title: "Japanese knotweed & other invasive species",
+    signal: "watch",
+    evidence: "No data source available flags this — it can only be confirmed by inspecting the garden/grounds (and neighbouring boundaries) directly, ideally during the growing season (spring-autumn) when it's identifiable.",
+    surveyorBrief: "Ask the surveyor to walk the full garden/grounds and boundaries (not just what's visible from the house) specifically for Japanese knotweed, giant hogweed or similar invasive species, and to check the seller's TA6 form answer against what they actually observe.",
+    builderBrief: "If knotweed is suspected, get a quote from a PCA-accredited invasive species specialist for a treatment/management plan with an insurance-backed guarantee — lenders increasingly require this before completion if knotweed is within 7m of habitable space.",
+    markdownNote: "Confirmed knotweed (or other notifiable invasive species) close to the building justifies a markdown covering a multi-year treatment programme with insurance-backed guarantee — and can affect mortgageability until a plan is in place, so treat this as a potential transaction-blocker, not just a price chip.",
+    markdownLowPct: 0.01,
+    markdownHighPct: 0.04,
+  });
+
+  // External areas, boundaries & outbuildings — garages, sheds, fences, paths, drives.
+  issues.push({
+    key: "external_grounds",
+    title: "External areas, boundaries & outbuildings",
+    signal: "routine",
+    surveyorBrief: "Ask the surveyor to comment on the condition of any garage, shed, outbuilding, boundary walls/fences, paths and driveway — and to flag anything that looks like it encroaches on or is encroached by a neighbouring property (a boundary/title issue, not just a condition one).",
+    builderBrief: "Where outbuildings or boundary structures are in poor condition, get a quote for repair or removal/replacement — these are routine but easy-to-forget line items that add up across a property, especially if any are needed for your strategy (e.g. a garage you plan to convert).",
+    markdownNote: "Confirmed external/outbuilding condition issues justify a modest markdown covering repair or clearance — individually small, but worth logging as part of a comprehensive pre-letting/refurb budget rather than discovering them piecemeal after exchange.",
+    markdownLowPct: 0.005,
+    markdownHighPct: 0.02,
+  });
+
   return issues;
+}
+
+// Where on an issue's [markdownLowPct, markdownHighPct] range each severity tier sits — low
+// severity sits at the bottom of the recommended range, high severity at the top, medium at the
+// midpoint. This keeps the checkbox+severity UI directly traceable to the same ranges shown in
+// the static survey-strategy briefing above.
+const SEVERITY_RATIO: Record<SurveySeverity, number> = { low: 0, medium: 0.5, high: 1 };
+
+/** Turns confirmed survey findings (`prop.survey_findings`, keyed by `SurveyIssue.key`) into
+ *  negotiation points: each confirmed finding becomes a "fault" (survey-confirmed, high
+ *  confidence) leverage line, sized by severity within that issue's markdown range. These feed
+ *  into `buildNegotiation`'s totals (so they tighten the offer plan) and surface verbatim in the
+ *  talking-points script as survey results. */
+export function buildSurveyNegotiationPoints(prop: PropertyInput): NegotiationPoint[] {
+  const findings: SurveyFindings | undefined = (prop as any).survey_findings;
+  if (!findings) return [];
+  const asking = prop.asking_price_gbp ?? 0;
+  if (asking <= 0) return [];
+
+  const issues = buildSurveyStrategy(prop);
+  const out: NegotiationPoint[] = [];
+  for (const issue of issues) {
+    const f = findings[issue.key];
+    if (!f?.active) continue;
+    const ratio = SEVERITY_RATIO[f.severity] ?? 0.5;
+    const pct = issue.markdownLowPct + (issue.markdownHighPct - issue.markdownLowPct) * ratio;
+    const gbp = Math.round(asking * pct);
+    const severityLabel = f.severity === "low" ? "Low" : f.severity === "high" ? "High" : "Medium";
+    out.push({
+      category: "fault",
+      title: `Survey: ${issue.title} (${severityLabel} severity)`,
+      description: `${issue.markdownNote}${f.note ? ` Surveyor's note: "${f.note}"` : ""}`,
+      gbp_impact: gbp,
+      confidence: "high",
+    });
+  }
+  return out;
 }

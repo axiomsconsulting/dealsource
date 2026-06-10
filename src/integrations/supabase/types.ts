@@ -403,6 +403,7 @@ export type Database = {
           rent_source: string | null
           risk_flags: Json
           seller_context: Json
+          survey_findings: Json
           source: string
           source_link: string | null
           tenure: string | null
@@ -438,6 +439,7 @@ export type Database = {
           rent_source?: string | null
           risk_flags?: Json
           seller_context?: Json
+          survey_findings?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null
@@ -473,6 +475,7 @@ export type Database = {
           rent_source?: string | null
           risk_flags?: Json
           seller_context?: Json
+          survey_findings?: Json
           source?: string
           source_link?: string | null
           tenure?: string | null

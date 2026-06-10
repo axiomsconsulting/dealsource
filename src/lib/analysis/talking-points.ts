@@ -12,17 +12,30 @@ export function buildTalkingPointsScript(guidance: NegotiationGuidance, negotiat
     ? Math.round(((guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice) * 100)
     : 0;
 
+  // Survey-confirmed condition findings (from the Survey & condition leverage panel) get their
+  // own section, since they're the strongest possible evidence — a surveyor has actually looked.
+  const surveyPoints = negotiation.filter((n) => n.title.startsWith("Survey:"));
+  const otherPoints = negotiation.filter((n) => !n.title.startsWith("Survey:"));
+
   lines.push(`Asking price: ${fmtGBP0(guidance.askingPrice)}`);
   lines.push(`My offer: ${fmtGBP0(guidance.targetOffer)} (${discountPct}% below asking)`);
   lines.push(`Opening position: ${fmtGBP0(guidance.openingOffer)} · Walk-away ceiling: ${fmtGBP0(guidance.walkAwayOffer)}`);
   lines.push("");
   lines.push("Reasons for this offer:");
 
-  if (negotiation.length === 0) {
+  if (otherPoints.length === 0) {
     lines.push("- No specific adjustments — offer reflects the asking price for this property.");
   } else {
-    for (const n of negotiation) {
+    for (const n of otherPoints) {
       lines.push(`- ${n.title} (~${fmtGBP0(n.gbp_impact)}): ${n.description}`);
+    }
+  }
+
+  if (surveyPoints.length > 0) {
+    lines.push("");
+    lines.push(`Survey results (additional reduction: ~${fmtGBP0(surveyPoints.reduce((s, n) => s + n.gbp_impact, 0))}):`);
+    for (const n of surveyPoints) {
+      lines.push(`- ${n.title.replace(/^Survey:\s*/, "")} (~${fmtGBP0(n.gbp_impact)}): ${n.description}`);
     }
   }
 
