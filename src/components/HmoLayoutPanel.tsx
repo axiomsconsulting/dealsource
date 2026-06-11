@@ -2,15 +2,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShowerHead, Sparkles, UtensilsCrossed } from "lucide-react";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
+import { SpecOptionsRow } from "@/components/SpecOptionsRow";
+import { DoorOpen, Loader2, ShowerHead, Sparkles, UtensilsCrossed } from "lucide-react";
 import { analyseHmoLayout, getAIAnalysis } from "@/lib/ai.functions";
+import { fmtGBP, fmtPct } from "@/lib/format";
+import type { StrategyResult } from "@/lib/analysis/types";
 import { toast } from "sonner";
 
 /** Floor-plan-driven HMO/SA conversion assessment, shown alongside the floor plan(s) it's based
  *  on. Two layers, kept visually distinct: a deterministic floor-area ceiling against the
  *  statutory minimum HMO bedroom size (arithmetic — can't be wrong), and an AI read of the actual
  *  drawn layout for room-by-room ensuite/kitchenette feasibility (judgement — caveated as such). */
-export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: string; hasFloorPlan: boolean }) {
+export function HmoLayoutPanel({ propertyId, hasFloorPlan, hmoConversion, saConversion }: { propertyId: string; hasFloorPlan: boolean; hmoConversion?: StrategyResult["conversionOptions"]; saConversion?: StrategyResult["conversionOptions"] }) {
   const qc = useQueryClient();
   const getAI = useServerFn(getAIAnalysis);
   const runLayout = useServerFn(analyseHmoLayout);
@@ -39,24 +43,40 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
           </Button>
         </div>
         {areaEstimate && (
-          <div className="rounded-md border bg-muted/30 p-3 text-sm">
-            <p className="font-medium">Floor-area ceiling — statutory minimum bedroom size</p>
-            <p className="mt-1 text-muted-foreground">
+          <CollapsibleCard
+            variant="plain"
+            defaultOpen={false}
+            id="hmo-area-ceiling"
+            title="Floor-area ceiling — statutory minimum bedroom size"
+            summary={`~${areaEstimate.maxRooms} room${areaEstimate.maxRooms === 1 ? "" : "s"} ceiling from ${areaEstimate.totalAreaSqm}m²`}
+          >
+            <p className="text-sm text-muted-foreground">
               {areaEstimate.totalAreaSqm}m² total, reserving ~{Math.round(areaEstimate.communalReservePct * 100)}% (~{Math.round(areaEstimate.totalAreaSqm * areaEstimate.communalReservePct)}m²) for kitchen/bathrooms/circulation
               leaves ~{areaEstimate.lettableAreaSqm}m² lettable. At the statutory minimum single-occupant bedroom size ({areaEstimate.minRoomSqm}m² — The Licensing and Management of HMOs (Additional Provisions) (England) Regulations 2007),
               that's a hard ceiling of <span className="font-semibold text-foreground">{areaEstimate.maxRooms} room{areaEstimate.maxRooms === 1 ? "" : "s"}</span>. This figure is arithmetic against a published standard — not an estimate.
             </p>
-          </div>
+          </CollapsibleCard>
         )}
 
         {layout ? (
           <>
             {layout.summary && <p className="text-sm text-muted-foreground">{layout.summary}</p>}
 
-            {layout.recommendedRooms != null && (
-              <p className="text-sm">
-                AI's read of the actual floor plan: <span className="font-semibold">{layout.recommendedRooms} lettable room{layout.recommendedRooms === 1 ? "" : "s"}</span> achievable within the layout shown.
-              </p>
+            {(layout.recommendedRooms != null || layout.recommendedEnsuites != null) && (
+              <div className="flex flex-wrap gap-4 rounded-md border bg-muted/20 p-3">
+                {layout.recommendedRooms != null && (
+                  <div>
+                    <p className="text-2xl font-semibold leading-tight">{layout.recommendedRooms}</p>
+                    <p className="text-xs text-muted-foreground">lettable room{layout.recommendedRooms === 1 ? "" : "s"}</p>
+                  </div>
+                )}
+                {layout.recommendedEnsuites != null && layout.recommendedEnsuites > 0 && (
+                  <div>
+                    <p className="text-2xl font-semibold leading-tight text-sky-700">+{layout.recommendedEnsuites}</p>
+                    <p className="text-xs text-muted-foreground">ensuite{layout.recommendedEnsuites === 1 ? "" : "s"} (incl. adjacent knock-throughs)</p>
+                  </div>
+                )}
+              </div>
             )}
 
             {layout.rooms?.length > 0 && (
@@ -81,6 +101,15 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
                           </Badge>
                         )}
                       </div>
+                      {r.ensuitePossible === false && r.adjacentEnsuite?.possible && (
+                        <p className="mt-1.5 flex items-start gap-1 text-xs text-sky-700">
+                          <DoorOpen className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span>
+                            Adjacent ensuite possible — knock through to {r.adjacentEnsuite.adjacentRoomLabel}
+                            {r.adjacentEnsuite.resultingAdjacentSqm != null && <> → ~{r.adjacentEnsuite.resultingAdjacentSqm}m² after carve-out</>}
+                          </span>
+                        </p>
+                      )}
                       {r.notes && <p className="mt-1.5 text-xs text-muted-foreground">{r.notes}</p>}
                     </div>
                   ))}
@@ -110,6 +139,17 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
               </div>
             )}
 
+            {(hmoConversion || saConversion) && (
+              <div className="space-y-3">
+                {hmoConversion && (
+                  <ConversionRecommendation conversion={hmoConversion} />
+                )}
+                {saConversion && (
+                  <ConversionRecommendation conversion={saConversion} />
+                )}
+              </div>
+            )}
+
             {layout.caveats && (
               <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                 <span className="font-semibold">Caveats: </span>{layout.caveats}
@@ -124,6 +164,27 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
             Run the analysis to get a room-by-room conversion proposal from the floor plan — including where there's space for an ensuite, and whether any part of the property could work as a self-contained ensuite + kitchenette unit for serviced accommodation.
           </p>
         )}
+    </div>
+  );
+}
+
+function ConversionRecommendation({ conversion }: { conversion: NonNullable<StrategyResult["conversionOptions"]> }) {
+  const recommended = conversion.options.find((o) => o.rating === conversion.recommendedRating);
+  return (
+    <div className="rounded-md border bg-muted/20 p-3">
+      <p className="text-sm">
+        AI recommends <span className="font-semibold">{conversion.appliedCount} {conversion.countLabel}</span>
+        {recommended && (
+          <>
+            {" "}— <span className="font-medium">{recommended.label}</span> recommended
+            {recommended.addedMonthlyRevenue > 0 && <> (adds {fmtGBP(recommended.addedMonthlyRevenue)}/mo rent)</>}
+            {" "}for {fmtGBP(recommended.totalCostGbp)}, giving {fmtPct(recommended.annualROI)} annual ROI.
+          </>
+        )}
+      </p>
+      <div className="mt-2">
+        <SpecOptionsRow options={conversion.options.map((o) => ({ rating: o.rating, label: o.label, gbp: o.totalCostGbp }))} highlight={conversion.recommendedRating} />
+      </div>
     </div>
   );
 }

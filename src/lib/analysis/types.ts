@@ -96,6 +96,9 @@ export interface StrategyNumber {
   baseline?: number;
   /** True when the user (or another tuned input) has overridden this lever. */
   overridden?: boolean;
+  /** Low/Medium/High spend tiers for this line item — same shape as
+   *  `NegotiationPoint.specOptions`, used for AI-derived conversion costs (e.g. ensuites). */
+  specOptions?: { rating: "L" | "M" | "H"; label: string; gbp: number }[];
 }
 
 /** One weighted line item behind a deal score — the sum of `points` across a strategy's
@@ -125,6 +128,27 @@ export interface StrategyResult {
   /** One-line statement of the formula that combines `scoreBreakdown` into `dealScore`. */
   scoreFormula?: string;
   summary: string;
+  /** AI-floor-plan-derived ensuite/self-contained-unit conversion economics — present only for
+   *  HMO/SA when `ai_payload.hmoLayout` flags conversions, with the L/M/H spend tiers and the
+   *  tier this strategy's headline numbers were computed at. */
+  conversionOptions?: {
+    /** AI's raw recommended count (ensuites for HMO, self-contained units for SA), before
+     *  clamping to what this strategy can use. */
+    aiRecommendedCount: number;
+    /** Count actually applied to this strategy's numbers (clamped to room/unit count). */
+    appliedCount: number;
+    countLabel: string; // "ensuite conversions" | "self-contained unit conversions"
+    options: {
+      rating: "L" | "M" | "H";
+      label: string;
+      totalCostGbp: number;
+      addedMonthlyRevenue: number;
+      monthlyCashflow: number;
+      annualROI: number;
+    }[];
+    /** The tier with the best annualROI — also the tier this strategy's headline numbers use. */
+    recommendedRating: "L" | "M" | "H";
+  };
 }
 
 /** A plain-language read on what the numbers mean — shown as badges alongside the deal score

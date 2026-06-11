@@ -9,7 +9,7 @@ import { resolveMonthlyRent, proposeRentRange } from "./rent";
 import { deriveLenderCriteria } from "./lender-criteria";
 import { estimateRefurb, tierFromConditionScore, locationModifier } from "./refurb";
 import { estimateInsurance } from "./insurance";
-import { estimateMaxHmoRoomsByArea } from "./hmo-layout";
+import { estimateMaxHmoRoomsByArea, ENSUITE_CONVERSION_COST_GBP, ENSUITE_RENT_PREMIUM_PCM, SA_SELF_CONTAINED_UNIT_COST_GBP, SPEC_LABELS } from "./hmo-layout";
 
 const SDLT_INVESTOR = (price: number) => {
   // UK SDLT additional-dwellings approximation (2024 rates +5% surcharge)
@@ -267,15 +267,45 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
   const furnishings = 3000 + beds * 2200;
   const smartLocks = 150 + beds * 60;
   const refurb = eff.refurb_cost + furnishings + smartLocks;
-  const cashIn = purchase * (1 - eff.ltv) + sdlt + 4000 + refurb;
-  const annualROI = (monthlyCashflow * 12) / cashIn;
+  const cashInBase = purchase * (1 - eff.ltv) + sdlt + 4000 + refurb;
 
   const article4Status = p.article4_status ?? (p as any).ai_payload?.article4?.status ?? p.pf_json?.propertyLight?.article4Status ?? null;
   if (isArticle4Inside(article4Status)) reasons.push("Article 4 area — short-let (sui generis) use class change may require planning permission");
   if (p.tenure === "Leasehold") reasons.push("Leasehold — check short-let permitted");
+
+  // AI floor-plan read: self-contained ensuite + kitchenette units it flags as possible, costed
+  // at L/M/H spec tiers and folded into cash-in (no revenue uplift assumed — conservative).
   const layout: any = (p as any).ai_payload?.hmoLayout;
-  if (layout?.saUnits?.some((u: any) => u.ensuiteAndKitchenettePossible)) {
-    reasons.push("Floor-plan assessment flags space for a self-contained ensuite + kitchenette unit — that's structural conversion cost on top of the furnishing/setup figures here, not included below.");
+  const selfContainedCount: number = layout?.saUnits?.filter((u: any) => u.ensuiteAndKitchenettePossible).length ?? 0;
+  const saTierScenarios = (["L", "M", "H"] as const).map((rating) => {
+    const unitCost = selfContainedCount * SA_SELF_CONTAINED_UNIT_COST_GBP[rating];
+    const cashIn = cashInBase + unitCost;
+    return { rating, unitCost, cashIn, annualROI: (monthlyCashflow * 12) / cashIn };
+  });
+  const saRecommendedRating: "L" | "M" | "H" = selfContainedCount > 0
+    ? (saTierScenarios.find((t) => t.annualROI > 0) ?? saTierScenarios[0]).rating
+    : "L";
+  const saChosen = saTierScenarios.find((t) => t.rating === saRecommendedRating)!;
+  const cashIn = saChosen.cashIn;
+  const annualROI = saChosen.annualROI;
+
+  const conversionOptions = selfContainedCount > 0 ? {
+    aiRecommendedCount: selfContainedCount,
+    appliedCount: selfContainedCount,
+    countLabel: "self-contained unit conversions",
+    options: saTierScenarios.map((t) => ({
+      rating: t.rating,
+      label: SPEC_LABELS[t.rating],
+      totalCostGbp: t.unitCost,
+      addedMonthlyRevenue: 0,
+      monthlyCashflow,
+      annualROI: t.annualROI,
+    })),
+    recommendedRating: saRecommendedRating,
+  } : undefined;
+
+  if (selfContainedCount > 0) {
+    reasons.push(`Floor-plan assessment flags space for ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — conversion cost is included in cash-in below at ${SPEC_LABELS[saRecommendedRating].toLowerCase()}.`);
   }
 
   const scoreBreakdown = [
@@ -295,6 +325,7 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
     scoreBreakdown,
     scoreFormula: "Net cashflow ÷ 10 + Annual ROI × 2, summed and clamped to 0-100",
     summary: `£${Math.round(monthlyRevenue)}/mo revenue at ${Math.round(occ * 100)}% occ × £${nightly}. £${Math.round(monthlyCashflow)} net after bills, cleaning, platform commissions & channel-manager fees.`,
+    conversionOptions,
     numbers: [
       tunable("Nightly rate", nightly, "gbp", "sa_nightly", overrides, defaults),
       tunable("Occupancy", occ, "pct", "sa_occupancy", overrides, defaults,
@@ -308,6 +339,13 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
       { label: "Buildings insurance", value: insurance, format: "gbp", hint: "Short-let/SA landlord policy — see Insurance breakdown" },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
+      ...(selfContainedCount > 0 ? [{
+        label: "Self-contained unit conversions (AI)",
+        value: selfContainedCount,
+        format: "count" as const,
+        hint: `AI floor-plan read flags ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — costed at ${SPEC_LABELS[saRecommendedRating].toLowerCase()} above`,
+        specOptions: saTierScenarios.map((t) => ({ rating: t.rating, label: SPEC_LABELS[t.rating], gbp: t.unitCost })),
+      }] : []),
       { label: "Cash in (incl. furnishings & smart locks)", value: cashIn, format: "gbp", hint: `£${Math.round(furnishings).toLocaleString()} furnishings + £${Math.round(smartLocks).toLocaleString()} smart locks for ${beds} bedroom(s)` },
       { label: "Annual ROI", value: annualROI, format: "pct" },
     ],
@@ -320,17 +358,54 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   // it touches any downstream maths or display (a "4.00-room HMO" is meaningless).
   const rooms = Math.round(overrides.room_count ?? defaults.room_count);
   const rentPerRoom = overrides.rent_per_room ?? defaults.rent_per_room;
-  const monthlyRevenue = rooms * rentPerRoom;
-  const opex = 350 + monthlyRevenue * 0.08; // bills + mgmt
+  const baseRevenue = rooms * rentPerRoom;
   const insurance = estimateInsurance(p, "HMO").monthlyPremiumGbp;
   const purchase = eff.offer_price;
   const loan = purchase * eff.ltv;
   const monthlyInt = interestOnlyMonthly(loan, eff.mortgage_rate);
-  const monthlyCashflow = monthlyRevenue - opex - insurance - monthlyInt;
-  const conversionCost = (rooms >= 5 ? 25000 : 12000);
+  const baseConversionCost = (rooms >= 5 ? 25000 : 12000);
   const sdlt = SDLT_INVESTOR(purchase);
-  const cashIn = purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCost;
-  const annualROI = (monthlyCashflow * 12) / cashIn;
+
+  // AI floor-plan read: ensuite conversions it recommends (own-room + adjacent knock-throughs),
+  // clamped to the room count, costed at L/M/H spec tiers and folded into the headline numbers
+  // at whichever tier gives the best annual ROI.
+  const layout: any = (p as any).ai_payload?.hmoLayout;
+  const aiEnsuites: number = layout?.recommendedEnsuites ?? 0;
+  const appliedEnsuites = Math.max(0, Math.min(aiEnsuites, rooms));
+  const tierScenarios = (["L", "M", "H"] as const).map((rating) => {
+    const conversionCostTier = baseConversionCost + appliedEnsuites * ENSUITE_CONVERSION_COST_GBP[rating];
+    const addedRent = appliedEnsuites * ENSUITE_RENT_PREMIUM_PCM;
+    const revenue = baseRevenue + addedRent;
+    const opexTier = 350 + revenue * 0.08; // bills + mgmt
+    const cashflow = revenue - opexTier - insurance - monthlyInt;
+    const cashInTier = purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCostTier;
+    return { rating, conversionCost: conversionCostTier, revenue, opex: opexTier, cashflow, cashIn: cashInTier, annualROI: (cashflow * 12) / cashInTier, addedRent };
+  });
+  const recommendedRating: "L" | "M" | "H" =
+    appliedEnsuites > 0 ? tierScenarios.reduce((best, t) => (t.annualROI > best.annualROI ? t : best)).rating : "M";
+  const chosen = tierScenarios.find((t) => t.rating === recommendedRating)!;
+
+  const monthlyRevenue = chosen.revenue;
+  const opex = chosen.opex;
+  const monthlyCashflow = chosen.cashflow;
+  const conversionCost = chosen.conversionCost;
+  const cashIn = chosen.cashIn;
+  const annualROI = chosen.annualROI;
+
+  const conversionOptions = appliedEnsuites > 0 ? {
+    aiRecommendedCount: aiEnsuites,
+    appliedCount: appliedEnsuites,
+    countLabel: "ensuite conversions",
+    options: tierScenarios.map((t) => ({
+      rating: t.rating,
+      label: SPEC_LABELS[t.rating],
+      totalCostGbp: t.conversionCost,
+      addedMonthlyRevenue: t.addedRent,
+      monthlyCashflow: t.cashflow,
+      annualROI: t.annualROI,
+    })),
+    recommendedRating,
+  } : undefined;
 
   // Commercial (NOI ÷ yield) valuation — "the same formula RICS surveyors use" for HMOs, per
   // Property Filter's HMO valuation calculator. 23% operating costs is its self-managed default;
@@ -381,7 +456,10 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     dealScore: score,
     scoreBreakdown,
     scoreFormula: "Net cashflow ÷ 15 + Annual ROI × 2, summed and clamped to 0-100",
-    summary: `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
+    summary: appliedEnsuites > 0
+      ? `${rooms} rooms (+${appliedEnsuites} ensuite${appliedEnsuites === 1 ? "" : "s"}) — £${Math.round(monthlyRevenue)}/mo at ${SPEC_LABELS[recommendedRating].toLowerCase()}. £${Math.round(monthlyCashflow)} net cashflow.`
+      : `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
+    conversionOptions,
     numbers: [
       tunable("Rooms", rooms, "count", "room_count", overrides, defaults,
         areaEstimate ? `Up to ~${areaEstimate.maxRooms} rooms fit at the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m², ${Math.round(areaEstimate.communalReservePct * 100)}% reserved for kitchen/bathrooms/circulation)` : undefined),
@@ -391,6 +469,13 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
       { label: "Buildings insurance", value: insurance, format: "gbp", hint: "HMO landlord policy — see Insurance breakdown" },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "HMO conversion cost", value: conversionCost, format: "gbp" },
+      ...(appliedEnsuites > 0 ? [{
+        label: "Ensuite conversions (AI)",
+        value: appliedEnsuites,
+        format: "count" as const,
+        hint: `AI floor-plan read recommends ${aiEnsuites} ensuite${aiEnsuites === 1 ? "" : "s"} — costed at ${SPEC_LABELS[recommendedRating].toLowerCase()} above`,
+        specOptions: tierScenarios.map((t) => ({ rating: t.rating, label: SPEC_LABELS[t.rating], gbp: t.conversionCost })),
+      }] : []),
       { label: "Cash in", value: cashIn, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
       { label: "Annual ROI", value: annualROI, format: "pct" },

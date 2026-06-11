@@ -191,11 +191,22 @@ Use UK 2026 trade prices. Be conservative.`;
 const HmoLayoutSchema = z.object({
   summary: z.string().max(700).optional(),
   recommendedRooms: z.number().int().min(0).max(20).optional(),
+  /** AI's overall recommended count of ensuites to build — own-room conversions plus any
+   *  adjacent-room knock-throughs flagged below — kept consistent with the per-room judgements. */
+  recommendedEnsuites: z.number().int().min(0).max(20).optional(),
   rooms: z.array(z.object({
     label: z.string(),
     approxSqm: z.number().min(0).max(100).optional(),
     meetsMinStandard: z.boolean().optional(),
     ensuitePossible: z.boolean().optional(),
+    /** When this room itself can't take an ensuite, whether knocking through to the named
+     *  adjacent room would let THAT room host an ensuite, and its resulting area afterwards. */
+    adjacentEnsuite: z.object({
+      adjacentRoomLabel: z.string(),
+      possible: z.boolean(),
+      resultingAdjacentSqm: z.number().min(0).max(100).optional(),
+      notes: z.string().max(300).optional(),
+    }).optional(),
     notes: z.string().max(1000).optional(),
   })).max(20).optional(),
   saUnits: z.array(z.object({
@@ -250,8 +261,8 @@ Hard rules — do not propose anything that breaches these:
 - Never suggest more bedrooms than the floor-area ceiling provided in the user message
 - Don't propose layouts that would remove the only fire escape route from a room, or require moving structural walls, soil stacks or staircases
 
-For each proposed bedroom, judge from the actual layout (door/window positions, adjacent plumbing, room shape) whether there is realistically space to partition off a small ensuite shower/WC without the remaining bedroom area dropping below the minimum. Separately, identify whether any part of the property (e.g. a larger room, loft, or annexe shown on the plan) could be configured as a fully self-contained unit — its own ensuite AND kitchenette — suitable for serviced-accommodation (SA) letting. Be conservative: if the plan doesn't clearly support a claim, say so in "notes" rather than asserting it. Output STRICT JSON ONLY, matching:
-{"summary":"...","recommendedRooms":0,"rooms":[{"label":"Room 1 — front double bedroom","approxSqm":12,"meetsMinStandard":true,"ensuitePossible":true,"notes":"..."}],"saUnits":[{"label":"Loft conversion — self-contained studio","approxSqm":22,"ensuiteAndKitchenettePossible":true,"notes":"..."}],"caveats":"..."}`;
+For each proposed bedroom, judge from the actual layout (door/window positions, adjacent plumbing, room shape) whether there is realistically space to partition off a small ensuite shower/WC without the remaining bedroom area dropping below the minimum. If a room CANNOT take its own ensuite, additionally judge whether knocking through the wall/door it shares with an adjacent bedroom would let THAT adjacent room host an ensuite without dropping its own area below the minimum — if so, name the adjacent room and estimate its resulting floor area after the ensuite is carved out of it. Separately, identify whether any part of the property (e.g. a larger room, loft, or annexe shown on the plan) could be configured as a fully self-contained unit — its own ensuite AND kitchenette — suitable for serviced-accommodation (SA) letting. Finally, set "recommendedEnsuites" to the total number of ensuites you'd actually recommend building (own-room conversions plus any adjacent-room knock-throughs you flagged as possible) — be conservative and keep this consistent with the per-room judgements above. Be conservative: if the plan doesn't clearly support a claim, say so in "notes" rather than asserting it. Output STRICT JSON ONLY, matching:
+{"summary":"...","recommendedRooms":0,"recommendedEnsuites":0,"rooms":[{"label":"Room 1 — front double bedroom","approxSqm":12,"meetsMinStandard":true,"ensuitePossible":true,"adjacentEnsuite":{"adjacentRoomLabel":"Room 2 — rear bedroom","possible":false,"resultingAdjacentSqm":9,"notes":"..."},"notes":"..."}],"saUnits":[{"label":"Loft conversion — self-contained studio","approxSqm":22,"ensuiteAndKitchenettePossible":true,"notes":"..."}],"caveats":"..."}`;
 
     const contextLine = areaEstimate
       ? `Floor-area ceiling at the statutory minimum bedroom size (after reserving ~${Math.round(areaEstimate.communalReservePct * 100)}% of ${areaEstimate.totalAreaSqm}m² total for kitchen/bathrooms/circulation, leaving ~${areaEstimate.lettableAreaSqm}m² lettable): no more than ${areaEstimate.maxRooms} bedroom(s). Do not propose more than this.`

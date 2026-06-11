@@ -34,6 +34,7 @@ import { NegotiationPanel } from "@/components/NegotiationPanel";
 import { ImageLibrary } from "@/components/ImageLibrary";
 import { ImageCarousel } from "@/components/ImageCarousel";
 import { HmoLayoutPanel } from "@/components/HmoLayoutPanel";
+import { SpecOptionsRow } from "@/components/SpecOptionsRow";
 import { SurveyStrategyPanel } from "@/components/SurveyStrategyPanel";
 import { MarketComparablesPanel } from "@/components/MarketComparablesPanel";
 import { computeSurveyLeverage } from "@/lib/analysis/survey-strategy";
@@ -48,13 +49,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { bestOfSelected, strategiesInScope, useStrategyFilter } from "@/lib/strategy-filter";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check, Zap, ClipboardCheck, TrendingUp, Handshake, BedDouble, FileText, FileStack } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check, Zap, ClipboardCheck, TrendingUp, Handshake, BedDouble, FileText, FileStack, RefreshCcw, Hotel, Repeat, Scissors, Users, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
   head: () => ({ meta: [{ title: "Property — Deal Negotiator" }] }),
   component: PropertyDetail,
 });
+
+const STRATEGY_META: Record<StrategyResult["key"], { short: string; icon: LucideIcon }> = {
+  BTL: { short: "BTL", icon: Home },
+  BRRR: { short: "BRRR", icon: RefreshCcw },
+  SA: { short: "SA", icon: Hotel },
+  HMO: { short: "HMO", icon: Users },
+  FLIP: { short: "Flip", icon: Repeat },
+  TITLE_SPLIT: { short: "Split", icon: Scissors },
+};
 
 function PropertyDetail() {
   const { id } = Route.useParams();
@@ -335,6 +345,26 @@ function PropertyDetail() {
           </div>
         </CollapsibleCard>
       )}
+
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <button onClick={() => setActivePanel("photos")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Camera className="h-4 w-4 text-muted-foreground" /> Photos</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">AI condition scan</p>
+        </button>
+        <button onClick={() => setActivePanel("refurb")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> AI condition report</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Refurb estimate</p>
+        </button>
+        <button onClick={() => setActivePanel("library")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Images className="h-4 w-4 text-muted-foreground" /> Image library</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{heroImages.length} photo{heroImages.length === 1 ? "" : "s"}, by room</p>
+        </button>
+        <button onClick={() => setActivePanel("enrich")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
+          <div className="flex items-center gap-2 text-sm font-medium"><Link2 className="h-4 w-4 text-muted-foreground" /> Enrich listing</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Details, images, PF JSON</p>
+        </button>
+      </div>
+
       <ImageCarousel images={heroCarouselImages} index={heroOpenIndex} onIndexChange={setHeroOpenIndex} onClose={() => setHeroOpenIndex(null)} />
 
       {floorPlans.length > 0 && (
@@ -363,28 +393,14 @@ function PropertyDetail() {
           title="HMO / SA layout assessment"
           summary="Room-by-room conversion feasibility"
         >
-          <HmoLayoutPanel propertyId={id} hasFloorPlan={floorPlans.length > 0} />
+          <HmoLayoutPanel
+            propertyId={id}
+            hasFloorPlan={floorPlans.length > 0}
+            hmoConversion={analysis.strategies.find((s) => s.key === "HMO")?.conversionOptions}
+            saConversion={analysis.strategies.find((s) => s.key === "SA")?.conversionOptions}
+          />
         </CollapsibleCard>
       )}
-
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <button onClick={() => setActivePanel("photos")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Camera className="h-4 w-4 text-muted-foreground" /> Photos</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Run AI condition scan</p>
-        </button>
-        <button onClick={() => setActivePanel("refurb")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> AI condition report</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Refurb estimate from photos</p>
-        </button>
-        <button onClick={() => setActivePanel("library")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Images className="h-4 w-4 text-muted-foreground" /> Image library</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{heroImages.length} photo{heroImages.length === 1 ? "" : "s"}, organised by room</p>
-        </button>
-        <button onClick={() => setActivePanel("enrich")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Link2 className="h-4 w-4 text-muted-foreground" /> Enrich from listing URL</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Pull details, images or PF JSON</p>
-        </button>
-      </div>
 
       <Dialog open={activePanel === "photos"} onOpenChange={(o) => setActivePanel(o ? "photos" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
@@ -482,14 +498,8 @@ function PropertyDetail() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
                     {n.specOptions && n.specOptions.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {n.specOptions.map((s) => (
-                          <div key={s.rating} className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-xs">
-                            <Badge className="h-5 w-5 justify-center rounded-full p-0 text-[10px]">{s.rating}</Badge>
-                            <span className="text-muted-foreground">{s.label}</span>
-                            <span className="font-semibold">{fmtGBP(s.gbp)}</span>
-                          </div>
-                        ))}
+                      <div className="mt-2">
+                        <SpecOptionsRow options={n.specOptions} />
                       </div>
                     )}
                   </div>
@@ -566,12 +576,18 @@ function PropertyDetail() {
             cell's slider to flex it and watch the rest ripple through.
           </p>
           <Tabs defaultValue={defaultStrategyTab}>
-            <TabsList className="flex w-full flex-wrap">
-              {inScopeStrategies.map((s) => (
-                <TabsTrigger key={s.key} value={s.key} className="flex-1">
-                  {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
-                </TabsTrigger>
-              ))}
+            <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
+              {inScopeStrategies.map((s) => {
+                const meta = STRATEGY_META[s.key];
+                const Icon = meta.icon;
+                return (
+                  <TabsTrigger key={s.key} value={s.key} title={s.name} className="flex flex-col items-center gap-0.5 px-1 py-2 text-xs">
+                    <Icon className="h-4 w-4" />
+                    <span>{meta.short}</span>
+                    <span className="text-[10px] opacity-60">{s.dealScore}</span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
             {inScopeStrategies.map((s) => (
               <TabsContent key={s.key} value={s.key} className="pt-4">
@@ -796,9 +812,15 @@ function OfferPlanCard({
           </p>
         )}
         {eq && (
-          <div id="equity-check" className="rounded-md border bg-background/60 p-3">
-            <p className="text-sm font-medium">Equity check (target offer)</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+          <CollapsibleCard
+            variant="plain"
+            defaultOpen={false}
+            id="equity-check"
+            title="Equity check (target offer)"
+            summary={`${eq.meetsTarget ? "Meets" : "Below"} ${fmtPct(eq.targetEquityPct)} target — ${fmtGBP(eq.equityAtTarget)} built-in equity (${fmtPct(eq.equityPctAtTarget)} of GDV)`}
+            className="bg-background/60"
+          >
+            <p className="text-xs text-muted-foreground">
               GDV {fmtGBP(eq.gdv)} − offer {fmtGBP(guidance.targetOffer)} − refurb{" "}
               <button type="button" onClick={onOpenRefurb} className="font-medium text-primary hover:underline">
                 {fmtGBP(eq.refurbCost)}
@@ -814,7 +836,7 @@ function OfferPlanCard({
                 To hit {fmtPct(eq.targetEquityPct)} equity, the offer would need to come down to around {fmtGBP(eq.maxOfferForTargetEquity)} (or the refurb scope/GDV would need to improve).
               </p>
             )}
-          </div>
+          </CollapsibleCard>
         )}
         <div className="rounded-md border bg-background/60 p-3">
           <div className="flex items-center justify-between gap-3">
@@ -1000,6 +1022,7 @@ function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key:
 
   return (
     <div className="space-y-4">
+      <h3 className="text-sm font-semibold">{s.name}</h3>
       <div className="flex items-center gap-2">
         {s.feasible
           ? <CheckCircle2 className="h-5 w-5 text-primary" />
@@ -1042,14 +1065,14 @@ function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key:
       )}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         {s.numbers.map((n, i) => (
-          <TunableNumberCell key={i} n={n} onTune={onTune} onReset={onReset} />
+          <TunableNumberCell key={i} n={n} onTune={onTune} onReset={onReset} highlight={s.conversionOptions?.recommendedRating} />
         ))}
       </div>
     </div>
   );
 }
 
-function TunableNumberCell({ n, onTune, onReset }: { n: StrategyNumber; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void }) {
+function TunableNumberCell({ n, onTune, onReset, highlight }: { n: StrategyNumber; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void; highlight?: "L" | "M" | "H" }) {
   const isPct = n.format === "pct";
   const scale = isPct ? 100 : 1;
 
@@ -1065,6 +1088,11 @@ function TunableNumberCell({ n, onTune, onReset }: { n: StrategyNumber; onTune: 
       </div>
       <p className="text-lg font-semibold">{fmtNumber(n)}</p>
       {n.hint && <p className="mt-1 text-[10px] text-muted-foreground">{n.hint}</p>}
+      {n.specOptions && n.specOptions.length > 0 && (
+        <div className="mt-2">
+          <SpecOptionsRow options={n.specOptions} highlight={highlight} />
+        </div>
+      )}
       {(n.label === "Mortgage rate" || n.label.startsWith("ICR @")) && (
         <Link to="/persona" className="mt-1 inline-block text-[10px] text-primary hover:underline">
           From investor profile →

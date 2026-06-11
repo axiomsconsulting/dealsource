@@ -15,6 +15,27 @@ export const HMO_MIN_CHILD_ROOM_SQM = 4.64;
 // (actual amenity standards are set per local authority and vary with occupancy count).
 const COMMUNAL_RESERVE_PCT = 0.30;
 
+// Per-ensuite UK conversion cost by spec tier (shower/WC pod, basin, tiling, extraction, drainage
+// run to nearest stack) — Low = budget shower-pod, Medium = standard ensuite, High = premium fit-out.
+export const ENSUITE_CONVERSION_COST_GBP: Record<"L" | "M" | "H", number> = {
+  L: 3000,
+  M: 5500,
+  H: 8500,
+};
+// Achievable rent uplift per ensuite room vs. a room sharing a bathroom.
+export const ENSUITE_RENT_PREMIUM_PCM = 75;
+// Cost to convert a room/loft/annexe into a fully self-contained unit (own ensuite + kitchenette) for SA.
+export const SA_SELF_CONTAINED_UNIT_COST_GBP: Record<"L" | "M" | "H", number> = {
+  L: 8000,
+  M: 14000,
+  H: 22000,
+};
+export const SPEC_LABELS: Record<"L" | "M" | "H", string> = {
+  L: "Low spec",
+  M: "Medium spec",
+  H: "High spec",
+};
+
 export interface HmoAreaEstimate {
   totalAreaSqm: number;
   lettableAreaSqm: number;
