@@ -10,6 +10,7 @@ import { deriveLenderCriteria } from "./lender-criteria";
 import { estimateRefurb, tierFromConditionScore, locationModifier } from "./refurb";
 import { estimateInsurance } from "./insurance";
 import { estimateMaxHmoRoomsByArea, ENSUITE_CONVERSION_COST_GBP, ENSUITE_RENT_PREMIUM_PCM, SA_SELF_CONTAINED_UNIT_COST_GBP, SPEC_LABELS } from "./hmo-layout";
+import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "./epc-plan";
 
 const SDLT_INVESTOR = (price: number) => {
   // UK SDLT additional-dwellings approximation (2024 rates +5% surcharge)
@@ -636,7 +637,15 @@ export function analyseProperty(
   } else {
     const aiRefurb = (prop as any).ai_payload?.refurb;
     const conditionScore = (prop as any).ai_payload?.condition?.score ?? null;
-    const est = estimateRefurb(prop, tierFromConditionScore(conditionScore), aiRefurb?.items);
+    const epcData = (prop as any).epc_data ?? null;
+    const roadmap = epcData ? buildEpcRoadmap(epcData) : null;
+    const epcSelection = roadmap
+      ? resolveEpcMeasureSelection(
+          buildEpcMeasureCandidates(roadmap, deriveAiEpcCategories((prop as any).ai_payload)),
+          (prop as any).refurb_estimate?.epcMeasures,
+        ).totals
+      : null;
+    const est = estimateRefurb(prop, tierFromConditionScore(conditionScore), aiRefurb?.items, epcSelection);
     refurb_default = est.total;
     refurb_default_source = aiRefurb ? "ai" : "algo";
   }

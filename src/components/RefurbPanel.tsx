@@ -9,6 +9,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Wrench, Sparkles, Save } from "lucide-react";
 import { estimateRefurb, type RefurbTier } from "@/lib/analysis/refurb";
+import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "@/lib/analysis/epc-plan";
 import { fmtGBP } from "@/lib/format";
 import { updateProperty } from "@/lib/ingest.functions";
 import { toast } from "sonner";
@@ -28,7 +29,16 @@ export function RefurbPanel({
     () => property?.ai_payload?.refurb?.items ?? property?.ai_payload?.condition?.items ?? [],
     [property?.ai_payload?.refurb?.items, property?.ai_payload?.condition?.items],
   );
-  const est = useMemo(() => estimateRefurb(property, tier, aiItems), [property, tier, aiItems]);
+  const epcSelection = useMemo(() => {
+    const epcData = property?.epc_data;
+    if (!epcData) return null;
+    const roadmap = buildEpcRoadmap(epcData);
+    if (!roadmap) return null;
+    const candidates = buildEpcMeasureCandidates(roadmap, deriveAiEpcCategories(property?.ai_payload));
+    return resolveEpcMeasureSelection(candidates, property?.refurb_estimate?.epcMeasures).totals;
+  }, [property?.epc_data, property?.ai_payload, property?.refurb_estimate?.epcMeasures]);
+  const est = useMemo(() => estimateRefurb(property, tier, aiItems, epcSelection), [property, tier, aiItems, epcSelection]);
+  const condition = property?.ai_payload?.condition;
 
   const qc = useQueryClient();
   const update = useServerFn(updateProperty);
@@ -97,6 +107,15 @@ export function RefurbPanel({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {condition?.summary && (
+          <div className="mb-4 flex items-start gap-2 rounded-md border bg-muted/20 p-3 text-sm">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+            <p className="text-muted-foreground">
+              <span className="font-medium text-foreground">AI condition scan</span>
+              {condition.score != null && <> ({condition.score}/10)</>}: {condition.summary}
+            </p>
+          </div>
+        )}
         <div className="mb-4 grid grid-cols-4 gap-2 text-center">
           <Stat label="Selected" v={fmtGBP(live.subtotal)} />
           <Stat label="Contingency 10%" v={fmtGBP(live.contingency)} />
@@ -127,6 +146,7 @@ export function RefurbPanel({
                     {l.note && <div className="text-xs text-muted-foreground">{l.note}</div>}
                     <div className="text-[10px] text-muted-foreground">{l.qty} {l.unit} · @ {fmtGBP(l.rate)}</div>
                     {l.source === "ai" && <Badge variant="outline" className="mt-1 h-4 text-[9px]">AI</Badge>}
+                    {l.source === "epc" && <Badge variant="outline" className="mt-1 h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700">EPC</Badge>}
                   </td>
                   <td className="px-3 py-2 text-right text-muted-foreground">{fmtGBP(l.low)}</td>
                   <td className="px-3 py-2 text-right font-medium">{fmtGBP(l.mid)}</td>

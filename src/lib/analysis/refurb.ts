@@ -11,7 +11,7 @@ export interface RefurbLine {
   low: number;
   mid: number;
   high: number;
-  source: "algo" | "ai" | "manual";
+  source: "algo" | "ai" | "manual" | "epc";
   note?: string;
 }
 
@@ -101,7 +101,12 @@ function pushSqm(lines: RefurbLine[], category: string, label: string, sqm: numb
   });
 }
 
-export function estimateRefurb(p: PropertyInput, tier: RefurbTier = "medium", aiItems?: { category?: string; estimateGbp?: number; issue?: string }[]): RefurbEstimate {
+export function estimateRefurb(
+  p: PropertyInput,
+  tier: RefurbTier = "medium",
+  aiItems?: { category?: string; estimateGbp?: number; issue?: string }[],
+  epcSelection?: { low: number; mid: number; high: number; count: number } | null,
+): RefurbEstimate {
   const { mod, name: locName } = locationModifier(p.postcode);
   const beds = p.beds ?? 3;
   const baths = p.baths ?? Math.max(1, Math.floor(beds / 2));
@@ -121,7 +126,24 @@ export function estimateRefurb(p: PropertyInput, tier: RefurbTier = "medium", ai
   pushSqm(lines, "roof", "Roof works", sqm, tier, mod, PER_SQM.roof as any);
   pushSqm(lines, "external", "External / render / gutters", sqm, tier, mod, PER_SQM.external as any);
   pushSqm(lines, "damp", "Damp / structural", sqm, tier, mod, PER_SQM.damp as any);
-  if (needsEpcUplift) pushSqm(lines, "epc_upgrade", `EPC ${epc}→C uplift`, sqm, tier === "light" ? "medium" : tier, mod, PER_SQM.epc_upgrade as any);
+  if (epcSelection) {
+    if (epcSelection.mid > 0) {
+      lines.push({
+        category: "epc_upgrade",
+        label: `EPC upgrade (${epcSelection.count} measure${epcSelection.count === 1 ? "" : "s"} selected)`,
+        qty: epcSelection.count,
+        unit: "measure",
+        rate: epcSelection.mid,
+        low: epcSelection.low,
+        mid: epcSelection.mid,
+        high: epcSelection.high,
+        source: "epc",
+        note: "From EPC card selection",
+      });
+    }
+  } else if (needsEpcUplift) {
+    pushSqm(lines, "epc_upgrade", `EPC ${epc}→C uplift`, sqm, tier === "light" ? "medium" : tier, mod, PER_SQM.epc_upgrade as any);
+  }
 
   // AI override / addition per category
   if (aiItems?.length) {

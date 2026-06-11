@@ -85,4 +85,91 @@ export function buildEpcRoadmap(epc: {
   };
 }
 
+/** Maps an EPC recommendation title to the refurb-cost category vocabulary used in
+ *  `refurb.ts`/`ai_payload`, so AI condition-scan findings (which use that vocabulary) can be
+ *  matched against certificate recommendations. */
+const MEASURE_CATEGORY_RULES: { re: RegExp; category: string }[] = [
+  { re: /boiler|heating controls|heating system|hot water cylinder|thermostat/i, category: "boiler" },
+  { re: /loft insulation|roof insulation/i, category: "roof" },
+  { re: /cavity wall|solid wall|external wall|internal wall/i, category: "external" },
+  { re: /floor insulation/i, category: "flooring" },
+  { re: /window|glazing/i, category: "windows" },
+  { re: /draught proofing/i, category: "external" },
+];
+
+export function categoriseEpcMeasure(title: string): string {
+  for (const { re, category } of MEASURE_CATEGORY_RULES) if (re.test(title)) return category;
+  return "epc_upgrade";
+}
+
+export interface EpcMeasureCandidate {
+  index: number;
+  title: string;
+  category: string;
+  costMin: number | null;
+  costMax: number | null;
+  resultingScore: number | null;
+  resultingBand: string | null;
+  crossesIntoC: boolean;
+  aiRecommended: boolean;
+  defaultSelected: boolean;
+}
+
+/** Builds a per-measure selection candidate list from the EPC roadmap. Each measure defaults
+ *  to selected if it's part of the assessor's path to band C (current score < 69, on/before the
+ *  step that crosses into C), or if the AI condition scan flagged a matching category. */
+export function buildEpcMeasureCandidates(roadmap: EpcRoadmap, aiCategories: Set<string>): EpcMeasureCandidate[] {
+  const neededForC = roadmap.currentScore == null || roadmap.currentScore < 69;
+  let crossedIntoC = false;
+  return roadmap.steps.map((s) => {
+    const category = categoriseEpcMeasure(s.summary);
+    const aiRecommended = aiCategories.has(category);
+    const onPathToC = neededForC && !crossedIntoC;
+    if (s.crossesIntoC) crossedIntoC = true;
+    return {
+      index: s.index,
+      title: s.summary,
+      category,
+      costMin: s.costMin,
+      costMax: s.costMax,
+      resultingScore: s.resultingScore,
+      resultingBand: s.resultingBand,
+      crossesIntoC: s.crossesIntoC,
+      aiRecommended,
+      defaultSelected: onPathToC || aiRecommended,
+    };
+  });
+}
+
+/** Resolves the effective selection for each candidate (override wins, else default), and sums
+ *  costs across the selected measures. */
+export function resolveEpcMeasureSelection(
+  candidates: EpcMeasureCandidate[],
+  overrides: Record<number, boolean> | null | undefined,
+): { selected: EpcMeasureCandidate[]; totals: { low: number; mid: number; high: number; count: number } } {
+  const selected = candidates.filter((c) => overrides?.[c.index] ?? c.defaultSelected);
+  let low = 0, mid = 0, high = 0;
+  for (const c of selected) {
+    const min = c.costMin ?? c.costMax ?? 0;
+    const max = c.costMax ?? c.costMin ?? 0;
+    low += min;
+    high += max;
+    mid += (min + max) / 2;
+  }
+  return { selected, totals: { low: Math.round(low), mid: Math.round(mid), high: Math.round(high), count: selected.length } };
+}
+
+/** Collects refurb categories the AI photo condition scan flagged (any from `refurb.items`,
+ *  or `condition.items` with severity above "low"), for matching against EPC measures. */
+export function deriveAiEpcCategories(aiPayload: any): Set<string> {
+  const cats = new Set<string>();
+  for (const it of aiPayload?.refurb?.items ?? []) {
+    if (it?.category) cats.add(String(it.category).toLowerCase());
+  }
+  for (const it of aiPayload?.condition?.items ?? []) {
+    if (it?.category && it?.severity !== "low") cats.add(String(it.category).toLowerCase());
+  }
+  return cats;
+}
+
 export { EPC_BANDS, bandForScore };

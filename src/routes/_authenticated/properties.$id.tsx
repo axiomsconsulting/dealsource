@@ -352,7 +352,7 @@ function PropertyDetail() {
           <p className="mt-0.5 text-xs text-muted-foreground">AI condition scan</p>
         </button>
         <button onClick={() => setActivePanel("refurb")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> AI condition report</div>
+          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> Refurb Estimator</div>
           <p className="mt-0.5 text-xs text-muted-foreground">Refurb estimate</p>
         </button>
         <button onClick={() => setActivePanel("library")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
@@ -411,7 +411,7 @@ function PropertyDetail() {
 
       <Dialog open={activePanel === "refurb"} onOpenChange={(o) => setActivePanel(o ? "refurb" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader><DialogTitle>AI condition report</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Refurb Estimator</DialogTitle></DialogHeader>
           <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
         </DialogContent>
       </Dialog>
@@ -650,7 +650,7 @@ function PropertyDetail() {
           title="EPC — energy performance"
           summary={`EPC ${p.epc_rate ?? "not fetched"}`}
         >
-          <EpcPanel propertyId={id} />
+          <EpcPanel propertyId={id} property={p} />
         </CollapsibleCard>
 
         <CollapsibleCard

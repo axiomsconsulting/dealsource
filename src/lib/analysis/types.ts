@@ -41,6 +41,8 @@ export interface PropertyInput {
   refurb_estimate?: any;
   image_urls?: string[] | null;
   pf_json?: any;
+  epc_data?: any;
+  ai_payload?: any;
 }
 
 export interface SliderOverrides {

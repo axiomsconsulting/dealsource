@@ -3,14 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Flame, KeyRound, RefreshCw } from "lucide-react";
+import { Flame, KeyRound, RefreshCw, Save, Sparkles } from "lucide-react";
 import {
   fetchEpcForProperty, selectEpcCertificate, getEpcForProperty, getEpcCredentialsStatus, saveEpcCredentials, clearEpcCredentials,
   EPC_BANDS, bandForScore,
 } from "@/lib/epc.functions";
-import { buildEpcRoadmap } from "@/lib/analysis/epc-plan";
+import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "@/lib/analysis/epc-plan";
+import { updateProperty } from "@/lib/ingest.functions";
 import { fmtGBP } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -32,11 +34,12 @@ const EFF_LABEL_COLOR: Record<string, string> = {
   "very poor": "text-red-700 bg-red-50 border-red-200",
 };
 
-export function EpcPanel({ propertyId }: { propertyId: string }) {
+export function EpcPanel({ propertyId, property }: { propertyId: string; property?: any }) {
   const qc = useQueryClient();
   const getEpc = useServerFn(getEpcForProperty);
   const fetchEpc = useServerFn(fetchEpcForProperty);
   const selectCert = useServerFn(selectEpcCertificate);
+  const updateProp = useServerFn(updateProperty);
 
   const q = useQuery({ queryKey: ["epc", propertyId], queryFn: () => getEpc({ data: { propertyId } }) });
   const epc: any = (q.data as any)?.epc_data ?? null;
@@ -83,6 +86,18 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
   });
 
   const roadmap = useMemo(() => epc ? buildEpcRoadmap(epc) : null, [epc]);
+
+  const aiCategories = useMemo(() => deriveAiEpcCategories(property?.ai_payload), [property?.ai_payload]);
+  const epcMeasureCandidates = useMemo(() => roadmap ? buildEpcMeasureCandidates(roadmap, aiCategories) : [], [roadmap, aiCategories]);
+  const [overrides, setOverrides] = useState<Record<number, boolean>>(() => property?.refurb_estimate?.epcMeasures ?? {});
+  useEffect(() => { setOverrides(property?.refurb_estimate?.epcMeasures ?? {}); }, [property?.refurb_estimate?.epcMeasures]);
+  const { selected, totals } = useMemo(() => resolveEpcMeasureSelection(epcMeasureCandidates, overrides), [epcMeasureCandidates, overrides]);
+
+  const saveSelectionMut = useMutation({
+    mutationFn: () => updateProp({ data: { id: propertyId, patch: { refurb_estimate: { ...(property?.refurb_estimate ?? {}), epcMeasures: overrides } as any } } }),
+    onSuccess: () => { toast.success("EPC measure selection saved — applied to Refurb Estimator"); qc.invalidateQueries({ queryKey: ["property", propertyId] }); },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   return (
     <div className="space-y-6">
@@ -168,29 +183,53 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
                 {epc.currentRating}{epc.currentScore != null ? ` (${epc.currentScore})` : ""} → {epc.potentialRating}{epc.potentialScore != null ? ` (${epc.potentialScore})` : ""} is what the assessor says is achievable doing every measure below, for a total indicative spend of {fmtGBP(roadmap.totalCostMin)}–{fmtGBP(roadmap.totalCostMax)}.
                 {" "}The resulting score after each step is the register's own calculated cumulative figure — not an estimate — so the "reaches D" / "reaches C" markers below are read straight off the certificate.
               </p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Tick the upgrades you want costed in — these feed the Refurb Estimator and the EPC negotiation point.
+                Items flagged from the AI photo condition scan are pre-ticked; untick anything you disagree with.
+              </p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 p-3 text-sm">
+                <span>
+                  Selected: <span className="font-semibold">{totals.count}</span> of {epcMeasureCandidates.length} measures · est.{" "}
+                  <span className="font-semibold">{fmtGBP(totals.low)}–{fmtGBP(totals.high)}</span> (mid {fmtGBP(totals.mid)})
+                </span>
+                <Button size="sm" variant="outline" disabled={saveSelectionMut.isPending} onClick={() => saveSelectionMut.mutate()}>
+                  <Save className="mr-1 h-3 w-3" /> Save selection
+                </Button>
+              </div>
               <ol className="space-y-2">
-                {roadmap.steps.map((s) => (
-                  <li key={s.index} className="rounded-md border p-3 text-sm">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">{s.index}</span>
-                          <span className="font-medium">{s.summary}</span>
-                          {s.crossesIntoD && <Badge className="bg-amber-500 text-[10px] text-white">reaches D here</Badge>}
-                          {s.crossesIntoC && <Badge className="bg-green-600 text-[10px] text-white">reaches C here</Badge>}
+                {epcMeasureCandidates.map((c) => {
+                  const isSelected = selected.some((sel) => sel.index === c.index);
+                  return (
+                    <li key={c.index} className="rounded-md border p-3 text-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex flex-1 items-start gap-2">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={isSelected}
+                            onCheckedChange={(checked) => setOverrides((prev) => ({ ...prev, [c.index]: !!checked }))}
+                          />
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium">{c.title}</span>
+                              {c.crossesIntoC && <Badge className="bg-green-600 text-[10px] text-white">reaches C here</Badge>}
+                              {c.aiRecommended && (
+                                <Badge variant="outline" className="border-sky-300 bg-sky-50 text-[10px] text-sky-700">
+                                  <Sparkles className="mr-1 h-3 w-3" /> AI flagged
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {c.resultingScore != null && <>Resulting score after this step: {c.resultingScore}{c.resultingBand ? ` (band ${c.resultingBand})` : ""}</>}
+                            </p>
+                          </div>
                         </div>
-                        <p className="mt-1 pl-7 text-xs text-muted-foreground">
-                          {s.resultingScore != null && <>Resulting score after this step: {s.resultingScore}{s.resultingBand ? ` (band ${s.resultingBand})` : ""}</>}
-                          {s.typicalSavingPerYear != null && <> · typical saving ~{fmtGBP(s.typicalSavingPerYear)}/yr</>}
-                        </p>
+                        <div className="shrink-0 text-right">
+                          <div className="text-sm font-semibold">{fmtGBP(c.costMin ?? 0)}–{fmtGBP(c.costMax ?? c.costMin ?? 0)}</div>
+                        </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-sm font-semibold">{s.costLabel}</div>
-                        <div className="text-[10px] text-muted-foreground">cumulative {fmtGBP(s.cumulativeMin)}–{fmtGBP(s.cumulativeMax)}</div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ol>
               {epc.certificateUrl && (
                 <a href={epc.certificateUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs text-accent underline">

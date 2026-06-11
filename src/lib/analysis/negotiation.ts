@@ -2,6 +2,7 @@ import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./typ
 import { extractPriceHistory, summarisePriceHistory } from "./price-history";
 import { buildSurveyNegotiationPoints } from "./survey-strategy";
 import { estimateLeaseExtensionPremium } from "./lease-extension";
+import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "./epc-plan";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
@@ -118,41 +119,58 @@ export function buildNegotiation(
   let epcToCCost: number | null = null;
   let epcRecoveryAmount = 0;
   const epc = (prop.epc_rate || "").toUpperCase();
-  if (["D", "E", "F", "G"].includes(epc)) {
-    // EPC spend to reach C — a dedicated bill-of-materials line, broken into Low/Medium/High spec
-    // tiers so the offer can be framed around "however they want to play it, here's what closing
-    // the gap costs". Where the register's own improvement roadmap is available (cumulative cost
-    // to the step that lands the property in band C — see epc.functions.ts buildEpcData), use that
-    // grounded figure for L (cheapest path to C) and H (full works); otherwise fall back to a
-    // banded heuristic. M is always the midpoint — the number actually used to frame the ask.
-    const epcData: any = (prop as any).epc_data ?? null;
-    const recs: any[] = Array.isArray(epcData?.recommendations) ? epcData.recommendations : [];
-    const stepToC = recs.find((r) => typeof r.resultingScore === "number" && r.resultingScore >= 69);
-    let lowSpec: number, highSpec: number, grounded: boolean;
-    if (stepToC && (stepToC.cumulativeCostMin > 0 || stepToC.cumulativeCostMax > 0)) {
-      lowSpec = stepToC.cumulativeCostMin || stepToC.cumulativeCostMax;
-      highSpec = Math.max(stepToC.cumulativeCostMax || stepToC.cumulativeCostMin, lowSpec);
-      grounded = true;
-    } else {
-      const base = epc === "D" ? 3500 : epc === "E" ? 7500 : 12000;
-      lowSpec = Math.round(base * 0.6);
-      highSpec = Math.round(base * 1.6);
-      grounded = false;
+  const epcData: any = (prop as any).epc_data ?? null;
+  const roadmap = epcData ? buildEpcRoadmap(epcData) : null;
+  if (roadmap) {
+    // EPC spend — a dedicated bill-of-materials line, broken into Low/Medium/High spec tiers so
+    // the offer can be framed around "however they want to play it, here's what closing the gap
+    // costs". Grounded directly in the user's per-measure selection on the EPC card (defaulting
+    // to the assessor's path to band C, plus anything the AI photo scan flagged) — M is always
+    // the midpoint, the number actually used to frame the ask.
+    const aiCategories = deriveAiEpcCategories((prop as any).ai_payload);
+    const candidates = buildEpcMeasureCandidates(roadmap, aiCategories);
+    const { totals } = resolveEpcMeasureSelection(candidates, (prop as any).refurb_estimate?.epcMeasures);
+    if (totals.mid > 0) {
+      const lowSpec = totals.low;
+      const highSpec = Math.max(totals.high, lowSpec);
+      const midSpec = totals.mid;
+      const recoveryRate = epc === "D" ? 0.45 : 0.5;
+      const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
+      epcToCCost = midSpec;
+      epcRecoveryAmount = Math.round(midSpec * recoveryRate);
+      points.push({
+        category: "improvement_gap",
+        title: `EPC ${epc || "rating"} — selected upgrade measures`,
+        description: `Based on the ${totals.count} measure${totals.count === 1 ? "" : "s"} selected on the EPC card, the register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.`
+          + (["D", "E", "F", "G"].includes(epc)
+            ? ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`
+            : ""),
+        gbp_impact: negotiationImpact,
+        confidence: "high",
+        specOptions: [
+          { rating: "L", label: "Low spec — minimum to qualify", gbp: lowSpec },
+          { rating: "M", label: "Medium spec — realistic midpoint", gbp: midSpec },
+          { rating: "H", label: "High spec — full works", gbp: highSpec },
+        ],
+      });
     }
+  } else if (["D", "E", "F", "G"].includes(epc)) {
+    // No certificate on file — fall back to a banded heuristic.
+    const base = epc === "D" ? 3500 : epc === "E" ? 7500 : 12000;
+    const lowSpec = Math.round(base * 0.6);
+    const highSpec = Math.round(base * 1.6);
     const midSpec = Math.round((lowSpec + highSpec) / 2);
-    const recoveryRate = grounded ? 0.5 : epc === "D" ? 0.35 : 0.45;
+    const recoveryRate = epc === "D" ? 0.35 : 0.45;
     const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
     epcToCCost = midSpec;
     epcRecoveryAmount = Math.round(midSpec * recoveryRate);
     points.push({
       category: "improvement_gap",
       title: `EPC ${epc} spend to reach C`,
-      description: (grounded
-        ? `The register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint to move toward EPC C. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.`
-        : `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`)
+      description: `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`
         + ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`,
       gbp_impact: negotiationImpact,
-      confidence: grounded ? "high" : "medium",
+      confidence: "medium",
       specOptions: [
         { rating: "L", label: "Low spec — minimum to qualify", gbp: lowSpec },
         { rating: "M", label: "Medium spec — realistic midpoint", gbp: midSpec },
