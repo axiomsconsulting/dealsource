@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { fmtGBP } from "@/lib/format";
-import { Handshake, Sparkles, Loader2, TrendingDown } from "lucide-react";
+import { Sparkles, Loader2, TrendingDown } from "lucide-react";
 import { SELLER_CIRCUMSTANCES, circumstanceFlexPct, inferSellerCircumstances, type SellerContext } from "@/lib/seller-context";
 import { estimateSellerFlex } from "@/lib/ai.functions";
 import { updateProperty } from "@/lib/ingest.functions";
@@ -107,18 +106,14 @@ export function NegotiationPanel({
   }, [asking, walkAway, openingOffer, targetOffer]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2"><Handshake className="h-4 w-4" /> Smart negotiation</span>
-          <Button size="sm" variant="outline" disabled={flexMut.isPending} onClick={() => flexMut.mutate()}>
-            {flexMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            AI comparables
-          </Button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {flex && (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" disabled={flexMut.isPending} onClick={() => flexMut.mutate()}>
+          {flexMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+          AI comparables
+        </Button>
+      </div>
+      {flex && (
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <div className="flex items-center gap-2"><TrendingDown className="h-4 w-4 text-primary" />
               <span className="font-medium">Typical reduction in this area: {(flex.reductionPctLow * 100).toFixed(1)}% – {(flex.reductionPctHigh * 100).toFixed(1)}%</span>
@@ -208,8 +203,7 @@ export function NegotiationPanel({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 

@@ -1,6 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp } from "lucide-react";
 import { fmtGBP } from "@/lib/format";
 import { extractMarketDataFromPfJson, type MarketData, type SoldComparable } from "@/lib/parsers/json";
 
@@ -43,13 +41,7 @@ export function MarketComparablesPanel({ pf_json, askingPrice }: Props) {
       : null;
 
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <TrendingUp className="h-4 w-4 text-accent" /> Market comparables
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
         {/* Headline benchmark boxes */}
         {(askingPrice || medianComp || hasStats) && (
           <div className="grid gap-3 sm:grid-cols-3">
@@ -164,7 +156,6 @@ export function MarketComparablesPanel({ pf_json, askingPrice }: Props) {
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

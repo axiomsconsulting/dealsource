@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrUpdateDealSheet, getMyDealSheet } from "@/lib/deal-sheets.functions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -37,11 +36,7 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
   const pdfUrl = token ? `/api/deal-pdf/${token}` : "";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Deal sheet for investors</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="space-y-3">
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Investor PDF privacy</p>
           <Toggle id="hideAddress" label="Hide exact address (show area only)" v={hideAddress} on={setHideAddress} />
@@ -68,8 +63,7 @@ export function DealSheetPanel({ propertyId, overrides }: { propertyId: string; 
             </a>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 

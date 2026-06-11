@@ -5,6 +5,7 @@ import { getProperty, updateProperty } from "@/lib/ingest.functions";
 import { listPersonas } from "@/lib/personas.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
 import type { AnalysisOutput, NegotiationGuidance, NegotiationPoint, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
 import { OVERRIDE_BOUNDS } from "@/lib/analysis/types";
@@ -13,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractPriceHistory, fmtHistoryDate } from "@/lib/analysis/price-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,9 @@ import { ImageCarousel } from "@/components/ImageCarousel";
 import { HmoLayoutPanel } from "@/components/HmoLayoutPanel";
 import { SurveyStrategyPanel } from "@/components/SurveyStrategyPanel";
 import { MarketComparablesPanel } from "@/components/MarketComparablesPanel";
+import { computeSurveyLeverage } from "@/lib/analysis/survey-strategy";
+import { extractMarketDataFromPfJson } from "@/lib/parsers/json";
+import { FormulaInfo } from "@/components/FormulaInfo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -43,7 +48,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { bestOfSelected, strategiesInScope, useStrategyFilter } from "@/lib/strategy-filter";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check, Zap, ClipboardCheck, TrendingUp, Handshake, BedDouble, FileText, FileStack } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -74,6 +79,13 @@ function PropertyDetail() {
   const resetAll = () => setOver({});
   const toggleSourcingBuffer = (enabled: boolean) =>
     setOver((o) => enabled ? { ...o, sourcingBufferEnabled: true } : (() => { const { sourcingBufferEnabled: _drop, ...rest } = o; return rest; })());
+
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const sectionProps = (key: string) => ({
+    id: key,
+    open: openSections[key] ?? true,
+    onOpenChange: (v: boolean) => setOpenSections((s) => ({ ...s, [key]: v })),
+  });
 
   const analysis = useMemo(() => {
     if (!prop.data || !persona) return null;
@@ -151,7 +163,17 @@ function PropertyDetail() {
             {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
             {p.baths && <Badge variant="outline">{p.baths} bath</Badge>}
             {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
-            {p.epc_rate && <Badge variant="outline">EPC {p.epc_rate}</Badge>}
+            {p.epc_rate && (
+              p.epc_data?.certificateUrl ? (
+                <a href={p.epc_data.certificateUrl} target="_blank" rel="noreferrer">
+                  <Badge variant="outline" className="cursor-pointer hover:bg-muted">
+                    EPC {p.epc_rate} <ExternalLink className="ml-1 h-3 w-3" />
+                  </Badge>
+                </a>
+              ) : (
+                <Badge variant="outline">EPC {p.epc_rate}</Badge>
+              )
+            )}
             {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
             {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
             {editingAsking ? (
@@ -263,6 +285,9 @@ function PropertyDetail() {
       </div>
 
       <OfferPlanCard
+        section={sectionProps("offer-plan")}
+        setOpenSections={setOpenSections}
+        onOpenRefurb={() => setActivePanel("refurb")}
         analysis={analysis}
         best={best}
         guidance={analysis.negotiationGuidance}
@@ -279,49 +304,68 @@ function PropertyDetail() {
       />
 
       {heroImages.length > 0 && (
-        <Card className="mb-4 overflow-hidden p-0">
-          <div className="grid grid-cols-4 gap-1">
-            <button className="col-span-4 sm:col-span-2 sm:row-span-2" onClick={() => setHeroOpenIndex(0)}>
-              <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover transition hover:opacity-90" />
-            </button>
-            {heroImages.slice(1, 5).map((u, i) => (
-              <button key={i} onClick={() => setHeroOpenIndex(i + 1)}>
-                <img src={u} alt="" className="h-32 w-full object-cover transition hover:opacity-90 sm:h-[178px]" loading="lazy" />
+        <CollapsibleCard
+          {...sectionProps("photos")}
+          className="mb-4"
+          icon={<Camera className="h-4 w-4 text-accent" />}
+          title="Photos"
+          summary={`${heroImages.length} photo${heroImages.length === 1 ? "" : "s"}`}
+        >
+          <div className="-mx-6 -mt-4 overflow-hidden rounded-md sm:mx-0 sm:mt-0">
+            <div className="grid grid-cols-4 gap-1">
+              <button className="col-span-4 sm:col-span-2 sm:row-span-2" onClick={() => setHeroOpenIndex(0)}>
+                <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover transition hover:opacity-90" />
               </button>
-            ))}
-          </div>
-          <div className="flex items-center justify-between px-3 py-2">
-            <button onClick={() => setHeroOpenIndex(0)} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length} photos
-            </button>
-            {heroImages.length > 5 && (
-              <button onClick={() => setActivePanel("library")} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                +{heroImages.length - 5} more — open in image library
+              {heroImages.slice(1, 5).map((u, i) => (
+                <button key={i} onClick={() => setHeroOpenIndex(i + 1)}>
+                  <img src={u} alt="" className="h-32 w-full object-cover transition hover:opacity-90 sm:h-[178px]" loading="lazy" />
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between px-3 py-2">
+              <button onClick={() => setHeroOpenIndex(0)} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length} photos
               </button>
-            )}
+              {heroImages.length > 5 && (
+                <button onClick={() => setActivePanel("library")} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  +{heroImages.length - 5} more — open in image library
+                </button>
+              )}
+            </div>
           </div>
-        </Card>
+        </CollapsibleCard>
       )}
       <ImageCarousel images={heroCarouselImages} index={heroOpenIndex} onIndexChange={setHeroOpenIndex} onClose={() => setHeroOpenIndex(null)} />
 
       {floorPlans.length > 0 && (
-        <Card className="mb-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Floor plan{floorPlans.length > 1 ? "s" : ""}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={cn("grid gap-3", floorPlans.length > 1 ? "sm:grid-cols-2" : "")}>
-              {floorPlans.map((u, i) => (
-                <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
-                  <img src={u} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
-                </a>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <CollapsibleCard
+          {...sectionProps("floorplans")}
+          className="mb-4"
+          icon={<FileStack className="h-4 w-4 text-accent" />}
+          title={`Floor plan${floorPlans.length > 1 ? "s" : ""}`}
+          summary={`${floorPlans.length} floor plan${floorPlans.length === 1 ? "" : "s"}`}
+        >
+          <div className={cn("grid gap-3", floorPlans.length > 1 ? "sm:grid-cols-2" : "")}>
+            {floorPlans.map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
+                <img src={u} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        </CollapsibleCard>
       )}
 
-      <HmoLayoutPanel propertyId={id} hasFloorPlan={floorPlans.length > 0} />
+      {floorPlans.length > 0 && (
+        <CollapsibleCard
+          {...sectionProps("hmo-layout")}
+          className="mb-4"
+          icon={<BedDouble className="h-4 w-4 text-accent" />}
+          title="HMO / SA layout assessment"
+          summary="Room-by-room conversion feasibility"
+        >
+          <HmoLayoutPanel propertyId={id} hasFloorPlan={floorPlans.length > 0} />
+        </CollapsibleCard>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <button onClick={() => setActivePanel("photos")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
@@ -418,12 +462,14 @@ function PropertyDetail() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-accent" /> Negotiation playbook</CardTitle>
+        <CollapsibleCard
+          {...sectionProps("negotiation-playbook")}
+          icon={<Sparkles className="h-4 w-4 text-accent" />}
+          title="Negotiation playbook"
+          summary={`−${fmtGBP(analysis.negotiationTotal)} weighted leverage across ${analysis.negotiation.filter((n) => n.gbp_impact > 250).length} points`}
+        >
+          <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Weighted evidence to take to the agent. Full costs are shown where useful, but only the defensible share is counted into the offer.</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
             {analysis.negotiation.filter((n) => n.gbp_impact > 250).map((n, i) => (
               <div key={i} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -431,6 +477,8 @@ function PropertyDetail() {
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="text-[10px] capitalize">{n.category.replace("_", " ")}</Badge>
                       <p className="font-medium">{n.title}</p>
+                      {n.title.startsWith("Survey:") && <JumpLink to="survey" setOpenSections={setOpenSections}>Survey</JumpLink>}
+                      {n.title.includes("EPC") && <JumpLink to="epc" setOpenSections={setOpenSections}>EPC</JumpLink>}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
                     {n.specOptions && n.specOptions.length > 0 && (
@@ -486,78 +534,129 @@ function PropertyDetail() {
                 </ul>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
 
-        <NegotiationPanel
-          property={p}
-          guidance={analysis.negotiationGuidance}
-          onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Target offer set to ${fmtGBP(gbp)}`); }}
-        />
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">Strategy comparison</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator — drag any tunable
-                  cell's slider to flex it and watch the rest ripple through.
-                </p>
-              </div>
-              {Object.keys(over).length > 0 && (
-                <Button variant="outline" size="sm" onClick={resetAll}>
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue={defaultStrategyTab}>
-              <TabsList className="flex w-full flex-wrap">
-                {inScopeStrategies.map((s) => (
-                  <TabsTrigger key={s.key} value={s.key} className="flex-1">
-                    {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {inScopeStrategies.map((s) => (
-                <TabsContent key={s.key} value={s.key} className="pt-4">
-                  <StrategyView s={s} onTune={tune} onReset={resetOne} />
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        {p.pf_json && (
-          <Card>
-            <CardHeader><CardTitle className="text-base">Property Filter signals</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                {p.pf_json.propertyLight?.lastSold && (
-                  <Stat label="Last sold" v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`} />
-                )}
-                {p.pf_json.propertyLight?.equity != null && <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />}
-                {p.pf_json.propertyLight?.article4Status && <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />}
-                {p.pf_json.propertyLight?.councilTax && <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />}
-                {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
-                {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
-              </div>
-              <PriceHistoryTimeline property={p} />
-            </CardContent>
-          </Card>
-        )}
-
-        {p.pf_json && (
-          <MarketComparablesPanel
-            pf_json={p.pf_json}
-            askingPrice={p.asking_price_gbp}
+        <CollapsibleCard
+          {...sectionProps("smart-negotiation")}
+          icon={<Handshake className="h-4 w-4 text-accent" />}
+          title="Smart negotiation"
+          summary={`Open ${fmtGBP(analysis.negotiationGuidance.openingOffer)} · Target ${fmtGBP(analysis.negotiationGuidance.targetOffer)}`}
+        >
+          <NegotiationPanel
+            property={p}
+            guidance={analysis.negotiationGuidance}
+            onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Target offer set to ${fmtGBP(gbp)}`); }}
           />
+        </CollapsibleCard>
+
+        <CollapsibleCard
+          {...sectionProps("strategy-comparison")}
+          icon={<Target className="h-4 w-4 text-accent" />}
+          title="Strategy comparison"
+          summary={`Best: ${best.name} · ${best.dealScore}/100`}
+          actions={Object.keys(over).length > 0 ? (
+            <Button variant="outline" size="sm" onClick={resetAll}>
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
+            </Button>
+          ) : undefined}
+        >
+          <p className="mb-3 text-sm text-muted-foreground">
+            Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator — drag any tunable
+            cell's slider to flex it and watch the rest ripple through.
+          </p>
+          <Tabs defaultValue={defaultStrategyTab}>
+            <TabsList className="flex w-full flex-wrap">
+              {inScopeStrategies.map((s) => (
+                <TabsTrigger key={s.key} value={s.key} className="flex-1">
+                  {s.name} <span className="ml-1.5 text-xs opacity-60">{s.dealScore}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {inScopeStrategies.map((s) => (
+              <TabsContent key={s.key} value={s.key} className="pt-4">
+                <StrategyView s={s} onTune={tune} onReset={resetOne} />
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CollapsibleCard>
+
+        {p.pf_json && (
+          <CollapsibleCard
+            {...sectionProps("pf-signals")}
+            icon={<ClipboardCheck className="h-4 w-4 text-accent" />}
+            title="Property Filter signals"
+            summary={p.pf_json.propertyLight?.lastSold
+              ? `Last sold ${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`
+              : p.pf_json.propertyLight?.equity != null
+                ? `Seller equity ${fmtPct(p.pf_json.propertyLight.equity)}`
+                : "Listing signals"}
+            actions={p.source_link ? (
+              <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <ExternalLink className="h-3.5 w-3.5" /> View listing
+              </a>
+            ) : undefined}
+          >
+            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              {p.pf_json.propertyLight?.lastSold && (
+                <Stat label="Last sold" v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`} />
+              )}
+              {p.pf_json.propertyLight?.equity != null && <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />}
+              {p.pf_json.propertyLight?.article4Status && <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />}
+              {p.pf_json.propertyLight?.councilTax && <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />}
+              {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
+              {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
+            </div>
+            <PriceHistoryTimeline property={p} />
+          </CollapsibleCard>
         )}
-        <EpcPanel propertyId={id} />
-        <SurveyStrategyPanel property={p} />
-        <DealSheetPanel propertyId={id} overrides={over} />
+
+        {p.pf_json && (() => {
+          const marketData = extractMarketDataFromPfJson(p.pf_json?.propertyLight ?? {}, p.pf_json?.propertyDetail ?? {});
+          if (!marketData) return null;
+          const { soldComparables, areaStats, subjectLastSold } = marketData;
+          if (soldComparables.length === 0 && !areaStats?.medianSoldPrice && !areaStats?.averageSoldPrice && !subjectLastSold) return null;
+          return (
+            <CollapsibleCard
+              {...sectionProps("market-comparables")}
+              icon={<TrendingUp className="h-4 w-4 text-accent" />}
+              title="Market comparables"
+              summary={`${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`}
+            >
+              <MarketComparablesPanel pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
+            </CollapsibleCard>
+          );
+        })()}
+
+        <CollapsibleCard
+          {...sectionProps("epc")}
+          icon={<Zap className="h-4 w-4 text-accent" />}
+          title="EPC — energy performance"
+          summary={`EPC ${p.epc_rate ?? "not fetched"}`}
+        >
+          <EpcPanel propertyId={id} />
+        </CollapsibleCard>
+
+        <CollapsibleCard
+          {...sectionProps("survey")}
+          icon={<ClipboardCheck className="h-4 w-4 text-accent" />}
+          title="Survey & condition leverage"
+          summary={(() => {
+            const { totalLeverage, flaggedCount } = computeSurveyLeverage(p);
+            return `${flaggedCount} flagged · −${fmtGBP(totalLeverage)} confirmed`;
+          })()}
+        >
+          <SurveyStrategyPanel property={p} />
+        </CollapsibleCard>
+
+        <CollapsibleCard
+          {...sectionProps("deal-sheet")}
+          icon={<FileText className="h-4 w-4 text-accent" />}
+          title="Deal sheet for investors"
+          summary="Shareable PDF / link"
+        >
+          <DealSheetPanel propertyId={id} overrides={over} />
+        </CollapsibleCard>
       </div>
     </AppShell>
   );
@@ -599,9 +698,12 @@ function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationG
 }
 
 function OfferPlanCard({
-  analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
+  section, setOpenSections, onOpenRefurb, analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
   arv, arvOverridden, sourcingProfitPct, sourcingFeeGbp, onTune, onResetOne,
 }: {
+  section: { id: string; open: boolean; onOpenChange: (open: boolean) => void };
+  setOpenSections: Dispatch<SetStateAction<Record<string, boolean>>>;
+  onOpenRefurb: () => void;
   analysis: AnalysisOutput;
   best: StrategyResult;
   guidance: NegotiationGuidance;
@@ -620,18 +722,37 @@ function OfferPlanCard({
   const sb = guidance.sourcingBuffer;
   const eq = guidance.equityPlan;
   return (
-    <Card className="mb-4 border-primary/30 bg-primary/[0.03]">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Offer plan</span>
-          <span className="flex items-center gap-2">
-            <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
-            <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
-          </span>
-        </CardTitle>
+    <CollapsibleCard
+      {...section}
+      className="mb-4 border-primary/30 bg-primary/[0.03]"
+      icon={<Target className="h-4 w-4 text-primary" />}
+      title={
+        <span className="flex items-center gap-2">
+          Offer plan <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
+          <FormulaInfo
+            title="How the offer plan is calculated"
+            rows={[
+              { label: "Asking price", value: fmtGBP(guidance.askingPrice) },
+              {
+                label: "Weighted leverage",
+                value: `−${fmtGBP(analysis.negotiationTotal)}`,
+                hint: <JumpLink to="negotiation-playbook" setOpenSections={setOpenSections}>View playbook</JumpLink>,
+              },
+              { label: "Price band / stance", value: `${guidance.priceBand} · ${guidance.stance.replace("-", " ")}` },
+              {
+                label: "Equity target",
+                value: eq ? fmtPct(eq.targetEquityPct) : "—",
+                hint: eq ? <JumpLink to="equity-check" setOpenSections={setOpenSections}>View equity check</JumpLink> : undefined,
+              },
+            ]}
+          />
+        </span>
+      }
+      summary={`Target ${fmtGBP(guidance.targetOffer)} · ${guidance.stance.replace("-", " ")} stance${eq ? ` · ${fmtPct(eq.equityPctAtTarget)} equity` : ""}`}
+      actions={<TalkingPointsButton guidance={guidance} negotiation={negotiation} />}
+    >
+      <div className="space-y-3">
         <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>
-      </CardHeader>
-      <CardContent className="space-y-3">
         <DealIndicators indicators={analysis.dealIndicators} />
         <div className="grid gap-3 md:grid-cols-4">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
@@ -670,14 +791,19 @@ function OfferPlanCard({
         </div>
         {guidance.epcToCCost != null && (
           <p className="text-xs text-muted-foreground">
-            EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away ceiling above — required to let from 2030 under MEES rules.
+            EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away ceiling above — required to let from 2030 under MEES rules.{" "}
+            <JumpLink to="epc" setOpenSections={setOpenSections}>EPC details</JumpLink>
           </p>
         )}
         {eq && (
-          <div className="rounded-md border bg-background/60 p-3">
+          <div id="equity-check" className="rounded-md border bg-background/60 p-3">
             <p className="text-sm font-medium">Equity check (target offer)</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              GDV {fmtGBP(eq.gdv)} − offer {fmtGBP(guidance.targetOffer)} − refurb {fmtGBP(eq.refurbCost)} − acquisition costs {fmtGBP(eq.acquisitionCosts)} (SDLT + legal/survey) leaves {fmtGBP(eq.equityAtTarget)} built-in equity ({fmtPct(eq.equityPctAtTarget)} of GDV).
+              GDV {fmtGBP(eq.gdv)} − offer {fmtGBP(guidance.targetOffer)} − refurb{" "}
+              <button type="button" onClick={onOpenRefurb} className="font-medium text-primary hover:underline">
+                {fmtGBP(eq.refurbCost)}
+              </button>
+              {" "}− acquisition costs {fmtGBP(eq.acquisitionCosts)} (SDLT + legal/survey) leaves {fmtGBP(eq.equityAtTarget)} built-in equity ({fmtPct(eq.equityPctAtTarget)} of GDV).
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               The {fmtPct(eq.targetEquityPct)} target gives a 75% LTV BRRR refinance enough headroom to return most/all capital, and gives a flip
@@ -780,8 +906,8 @@ function OfferPlanCard({
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </CollapsibleCard>
   );
 }
 
@@ -817,6 +943,29 @@ function PriceHistoryTimeline({ property }: { property: any }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Expands the target collapsible section (if collapsed) and scrolls it into view —
+ *  used to make derived figures click-through to the section that explains them. */
+function JumpLink({ to, setOpenSections, children }: {
+  to: string;
+  setOpenSections: Dispatch<SetStateAction<Record<string, boolean>>>;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
+      onClick={() => {
+        setOpenSections((s) => ({ ...s, [to]: true }));
+        requestAnimationFrame(() => {
+          document.getElementById(to)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }}
+    >
+      {children} <ArrowRight className="h-3 w-3" />
+    </button>
   );
 }
 
@@ -916,6 +1065,11 @@ function TunableNumberCell({ n, onTune, onReset }: { n: StrategyNumber; onTune: 
       </div>
       <p className="text-lg font-semibold">{fmtNumber(n)}</p>
       {n.hint && <p className="mt-1 text-[10px] text-muted-foreground">{n.hint}</p>}
+      {(n.label === "Mortgage rate" || n.label.startsWith("ICR @")) && (
+        <Link to="/persona" className="mt-1 inline-block text-[10px] text-primary hover:underline">
+          From investor profile →
+        </Link>
+      )}
       {n.overrideKey && n.min != null && n.max != null && (
         <div className="mt-2.5 flex items-center gap-2">
           <Slider

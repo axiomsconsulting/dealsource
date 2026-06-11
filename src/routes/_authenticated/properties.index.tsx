@@ -14,7 +14,7 @@ import { fmtGBP } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle } from "lucide-react";
+import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -64,6 +64,9 @@ function PropertiesPage() {
   const personas = useMemo(() => (personasQ.data ?? []) as any[], [personasQ.data]);
   const activePersona = personas.find((p) => p.is_default) ?? personas[0];
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapsed = (id: string) =>
+    setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [sortBy, setSortBy] = useState<"score" | "yield" | "price_asc" | "price_desc" | "risk">("score");
   const [minScore, setMinScore] = useState(0);
   const ALL_FLAGS = ["shared_ownership","auction","developer_invitation","land_only","planning_only","fake_or_underpriced","listed_building","retirement_only","leasehold_short"] as const;
@@ -347,6 +350,19 @@ function PropertiesPage() {
             </div>
           </SheetContent>
         </Sheet>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={!rows.length}
+          onClick={() => setCollapsed((s) => s.size === rows.length ? new Set() : new Set(rows.map((r) => r.p.id)))}
+        >
+          {collapsed.size === rows.length && rows.length > 0 ? (
+            <><ChevronsUpDown className="mr-2 h-4 w-4" /> Expand all</>
+          ) : (
+            <><ChevronsDownUp className="mr-2 h-4 w-4" /> Collapse all</>
+          )}
+        </Button>
         <div className="flex-1" />
         {selected.size > 0 && (
           <span className="text-sm text-muted-foreground">{selected.size} selected · <button className="underline" onClick={clearSel}>clear</button></span>
@@ -382,19 +398,22 @@ function PropertiesPage() {
           {rows.map(({ p, a, bestFit }) => {
             const best = a ? bestOfSelected(a.strategies, lensSelected) : undefined;
             const hero = (p.image_urls?.[0]) ?? null;
+            const isCollapsed = collapsed.has(p.id);
             return (
               <Card key={p.id} className="overflow-hidden p-0">
                 <div className="flex items-stretch gap-4">
                   <div className="flex items-start p-3">
                     <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggleSel(p.id)} />
                   </div>
-                  <div className="hidden h-32 w-44 shrink-0 bg-muted sm:block">
-                    {hero ? (
-                      <img src={hero} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground"><Home className="h-8 w-8" /></div>
-                    )}
-                  </div>
+                  {!isCollapsed && (
+                    <div className="hidden h-32 w-44 shrink-0 bg-muted sm:block">
+                      {hero ? (
+                        <img src={hero} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-muted-foreground"><Home className="h-8 w-8" /></div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-1 items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -417,7 +436,7 @@ function PropertiesPage() {
                         </a>
                       )}
                     </div>
-                    {a?.riskFlags?.length ? <div className="mt-2"><RiskChips flags={a.riskFlags as any} /></div> : null}
+                    {!isCollapsed && a?.riskFlags?.length ? <div className="mt-2"><RiskChips flags={a.riskFlags as any} /></div> : null}
                     <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <span>Asking {fmtGBP(p.asking_price_gbp)}</span>
                       {a && (best
@@ -426,8 +445,8 @@ function PropertiesPage() {
                       {a && !a.personaMatch.pass && <span className="text-amber-700">Criteria mismatch</span>}
                       {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
                     </div>
-                    {a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
-                    {a && (
+                    {!isCollapsed && a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
+                    {!isCollapsed && a && (
                       <div className="mt-3">
                         <RiskExplainer flags={a.riskFlags as any} score={a.overallScore} />
                       </div>
@@ -442,6 +461,9 @@ function PropertiesPage() {
                         <div className="text-xs text-muted-foreground">deal score</div>
                       </div>
                     )}
+                    <Button variant="ghost" size="icon" onClick={() => toggleCollapsed(p.id)} title={isCollapsed ? "Expand" : "Collapse"}>
+                      {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => delMut.mutate(p.id)}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                   </div>

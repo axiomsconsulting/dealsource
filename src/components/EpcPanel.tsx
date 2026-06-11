@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Flame, KeyRound, RefreshCw, Zap } from "lucide-react";
+import { Flame, KeyRound, RefreshCw } from "lucide-react";
 import {
   fetchEpcForProperty, selectEpcCertificate, getEpcForProperty, getEpcCredentialsStatus, saveEpcCredentials, clearEpcCredentials,
   EPC_BANDS, bandForScore,
@@ -86,30 +85,27 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
   const roadmap = useMemo(() => epc ? buildEpcRoadmap(epc) : null, [epc]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2"><Zap className="h-4 w-4 text-accent" /> EPC — energy performance</span>
-          {credQ.isSuccess && configured && (
-            <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => { setCandidates(null); mut.mutate(); }}>
-              <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
-              {epc?.source === "pf_json" ? "Enrich from EPC register" : epc ? "Refetch from register" : "Fetch from EPC register"}
-            </Button>
-          )}
-        </CardTitle>
-        <CardDescription>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
           {epc?.source === "pf_json"
             ? <>Band and SAP score from the listing JSON — fetching from the register adds the full element-by-element breakdown, assessor-costed improvement roadmap, and official certificate link.</>
             : epc
               ? <>From the government EPC register — matched on the exact registered address{epc.matchedManually ? " (you confirmed this one)" : ""}{fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}</>
               : "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className={epc || candidates ? "border-b pb-6" : undefined}>
+        </p>
+        {credQ.isSuccess && configured && (
+          <Button size="sm" variant={epc ? "outline" : "default"} disabled={mut.isPending} onClick={() => { setCandidates(null); mut.mutate(); }}>
+            <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
+            {epc?.source === "pf_json" ? "Enrich from EPC register" : epc ? "Refetch from register" : "Fetch from EPC register"}
+          </Button>
+        )}
+      </div>
+      <div className={epc || candidates ? "border-b pb-6" : undefined}>
         <EpcCredentialsForm />
-      </CardContent>
+      </div>
       {candidates && (
-        <CardContent className="border-b pb-6">
+        <div className="border-b pb-6">
           <h4 className="mb-1 text-sm font-semibold">Which of these is this property?</h4>
           <p className="mb-3 text-xs text-muted-foreground">
             The register doesn't have an exact address match for postcode {searchedPostcode} — rather than guess (and risk showing you
@@ -134,10 +130,10 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
               ))}
             </ul>
           )}
-        </CardContent>
+        </div>
       )}
       {epc && (
-        <CardContent className="space-y-6">
+        <div className="space-y-6">
           {epc.address && (
             <p className="text-xs text-muted-foreground">
               Matched certificate: {epc.address} · lodged {epc.lodgementDate ? new Date(epc.lodgementDate).toLocaleDateString("en-GB") : "unknown date"}
@@ -203,9 +199,9 @@ export function EpcPanel({ propertyId }: { propertyId: string }) {
               )}
             </div>
           )}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
 

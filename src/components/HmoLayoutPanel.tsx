@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BedDouble, Loader2, ShowerHead, Sparkles, UtensilsCrossed } from "lucide-react";
+import { Loader2, ShowerHead, Sparkles, UtensilsCrossed } from "lucide-react";
 import { analyseHmoLayout, getAIAnalysis } from "@/lib/ai.functions";
 import { toast } from "sonner";
 
@@ -29,20 +28,16 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
   if (!hasFloorPlan) return null;
 
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-accent" /> HMO / SA layout assessment</span>
+    <div className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            How many lettable rooms this layout can realistically support, and where there's room for an ensuite — or a fully self-contained ensuite + kitchenette unit for serviced accommodation.
+          </p>
           <Button size="sm" variant={layout ? "outline" : "default"} disabled={mut.isPending} onClick={() => mut.mutate()}>
             {mut.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1.5 h-3 w-3" />}
             {layout ? "Re-analyse floor plan" : "Analyse floor plan for HMO/SA"}
           </Button>
-        </CardTitle>
-        <CardDescription>
-          How many lettable rooms this layout can realistically support, and where there's room for an ensuite — or a fully self-contained ensuite + kitchenette unit for serviced accommodation.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </div>
         {areaEstimate && (
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <p className="font-medium">Floor-area ceiling — statutory minimum bedroom size</p>
@@ -129,7 +124,6 @@ export function HmoLayoutPanel({ propertyId, hasFloorPlan }: { propertyId: strin
             Run the analysis to get a room-by-room conversion proposal from the floor plan — including where there's space for an ensuite, and whether any part of the property could work as a self-contained ensuite + kitchenette unit for serviced accommodation.
           </p>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

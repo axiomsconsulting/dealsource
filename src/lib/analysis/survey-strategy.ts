@@ -278,6 +278,24 @@ export function buildSurveyStrategy(prop: PropertyInput): SurveyIssue[] {
 // the static survey-strategy briefing above.
 const SEVERITY_RATIO: Record<SurveySeverity, number> = { low: 0, medium: 0.5, high: 1 };
 
+/** Confirmed survey leverage and flagged-issue count for the property-detail page's collapsed
+ *  Survey card summary — same range/severity math as the panel's per-issue calculation, just
+ *  totalled across all issues. */
+export function computeSurveyLeverage(prop: PropertyInput): { totalLeverage: number; flaggedCount: number } {
+  const issues = buildSurveyStrategy(prop);
+  const findings: SurveyFindings = ((prop as any).survey_findings as SurveyFindings) ?? {};
+  const asking = Number((prop as any).asking_price_gbp ?? 0);
+  const flaggedCount = issues.filter((i) => i.signal === "flagged").length;
+  const totalLeverage = issues.reduce((sum, issue) => {
+    const f = findings[issue.key];
+    if (!f?.active || asking <= 0) return sum;
+    const ratio = SEVERITY_RATIO[f.severity] ?? 0.5;
+    const pct = issue.markdownLowPct + (issue.markdownHighPct - issue.markdownLowPct) * ratio;
+    return sum + Math.round(asking * pct);
+  }, 0);
+  return { totalLeverage, flaggedCount };
+}
+
 /** Turns confirmed survey findings (`prop.survey_findings`, keyed by `SurveyIssue.key`) into
  *  negotiation points: each confirmed finding becomes a "fault" (survey-confirmed, high
  *  confidence) leverage line, sized by severity within that issue's markdown range. These feed
