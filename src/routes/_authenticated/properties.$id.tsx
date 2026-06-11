@@ -655,7 +655,7 @@ function PropertyDetail() {
           title="Deal sheet for investors"
           summary="Shareable PDF / link"
         >
-          <DealSheetPanel propertyId={id} overrides={over} />
+          <DealSheetPanel propertyId={id} overrides={over} personaId={persona.id} personaName={persona.name} />
         </CollapsibleCard>
       </div>
     </AppShell>

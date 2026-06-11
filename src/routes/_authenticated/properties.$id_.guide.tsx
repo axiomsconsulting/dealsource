@@ -294,7 +294,7 @@ function GuidedWalkthrough() {
             <ListChecks className="h-4 w-4 shrink-0 text-primary" />
             <span>Property reviewed · Numbers checked · Strategy chosen ({best.name}) · Risks noted · Negotiation planned — ready to generate.</span>
           </div>
-          <DealSheetPanel propertyId={id} overrides={{}} />
+          <DealSheetPanel propertyId={id} overrides={{}} personaId={persona.id} personaName={persona.name} />
         </div>
       ),
     },
