@@ -262,7 +262,21 @@ function PropertyDetail() {
         </div>
       </div>
 
-      <BottomLineCard analysis={analysis} best={best} />
+      <OfferPlanCard
+        analysis={analysis}
+        best={best}
+        guidance={analysis.negotiationGuidance}
+        negotiation={analysis.negotiation}
+        personaPass={analysis.personaMatch.pass}
+        sourcingBufferEnabled={!!over.sourcingBufferEnabled}
+        onToggleSourcingBuffer={toggleSourcingBuffer}
+        arv={analysis.effectiveInputs.arv}
+        arvOverridden={over.arv !== undefined}
+        sourcingProfitPct={over.sourcingProfitPct ?? 0.25}
+        sourcingFeeGbp={over.sourcingFeeGbp ?? 5000}
+        onTune={tune}
+        onResetOne={resetOne}
+      />
 
       {heroImages.length > 0 && (
         <Card className="mb-4 overflow-hidden p-0">
@@ -403,19 +417,6 @@ function PropertyDetail() {
             </CardContent>
           </Card>
         )}
-        <OfferPlanCard
-          guidance={analysis.negotiationGuidance}
-          negotiation={analysis.negotiation}
-          personaPass={analysis.personaMatch.pass}
-          sourcingBufferEnabled={!!over.sourcingBufferEnabled}
-          onToggleSourcingBuffer={toggleSourcingBuffer}
-          arv={analysis.effectiveInputs.arv}
-          arvOverridden={over.arv !== undefined}
-          sourcingProfitPct={over.sourcingProfitPct ?? 0.25}
-          sourcingFeeGbp={over.sourcingFeeGbp ?? 5000}
-          onTune={tune}
-          onResetOne={resetOne}
-        />
 
         <Card>
           <CardHeader>
@@ -562,36 +563,6 @@ function PropertyDetail() {
   );
 }
 
-function BottomLineCard({ analysis, best }: { analysis: AnalysisOutput; best: StrategyResult }) {
-  const g = analysis.negotiationGuidance;
-  return (
-    <Card className="mb-4 border-primary/30 bg-primary/[0.03]">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Bottom line</span>
-          <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <DealIndicators indicators={analysis.dealIndicators} />
-        <div className="grid gap-3 md:grid-cols-4">
-          <Stat label="Opening bid" v={fmtGBP(g.openingOffer)} />
-          <Stat label="Target deal price" v={fmtGBP(g.targetOffer)} />
-          <Stat label="Walk-away ceiling" v={fmtGBP(g.walkAwayOffer)} />
-          <div className="rounded-md bg-muted/50 p-2.5">
-            <div className="flex items-center justify-between gap-1">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Insurance (est.)</p>
-              <InsuranceInfo insurance={analysis.insurance} />
-            </div>
-            <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationGuidance; negotiation: NegotiationPoint[] }) {
   const [copied, setCopied] = useState(false);
   const script = useMemo(() => buildTalkingPointsScript(guidance, negotiation), [guidance, negotiation]);
@@ -628,9 +599,11 @@ function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationG
 }
 
 function OfferPlanCard({
-  guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
+  analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
   arv, arvOverridden, sourcingProfitPct, sourcingFeeGbp, onTune, onResetOne,
 }: {
+  analysis: AnalysisOutput;
+  best: StrategyResult;
   guidance: NegotiationGuidance;
   negotiation: NegotiationPoint[];
   personaPass: boolean;
@@ -645,22 +618,48 @@ function OfferPlanCard({
 }) {
   const discount = guidance.askingPrice > 0 ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice : 0;
   const sb = guidance.sourcingBuffer;
+  const eq = guidance.equityPlan;
   return (
-    <Card className="border-primary/30 bg-primary/[0.03]">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-2 text-base">
+    <Card className="mb-4 border-primary/30 bg-primary/[0.03]">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Offer plan</span>
-          <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
+          <span className="flex items-center gap-2">
+            <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
+            <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
+          </span>
         </CardTitle>
+        <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        <DealIndicators indicators={analysis.dealIndicators} />
         <div className="grid gap-3 md:grid-cols-4">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
           <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
           <Stat label="Walk-away ceiling" v={fmtGBP(guidance.walkAwayOffer)} />
           <Stat label="Discount at target" v={fmtPct(discount)} />
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-md bg-muted/50 p-2.5">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Insurance (est.)</p>
+              <InsuranceInfo insurance={analysis.insurance} />
+            </div>
+            <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
+          </div>
+          {eq && (
+            <div className="rounded-md bg-muted/50 p-2.5 md:col-span-3">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Built-in equity at target offer</p>
+                <Badge className={eq.meetsTarget ? "bg-emerald-600" : "bg-amber-600"}>
+                  {eq.meetsTarget ? "Meets 25% target" : "Below 25% target"}
+                </Badge>
+              </div>
+              <p className="font-medium">{fmtGBP(eq.equityAtTarget)} ({fmtPct(eq.equityPctAtTarget)} of GDV)</p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline" className="capitalize">{guidance.stance.replace("-", " ")}</Badge>
           <Badge variant="outline">{guidance.priceBand}</Badge>
           <span className="inline-flex items-center gap-1">
@@ -670,11 +669,28 @@ function OfferPlanCard({
           {!personaPass && <span className="text-amber-700">Current investor criteria do not fully fit this property.</span>}
         </div>
         {guidance.epcToCCost != null && (
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away ceiling above — required to let from 2030 under MEES rules.
           </p>
         )}
-        <div className="mt-4 rounded-md border bg-background/60 p-3">
+        {eq && (
+          <div className="rounded-md border bg-background/60 p-3">
+            <p className="text-sm font-medium">Equity check (target offer)</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              GDV {fmtGBP(eq.gdv)} − offer {fmtGBP(guidance.targetOffer)} − refurb {fmtGBP(eq.refurbCost)} − acquisition costs {fmtGBP(eq.acquisitionCosts)} (SDLT + legal/survey) leaves {fmtGBP(eq.equityAtTarget)} built-in equity ({fmtPct(eq.equityPctAtTarget)} of GDV).
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The {fmtPct(eq.targetEquityPct)} target gives a 75% LTV BRRR refinance enough headroom to return most/all capital, and gives a flip
+              ~{fmtPct(eq.targetEquityPct)} of GDV to cover buy/hold/sell costs (~10%) plus genuine profit.
+            </p>
+            {!eq.meetsTarget && (
+              <p className="mt-2 text-xs text-amber-700">
+                To hit {fmtPct(eq.targetEquityPct)} equity, the offer would need to come down to around {fmtGBP(eq.maxOfferForTargetEquity)} (or the refurb scope/GDV would need to improve).
+              </p>
+            )}
+          </div>
+        )}
+        <div className="rounded-md border bg-background/60 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Sourcing buffer</p>

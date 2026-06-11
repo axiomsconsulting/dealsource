@@ -184,6 +184,23 @@ export interface NegotiationGuidance {
     sourcingFeeGbp: number;
     computedOffer: number;
   };
+  /** Built-in-equity check at the target offer: does (GDV − all-in cost) leave the ~25% margin
+   *  standard BRRR/refurbishment practice looks for (the level that lets a 75% LTV refinance
+   *  return most/all capital, and gives a flip enough headroom to cover ~10% buy/hold/sell costs
+   *  plus genuine profit)? `maxOfferForTargetEquity` is the highest price that still hits
+   *  `targetEquityPct` given the same refurb/acquisition costs — a ceiling distinct from (and
+   *  often below) the negotiation-evidence-based `walkAwayOffer`. */
+  equityPlan?: {
+    gdv: number;
+    refurbCost: number;
+    acquisitionCosts: number;
+    targetEquityPct: number;
+    totalCostAtTarget: number;
+    equityAtTarget: number;
+    equityPctAtTarget: number;
+    meetsTarget: boolean;
+    maxOfferForTargetEquity: number;
+  };
 }
 
 export interface AnalysisOutput {

@@ -256,6 +256,45 @@ async function loadCertificateAndPersist(context: any, propertyId: string, certi
   return { status: "matched" as const, epc_data, epc_fetched_at };
 }
 
+const FULL_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+
+/** Best-effort, silent EPC auto-match for newly-imported properties — same exact-match-only
+ *  matching as `fetchEpcForProperty` below, but returns null instead of throwing when the user
+ *  has no register token configured, the property has no full postcode yet, or there's no exact
+ *  (or unambiguous) match. Used by `ingestFromUrl` so a freshly-scraped property gets its EPC
+ *  band/recommendations without an extra click, when it unambiguously can. */
+export async function tryAutoMatchEpc(
+  supabase: any,
+  userId: string,
+  propertyId: string,
+  address: string | null,
+  postcode: string | null,
+): Promise<{ epc_data: any; epc_fetched_at: string } | null> {
+  if (!postcode || !FULL_POSTCODE_RE.test(postcode)) return null;
+  const token = await loadUserEpcToken(supabase, userId);
+  if (!token) return null;
+
+  try {
+    const search = await epcFetch(`/api/domestic/search?postcode=${encodeURIComponent(postcode)}&page_size=100`, token);
+    const rows: any[] = search?.data ?? [];
+    if (!rows.length) return null;
+
+    const scored = rows
+      .map((r) => ({ row: r, ...scoreAddressMatch(address ?? "", r) }))
+      .sort((a, b) => (Number(b.exact) - Number(a.exact)) || (Number(b.numberMatch) - Number(a.numberMatch)) || (b.score - a.score)
+        || String(b.row.registrationDate ?? "").localeCompare(String(a.row.registrationDate ?? "")));
+
+    const exactMatches = scored.filter((s) => s.exact);
+    if (exactMatches.length !== 1) return null;
+
+    const context = { supabase, userId };
+    const result = await loadCertificateAndPersist(context, propertyId, exactMatches[0].row.certificateNumber, token, false);
+    return { epc_data: result.epc_data, epc_fetched_at: result.epc_fetched_at };
+  } catch {
+    return null;
+  }
+}
+
 // Wrong EPC matches are worse than no match — they put another property's improvement costs,
 // scores and recommendations in front of the user as if they were this property's own. So the
 // only thing this ever does *without* asking is an exact, normalised string match (for the very

@@ -594,6 +594,17 @@ export function analyseProperty(
     rent_range, lender_criteria: lenderCriteria,
   };
 
+  // Built-in-equity check: a refurb offer isn't just "asking minus refurb minus issues" — good
+  // BRRR/sourcing practice is to leave ~25% equity in the deal at completion (GDV − all-in cost),
+  // because that's roughly what a 75% LTV refinance needs to return most/all of the cash invested,
+  // and it's the same headroom a flip needs to absorb ~10% buy/hold/sell costs and still profit.
+  // `acquisitionCosts` covers SDLT plus a flat legal/survey allowance; `maxOfferForTargetEquity`
+  // is the highest price that still clears that 25% bar given the same refurb/acquisition costs —
+  // a ceiling that can sit below the evidence-based walk-away offer on properties needing heavy work.
+  const TARGET_EQUITY_PCT = 0.25;
+  const ACQUISITION_LEGAL_SURVEY_GBP = 2000;
+  const acquisitionCosts = SDLT_INVESTOR(offer_price) + ACQUISITION_LEGAL_SURVEY_GBP;
+
   // 5d: sourcing-buffer toggle — recompute the offer plan from a GDV basis (post-refurb ARV ×
   // (1 − target profit %), less refurb cost and a sourcing fee) and shift the whole offer plan
   // by the same amount so the gaps between opening/target/walk-away are preserved. GDV here is
@@ -629,6 +640,31 @@ export function analyseProperty(
     if (sourcingOffer < negotiation.guidance.walkAwayOffer * 0.85) {
       negotiation.guidance.warnings.push(
         `Sourcing buffer offer (£${sourcingOffer.toLocaleString()}) is well below the walk-away ceiling (£${negotiation.guidance.walkAwayOffer.toLocaleString()}) — a reduction this large needs strong, evidenced justification (e.g. confirmed refurb scope + comparable GDV) to put to an agent.`
+      );
+    }
+  }
+
+  {
+    const targetForEquity = negotiation.guidance.targetOffer;
+    const totalCostAtTarget = targetForEquity + refurb_cost + acquisitionCosts;
+    const equityAtTarget = arv - totalCostAtTarget;
+    const equityPctAtTarget = arv > 0 ? equityAtTarget / arv : 0;
+    const maxOfferForTargetEquity = Math.max(0, Math.round(arv * (1 - TARGET_EQUITY_PCT) - refurb_cost - acquisitionCosts));
+    const meetsTarget = equityPctAtTarget >= TARGET_EQUITY_PCT;
+    negotiation.guidance.equityPlan = {
+      gdv: arv,
+      refurbCost: refurb_cost,
+      acquisitionCosts,
+      targetEquityPct: TARGET_EQUITY_PCT,
+      totalCostAtTarget,
+      equityAtTarget,
+      equityPctAtTarget,
+      meetsTarget,
+      maxOfferForTargetEquity,
+    };
+    if (!meetsTarget && negotiation.guidance.askingPrice > 0 && maxOfferForTargetEquity < targetForEquity) {
+      negotiation.guidance.warnings.push(
+        `At the target offer of £${targetForEquity.toLocaleString()}, built-in equity is only ${(equityPctAtTarget * 100).toFixed(1)}% of GDV (£${arv.toLocaleString()}) — below the ~25% most BRRR/refinance plans need. To hit 25%, the offer would need to come down to around £${maxOfferForTargetEquity.toLocaleString()} (or the refurb scope/GDV would need to improve).`
       );
     }
   }

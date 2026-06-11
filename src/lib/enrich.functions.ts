@@ -3,6 +3,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { parsePropertyFilterJson } from "./parsers/json";
 import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
+import { tryAutoMatchEpc } from "./epc.functions";
+import { estimateRefurb } from "./analysis/refurb";
 
 /** Folds a Rightmove "Reduced on dd/mm/yyyy" date (lifted from PAGE_MODEL by `scrapeListing`)
  *  into the `pf_json` shape `buildNegotiation` already reads (`propertyLight.multipleReduce`,
@@ -53,6 +55,26 @@ export const enrichFromUrl = createServerFn({ method: "POST" })
 
     const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
     if (error) throw new Error(error.message);
+
+    // A URL enrich often resolves a full postcode for the first time — try an automatic EPC
+    // match now rather than waiting for the user to open the EPC panel.
+    if (patch.postcode) {
+      const { data: row } = await context.supabase
+        .from("properties").select("address, postcode, epc_rate, epc_data, refurb_estimate").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+      if (row && !row.epc_data) {
+        const epcMatch = await tryAutoMatchEpc(context.supabase, context.userId, data.propertyId, row.address, row.postcode);
+        if (epcMatch?.epc_data?.currentRating) {
+          const epc_rate = String(epcMatch.epc_data.currentRating).toUpperCase().slice(0, 1);
+          const refurbWithEpc = estimateRefurb({ ...row, epc_rate } as any, "medium");
+          await context.supabase
+            .from("properties")
+            .update({ epc_rate, refurb_estimate: refurbWithEpc as any })
+            .eq("id", data.propertyId).eq("user_id", context.userId);
+          patch.epc_rate = epc_rate;
+        }
+      }
+    }
+
     return { ok: true, fieldsUpdated: Object.keys(patch), imageCount: scraped.image_urls.length };
   });
 
@@ -120,6 +142,24 @@ export const enrichFromPfJson = createServerFn({ method: "POST" })
 
     const { error } = await context.supabase.from("properties").update(patch).eq("id", data.propertyId).eq("user_id", context.userId);
     if (error) throw new Error(error.message);
+
+    // PF JSON often resolves a full postcode for the first time (refineIfBetter above) — try an
+    // automatic register EPC match now if one isn't on file yet.
+    if (patch.postcode && !existing.epc_data && !patch.epc_data) {
+      const address = patch.address ?? existing.address;
+      const postcode = patch.postcode;
+      const epcMatch = await tryAutoMatchEpc(context.supabase, context.userId, data.propertyId, address, postcode);
+      if (epcMatch?.epc_data?.currentRating) {
+        const epc_rate = String(epcMatch.epc_data.currentRating).toUpperCase().slice(0, 1);
+        const refurbWithEpc = estimateRefurb({ ...existing, ...patch, epc_rate } as any, "medium");
+        await context.supabase
+          .from("properties")
+          .update({ epc_rate, refurb_estimate: refurbWithEpc as any })
+          .eq("id", data.propertyId).eq("user_id", context.userId);
+        patch.epc_rate = epc_rate;
+      }
+    }
+
     const countedFields = Object.keys(patch).filter((k) => k !== "pf_json");
     return {
       ok: true,

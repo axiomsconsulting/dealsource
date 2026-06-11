@@ -56,24 +56,49 @@ function derivePostcodeFromText(root: any, address: string | null): string | nul
   return (m[2] ? `${m[1]} ${m[2]}` : m[1]).toUpperCase();
 }
 
+/** Fetches a Rightmove listing page directly (no Firecrawl) so PAGE_MODEL extraction doesn't
+ *  depend on Firecrawl's `onlyMainContent` handling, which can strip the `<script>` tags that
+ *  carry it from `rawHtml`. Rightmove serves PAGE_MODEL in the initial server-rendered HTML, so a
+ *  plain fetch with a browser-like User-Agent is enough — no JS execution needed. Best-effort:
+ *  returns null on any network/HTTP failure and the Firecrawl-derived data is used instead. */
+async function fetchRightmoveHtmlDirect(url: string): Promise<string | null> {
+  if (!/rightmove\.co\.uk/i.test(url)) return null;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.9",
+      },
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
 export async function scrapeListing(url: string): Promise<ScrapedListing> {
   const key = process.env.FIRECRAWL_API_KEY;
   if (!key) throw new Error("Firecrawl is not connected — link it in Connectors to enable URL enrichment.");
 
-  const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      url,
-      formats: ["markdown", "links", "rawHtml", { type: "json", prompt: EXTRACT_PROMPT }],
-      onlyMainContent: true,
+  const [res, directHtml] = await Promise.all([
+    fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown", "links", "rawHtml", { type: "json", prompt: EXTRACT_PROMPT }],
+        onlyMainContent: true,
+      }),
     }),
-  });
+    fetchRightmoveHtmlDirect(url),
+  ]);
   if (!res.ok) throw new Error(`Firecrawl ${res.status}: ${await res.text()}`);
   const body = await res.json();
   const root = body?.data ?? body;
   const j = root?.json ?? root?.extract ?? {};
-  const pm = deriveFromRightmovePageModel(extractRightmovePageModel(root?.rawHtml ?? root?.html));
+  const pm = deriveFromRightmovePageModel(extractRightmovePageModel(directHtml ?? root?.rawHtml ?? root?.html));
 
   const address = j.address ? String(j.address) : (pm?.address ?? deriveAddressFromText(root));
   const postcode = j.postcode

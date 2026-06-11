@@ -6,6 +6,7 @@ import { lookupArticle4WithClient } from "./analysis/article4";
 import { estimateRefurb } from "./analysis/refurb";
 import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
 import { mergePriceReductionIntoPfJson } from "./enrich.functions";
+import { tryAutoMatchEpc } from "./epc.functions";
 
 const PropertyInputSchema = z.object({
   address: z.string().min(1).max(500),
@@ -101,6 +102,20 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
       .select("id, address")
       .single();
     if (error) throw new Error(error.message);
+
+    // Auto-fetch EPC immediately if the postcode is unambiguous and the user has a register
+    // token configured — silently skipped otherwise (user can resolve via the EPC panel).
+    const epcMatch = await tryAutoMatchEpc(context.supabase, context.userId, inserted.id, propInput.address, propInput.postcode ?? null);
+    if (epcMatch?.epc_data?.currentRating) {
+      const epc_rate = String(epcMatch.epc_data.currentRating).toUpperCase().slice(0, 1);
+      const refurbWithEpc = estimateRefurb({ ...propInput, epc_rate }, "medium");
+      await context.supabase
+        .from("properties")
+        .update({ epc_rate, refurb_estimate: refurbWithEpc as any })
+        .eq("id", inserted.id)
+        .eq("user_id", context.userId);
+    }
+
     return { property: inserted };
   });
 
