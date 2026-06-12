@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { extractPriceHistory, fmtHistoryDate } from "@/lib/analysis/price-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -296,6 +297,7 @@ function PropertyDetail() {
 
       <OfferPlanCard
         section={sectionProps("offer-plan")}
+        propertyId={id}
         setOpenSections={setOpenSections}
         onOpenRefurb={() => setActivePanel("refurb")}
         analysis={analysis}
@@ -320,6 +322,7 @@ function PropertyDetail() {
           icon={<Camera className="h-4 w-4 text-accent" />}
           title="Photos"
           summary={`${heroImages.length} photo${heroImages.length === 1 ? "" : "s"}`}
+          actions={<FeedbackWidget propertyId={id} sectionKey="photos" sectionLabel="Photos" />}
         >
           <div className="-mx-6 -mt-4 overflow-hidden rounded-md sm:mx-0 sm:mt-0">
             <div className="grid grid-cols-4 gap-1">
@@ -374,6 +377,7 @@ function PropertyDetail() {
           icon={<FileStack className="h-4 w-4 text-accent" />}
           title={`Floor plan${floorPlans.length > 1 ? "s" : ""}`}
           summary={`${floorPlans.length} floor plan${floorPlans.length === 1 ? "" : "s"}`}
+          actions={<FeedbackWidget propertyId={id} sectionKey="floorplans" sectionLabel="Floorplans" />}
         >
           <div className={cn("grid gap-3", floorPlans.length > 1 ? "sm:grid-cols-2" : "")}>
             {floorPlans.map((u, i) => (
@@ -392,6 +396,7 @@ function PropertyDetail() {
           icon={<BedDouble className="h-4 w-4 text-accent" />}
           title="HMO / SA layout assessment"
           summary="Room-by-room conversion feasibility"
+          actions={<FeedbackWidget propertyId={id} sectionKey="hmo-layout" sectionLabel="HMO Layout" />}
         >
           <HmoLayoutPanel
             propertyId={id}
@@ -404,28 +409,40 @@ function PropertyDetail() {
 
       <Dialog open={activePanel === "photos"} onOpenChange={(o) => setActivePanel(o ? "photos" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Photos</DialogTitle></DialogHeader>
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+            <DialogTitle>Photos</DialogTitle>
+            <FeedbackWidget propertyId={id} sectionKey="photos-scan" sectionLabel="AI Photo Scan" />
+          </DialogHeader>
           <PhotosPanel propertyId={id} listingImageCount={heroImages.length} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={activePanel === "refurb"} onOpenChange={(o) => setActivePanel(o ? "refurb" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Refurb Estimator</DialogTitle></DialogHeader>
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+            <DialogTitle>Refurb Estimator</DialogTitle>
+            <FeedbackWidget propertyId={id} sectionKey="refurb-estimator" sectionLabel="Refurb Estimator" />
+          </DialogHeader>
           <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={activePanel === "library"} onOpenChange={(o) => setActivePanel(o ? "library" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader><DialogTitle>Image library</DialogTitle></DialogHeader>
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+            <DialogTitle>Image library</DialogTitle>
+            <FeedbackWidget propertyId={id} sectionKey="image-library" sectionLabel="Image Library" />
+          </DialogHeader>
           <ImageLibrary propertyId={id} urls={heroImages} defaultExpanded />
         </DialogContent>
       </Dialog>
 
       <Dialog open={activePanel === "enrich"} onOpenChange={(o) => setActivePanel(o ? "enrich" : null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Enrich from listing URL</DialogTitle></DialogHeader>
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+            <DialogTitle>Enrich from listing URL</DialogTitle>
+            <FeedbackWidget propertyId={id} sectionKey="enrich-listing" sectionLabel="Enrich Listing" />
+          </DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="https://www.rightmove.co.uk/properties/..."
@@ -483,6 +500,7 @@ function PropertyDetail() {
           icon={<Sparkles className="h-4 w-4 text-accent" />}
           title="Negotiation playbook"
           summary={`−${fmtGBP(analysis.negotiationTotal)} weighted leverage across ${analysis.negotiation.filter((n) => n.gbp_impact > 250).length} points`}
+          actions={<FeedbackWidget propertyId={id} sectionKey="negotiation-playbook" sectionLabel="Negotiation Playbook" />}
         >
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Weighted evidence to take to the agent. Full costs are shown where useful, but only the defensible share is counted into the offer.</p>
@@ -552,6 +570,7 @@ function PropertyDetail() {
           icon={<Handshake className="h-4 w-4 text-accent" />}
           title="Smart negotiation"
           summary={`Open ${fmtGBP(analysis.negotiationGuidance.openingOffer)} · Target ${fmtGBP(analysis.negotiationGuidance.targetOffer)}`}
+          actions={<FeedbackWidget propertyId={id} sectionKey="smart-negotiation" sectionLabel="Smart Negotiation" />}
         >
           <NegotiationPanel
             property={p}
@@ -565,11 +584,16 @@ function PropertyDetail() {
           icon={<Target className="h-4 w-4 text-accent" />}
           title="Strategy comparison"
           summary={`Best: ${best.name} · ${best.dealScore}/100`}
-          actions={Object.keys(over).length > 0 ? (
-            <Button variant="outline" size="sm" onClick={resetAll}>
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
-            </Button>
-          ) : undefined}
+          actions={
+            <div className="flex items-center gap-1">
+              {Object.keys(over).length > 0 && (
+                <Button variant="outline" size="sm" onClick={resetAll}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
+                </Button>
+              )}
+              <FeedbackWidget propertyId={id} sectionKey="strategy-comparison" sectionLabel="Strategy Comparison" />
+            </div>
+          }
         >
           <p className="mb-3 text-sm text-muted-foreground">
             Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator — drag any tunable
@@ -607,11 +631,16 @@ function PropertyDetail() {
               : p.pf_json.propertyLight?.equity != null
                 ? `Seller equity ${fmtPct(p.pf_json.propertyLight.equity)}`
                 : "Listing signals"}
-            actions={p.source_link ? (
-              <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                <ExternalLink className="h-3.5 w-3.5" /> View listing
-              </a>
-            ) : undefined}
+            actions={
+              <div className="flex items-center gap-2">
+                {p.source_link && (
+                  <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <ExternalLink className="h-3.5 w-3.5" /> View listing
+                  </a>
+                )}
+                <FeedbackWidget propertyId={id} sectionKey="pf-signals" sectionLabel="PF Signals" />
+              </div>
+            }
           >
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               {p.pf_json.propertyLight?.lastSold && (
@@ -638,6 +667,7 @@ function PropertyDetail() {
               icon={<TrendingUp className="h-4 w-4 text-accent" />}
               title="Market comparables"
               summary={`${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`}
+              actions={<FeedbackWidget propertyId={id} sectionKey="market-comparables" sectionLabel="Market Comparables" />}
             >
               <MarketComparablesPanel pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
             </CollapsibleCard>
@@ -649,6 +679,7 @@ function PropertyDetail() {
           icon={<Zap className="h-4 w-4 text-accent" />}
           title="EPC — energy performance"
           summary={`EPC ${p.epc_rate ?? "not fetched"}`}
+          actions={<FeedbackWidget propertyId={id} sectionKey="epc" sectionLabel="EPC" />}
         >
           <EpcPanel propertyId={id} property={p} />
         </CollapsibleCard>
@@ -661,6 +692,7 @@ function PropertyDetail() {
             const { totalLeverage, flaggedCount } = computeSurveyLeverage(p);
             return `${flaggedCount} flagged · −${fmtGBP(totalLeverage)} confirmed`;
           })()}
+          actions={<FeedbackWidget propertyId={id} sectionKey="survey" sectionLabel="Survey Findings" />}
         >
           <SurveyStrategyPanel property={p} />
         </CollapsibleCard>
@@ -670,6 +702,7 @@ function PropertyDetail() {
           icon={<FileText className="h-4 w-4 text-accent" />}
           title="Deal sheet for investors"
           summary="Shareable PDF / link"
+          actions={<FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />}
         >
           <DealSheetPanel propertyId={id} overrides={over} personaId={persona.id} personaName={persona.name} />
         </CollapsibleCard>
@@ -714,10 +747,11 @@ function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationG
 }
 
 function OfferPlanCard({
-  section, setOpenSections, onOpenRefurb, analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
+  section, propertyId, setOpenSections, onOpenRefurb, analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
   arv, arvOverridden, sourcingProfitPct, sourcingFeeGbp, onTune, onResetOne,
 }: {
   section: { id: string; open: boolean; onOpenChange: (open: boolean) => void };
+  propertyId: string;
   setOpenSections: Dispatch<SetStateAction<Record<string, boolean>>>;
   onOpenRefurb: () => void;
   analysis: AnalysisOutput;
@@ -765,7 +799,12 @@ function OfferPlanCard({
         </span>
       }
       summary={`Target ${fmtGBP(guidance.targetOffer)} · ${guidance.stance.replace("-", " ")} stance${eq ? ` · ${fmtPct(eq.equityPctAtTarget)} equity` : ""}`}
-      actions={<TalkingPointsButton guidance={guidance} negotiation={negotiation} />}
+      actions={
+        <div className="flex items-center gap-1">
+          <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
+          <FeedbackWidget propertyId={propertyId} sectionKey="offer-plan" sectionLabel="Offer Plan" />
+        </div>
+      }
     >
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>

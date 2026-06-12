@@ -18,10 +18,13 @@ import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSearchesRouteImport } from './routes/_authenticated/searches'
 import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedPropertiesIndexRouteImport } from './routes/_authenticated/properties.index'
 import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
 import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
+import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
 import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
 
 const DealSheetRoute = DealSheetRouteImport.update({
@@ -68,6 +71,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPropertiesIndexRoute =
   AuthenticatedPropertiesIndexRouteImport.update({
     id: '/properties/',
@@ -91,6 +99,17 @@ const AuthenticatedPropertiesIdRoute =
     path: '/properties/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
+const AuthenticatedAdminFeedbackRoute =
+  AuthenticatedAdminFeedbackRouteImport.update({
+    id: '/feedback',
+    path: '/feedback',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedPropertiesIdGuideRoute =
   AuthenticatedPropertiesIdGuideRouteImport.update({
     id: '/properties/$id_/guide',
@@ -102,11 +121,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/deal-sheet': typeof DealSheetRoute
+  '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/searches': typeof AuthenticatedSearchesRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
@@ -117,11 +139,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/deal-sheet': typeof DealSheetRoute
+  '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
   '/searches': typeof AuthenticatedSearchesRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
@@ -134,11 +159,14 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/deal-sheet': typeof DealSheetRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
   '/_authenticated/searches': typeof AuthenticatedSearchesRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
@@ -151,11 +179,14 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/deal-sheet'
+    | '/admin'
     | '/dashboard'
     | '/persona'
     | '/searches'
     | '/welcome'
     | '/deal/$token'
+    | '/admin/feedback'
+    | '/admin/users'
     | '/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
@@ -166,11 +197,14 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/deal-sheet'
+    | '/admin'
     | '/dashboard'
     | '/persona'
     | '/searches'
     | '/welcome'
     | '/deal/$token'
+    | '/admin/feedback'
+    | '/admin/users'
     | '/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
@@ -182,11 +216,14 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/deal-sheet'
+    | '/_authenticated/admin'
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
     | '/_authenticated/searches'
     | '/_authenticated/welcome'
     | '/deal/$token'
+    | '/_authenticated/admin/feedback'
+    | '/_authenticated/admin/users'
     | '/_authenticated/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
@@ -269,6 +306,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/properties/': {
       id: '/_authenticated/properties/'
       path: '/properties'
@@ -297,6 +341,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPropertiesIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/feedback': {
+      id: '/_authenticated/admin/feedback'
+      path: '/feedback'
+      fullPath: '/admin/feedback'
+      preLoaderRoute: typeof AuthenticatedAdminFeedbackRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/properties/$id_/guide': {
       id: '/_authenticated/properties/$id_/guide'
       path: '/properties/$id/guide'
@@ -307,7 +365,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedAdminRouteRouteChildren {
+  AuthenticatedAdminFeedbackRoute: typeof AuthenticatedAdminFeedbackRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+}
+
+const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
+  {
+    AuthenticatedAdminFeedbackRoute: AuthenticatedAdminFeedbackRoute,
+    AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  }
+
+const AuthenticatedAdminRouteRouteWithChildren =
+  AuthenticatedAdminRouteRoute._addFileChildren(
+    AuthenticatedAdminRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPersonaRoute: typeof AuthenticatedPersonaRoute
   AuthenticatedSearchesRoute: typeof AuthenticatedSearchesRoute
@@ -318,6 +393,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedPersonaRoute: AuthenticatedPersonaRoute,
   AuthenticatedSearchesRoute: AuthenticatedSearchesRoute,

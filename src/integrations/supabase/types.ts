@@ -356,6 +356,7 @@ export type Database = {
           email: string | null
           epc_bearer_token: string | null
           id: string
+          role: string
         }
         Insert: {
           created_at?: string
@@ -363,6 +364,7 @@ export type Database = {
           email?: string | null
           epc_bearer_token?: string | null
           id: string
+          role?: string
         }
         Update: {
           created_at?: string
@@ -370,8 +372,72 @@ export type Database = {
           email?: string | null
           epc_bearer_token?: string | null
           id?: string
+          role?: string
         }
         Relationships: []
+      }
+      feedback: {
+        Row: {
+          id: string
+          user_id: string
+          property_id: string | null
+          section_key: string
+          section_label: string
+          vote: string
+          reasons: string[]
+          note: string | null
+          page_path: string | null
+          ip_address: string | null
+          location_city: string | null
+          location_country: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          property_id?: string | null
+          section_key: string
+          section_label: string
+          vote: string
+          reasons?: string[]
+          note?: string | null
+          page_path?: string | null
+          ip_address?: string | null
+          location_city?: string | null
+          location_country?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          property_id?: string | null
+          section_key?: string
+          section_label?: string
+          vote?: string
+          reasons?: string[]
+          note?: string | null
+          page_path?: string | null
+          ip_address?: string | null
+          location_city?: string | null
+          location_country?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       properties: {
         Row: {

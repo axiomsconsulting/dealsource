@@ -1,6 +1,9 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { PlusCircle, ListChecks, LogOut, Sliders, Bell, Home, Filter, Menu } from "lucide-react";
+import { PlusCircle, ListChecks, LogOut, Sliders, Bell, Home, Filter, Menu, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
+import { getMyRole } from "@/lib/admin.functions";
 import type { ReactNode } from "react";
 import { AppFooter } from "@/components/AppFooter";
 import { AddPropertyDialog } from "@/components/AddPropertyDialog";
@@ -21,6 +24,10 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
   const router = useRouter();
   const { selected, toggle, setAll } = useStrategyFilter();
   const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
+
+  const getMyRoleFn = useServerFn(getMyRole);
+  const { data: myRole } = useQuery({ queryKey: ["my-role"], queryFn: () => getMyRoleFn(), staleTime: 5 * 60 * 1000 });
+  const isAdmin = myRole?.role === "admin" || myRole?.role === "super_admin";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -57,6 +64,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
               <Link to="/persona" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
                 <Sliders className="h-4 w-4" /> Investment
               </Link>
+              {isAdmin && (
+                <Link to="/admin/feedback" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
+                  <ShieldCheck className="h-4 w-4" /> Admin
+                </Link>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-normal text-foreground hover:bg-muted">
@@ -103,6 +115,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
                   <Link to="/persona" className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
                     <Sliders className="h-4 w-4" /> Investment
                   </Link>
+                  {isAdmin && (
+                    <Link to="/admin/feedback" className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-muted" activeProps={{ className: "bg-muted text-primary" }}>
+                      <ShieldCheck className="h-4 w-4" /> Admin
+                    </Link>
+                  )}
                   <div className="mt-2 border-t pt-2">
                     <p className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <Filter className="h-3.5 w-3.5" /> Strategy lens
