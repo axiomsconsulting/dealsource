@@ -15,7 +15,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DealTokenRouteImport } from './routes/deal.$token'
 import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
-import { Route as AuthenticatedSearchesRouteImport } from './routes/_authenticated/searches'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
@@ -56,9 +56,9 @@ const AuthenticatedWelcomeRoute = AuthenticatedWelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSearchesRoute = AuthenticatedSearchesRouteImport.update({
-  id: '/searches',
-  path: '/searches',
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedPersonaRoute = AuthenticatedPersonaRouteImport.update({
@@ -124,7 +124,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
-  '/searches': typeof AuthenticatedSearchesRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
@@ -142,7 +142,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
-  '/searches': typeof AuthenticatedSearchesRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
@@ -162,7 +162,7 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
-  '/_authenticated/searches': typeof AuthenticatedSearchesRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
@@ -182,7 +182,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/persona'
-    | '/searches'
+    | '/profile'
     | '/welcome'
     | '/deal/$token'
     | '/admin/feedback'
@@ -200,7 +200,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/persona'
-    | '/searches'
+    | '/profile'
     | '/welcome'
     | '/deal/$token'
     | '/admin/feedback'
@@ -219,7 +219,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
-    | '/_authenticated/searches'
+    | '/_authenticated/profile'
     | '/_authenticated/welcome'
     | '/deal/$token'
     | '/_authenticated/admin/feedback'
@@ -285,11 +285,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWelcomeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/searches': {
-      id: '/_authenticated/searches'
-      path: '/searches'
-      fullPath: '/searches'
-      preLoaderRoute: typeof AuthenticatedSearchesRouteImport
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/persona': {
@@ -385,7 +385,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPersonaRoute: typeof AuthenticatedPersonaRoute
-  AuthenticatedSearchesRoute: typeof AuthenticatedSearchesRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedWelcomeRoute: typeof AuthenticatedWelcomeRoute
   AuthenticatedPropertiesIdRoute: typeof AuthenticatedPropertiesIdRoute
   AuthenticatedPropertiesIndexRoute: typeof AuthenticatedPropertiesIndexRoute
@@ -396,7 +396,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedPersonaRoute: AuthenticatedPersonaRoute,
-  AuthenticatedSearchesRoute: AuthenticatedSearchesRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedWelcomeRoute: AuthenticatedWelcomeRoute,
   AuthenticatedPropertiesIdRoute: AuthenticatedPropertiesIdRoute,
   AuthenticatedPropertiesIndexRoute: AuthenticatedPropertiesIndexRoute,

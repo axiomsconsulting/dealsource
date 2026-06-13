@@ -1,19 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireAdminAuth } from "@/integrations/supabase/admin-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-
-export const getMyRole = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data } = await context.supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", context.userId)
-      .single();
-    return { role: data?.role ?? "user" };
-  });
 
 export const listFeedback = createServerFn({ method: "GET" })
   .middleware([requireAdminAuth])

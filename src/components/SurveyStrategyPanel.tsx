@@ -39,7 +39,6 @@ const SHORT_LABEL: Record<SurveyIssueKey, string> = {
 };
 
 const SEVERITY_RATIO: Record<SurveySeverity, number> = { low: 0, medium: 0.5, high: 1 };
-const SEVERITY_LABEL: Record<SurveySeverity, string> = { low: "Low", medium: "Medium", high: "High" };
 
 /** Survey/condition leverage: what to brief the Level 3 surveyor and builder to dig into and
  *  report on, what a confirmed finding is realistically worth off the price, and — once the
@@ -48,7 +47,13 @@ const SEVERITY_LABEL: Record<SurveySeverity, string> = { low: "Low", medium: "Me
  *  negotiation playbook's offer plan as high-confidence "fault" leverage (see
  *  `buildSurveyNegotiationPoints` / `buildNegotiation`), and surface verbatim in the talking
  *  points script as survey results. */
-export function SurveyStrategyPanel({ property }: { property: any }) {
+export function SurveyStrategyPanel({
+  property,
+  onLiveChange,
+}: {
+  property: any;
+  onLiveChange?: (findings: SurveyFindings) => void;
+}) {
   const qc = useQueryClient();
   const update = useServerFn(updateProperty);
   const issues = buildSurveyStrategy(property);
@@ -57,24 +62,39 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
   const [local, setLocal] = useState<SurveyFindings>((property.survey_findings as any) ?? {});
 
   const saveMut = useMutation({
-    mutationFn: (patch: SurveyFindings) => update({ data: { id: property.id, patch: { survey_findings: patch as any } } }),
+    mutationFn: (patch: SurveyFindings) =>
+      update({ data: { id: property.id, patch: { survey_findings: patch as any } } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["property", property.id] }),
   });
 
   const toggle = (key: string, active: boolean) => {
-    const next: SurveyFindings = { ...local, [key]: { ...(local[key] ?? { severity: "medium" as SurveySeverity }), active } };
+    const next: SurveyFindings = {
+      ...local,
+      [key]: { ...(local[key] ?? { severity: "medium" as SurveySeverity }), active },
+    };
     setLocal(next);
+    onLiveChange?.(next);
     saveMut.mutate(next);
   };
   const setSeverity = (key: string, severity: SurveySeverity) => {
-    const next: SurveyFindings = { ...local, [key]: { ...(local[key] ?? { active: true }), active: true, severity } };
+    const next: SurveyFindings = {
+      ...local,
+      [key]: { ...(local[key] ?? { active: true }), active: true, severity },
+    };
     setLocal(next);
+    onLiveChange?.(next);
     saveMut.mutate(next);
   };
   const setNote = (key: string, note: string) => {
-    setLocal((prev) => ({ ...prev, [key]: { ...(prev[key] ?? { active: false, severity: "medium" as SurveySeverity }), note } }));
+    setLocal((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { active: false, severity: "medium" as SurveySeverity }), note },
+    }));
   };
-  const saveNote = () => saveMut.mutate(local);
+  const saveNote = () => {
+    onLiveChange?.(local);
+    saveMut.mutate(local);
+  };
 
   const totalLeverage = issues.reduce((sum, issue) => {
     const f = local[issue.key];
@@ -85,16 +105,28 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
   }, 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        What to brief your Level 3 (RICS Building Survey) surveyor and builder to specifically dig into and report on. Once the survey is back, tick anything confirmed and set its severity — confirmed findings are added as further reduction to the offer plan and to the talking points as survey results.
+        What to brief your Level 3 (RICS Building Survey) surveyor and builder to specifically dig
+        into and report on. Once the survey is back, tick anything confirmed and set its severity —
+        confirmed findings are added as further reduction to the offer plan and to the talking
+        points as survey results.
       </p>
       {issues.map((issue) => {
         const f = local[issue.key];
         const active = !!f?.active;
         const severity = f?.severity ?? "medium";
         const ratio = SEVERITY_RATIO[severity];
-        const confirmedGbp = asking > 0 ? Math.round(asking * (issue.markdownLowPct + (issue.markdownHighPct - issue.markdownLowPct) * ratio)) : 0;
+        const confirmedGbp =
+          asking > 0
+            ? Math.round(
+                asking *
+                  (issue.markdownLowPct + (issue.markdownHighPct - issue.markdownLowPct) * ratio),
+              )
+            : 0;
+
+        const potentialGbp = asking > 0 ? Math.round(asking * issue.markdownLowPct) : 0;
+        const displayGbp = active ? confirmedGbp : potentialGbp;
 
         return (
           <CollapsibleCard
@@ -102,25 +134,62 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
             variant="plain"
             defaultOpen={false}
             title={SHORT_LABEL[issue.key]}
-            summary={active ? <span className="font-semibold text-primary">−{fmtGBP(confirmedGbp)}</span> : SIGNAL_LABEL[issue.signal]}
+            summary={SIGNAL_LABEL[issue.signal]}
             className={active ? "border-primary bg-primary/5" : ""}
+            actions={
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={active}
+                  onCheckedChange={(b) => toggle(issue.key, !!b)}
+                  title="Confirmed by survey"
+                />
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  value={severity}
+                  onValueChange={(v) => v && setSeverity(issue.key, v as SurveySeverity)}
+                >
+                  {(["low", "medium", "high"] as SurveySeverity[]).map((s) => (
+                    <ToggleGroupItem
+                      key={s}
+                      value={s}
+                      className="h-6 px-2 text-[10px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {s[0].toUpperCase()}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                {displayGbp > 0 && (
+                  <span
+                    className={`text-sm font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}
+                  >
+                    −{fmtGBP(displayGbp)}
+                  </span>
+                )}
+              </div>
+            }
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="flex cursor-pointer items-center gap-2">
-                <Checkbox checked={active} onCheckedChange={(b) => toggle(issue.key, !!b)} />
-                <p className="font-medium">{issue.title}</p>
-              </label>
-              <Badge className={`text-[10px] ${SIGNAL_BADGE[issue.signal]}`}>{SIGNAL_LABEL[issue.signal]}</Badge>
+              <p className="font-medium">{issue.title}</p>
+              <Badge className={`text-[10px] ${SIGNAL_BADGE[issue.signal]}`}>
+                {SIGNAL_LABEL[issue.signal]}
+              </Badge>
             </div>
-            {issue.evidence && <p className="mt-1.5 text-xs text-muted-foreground">{issue.evidence}</p>}
+            {issue.evidence && (
+              <p className="mt-1.5 text-xs text-muted-foreground">{issue.evidence}</p>
+            )}
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-md bg-muted/30 p-2.5">
-                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold"><Search className="h-3.5 w-3.5 text-sky-600" /> Brief the surveyor</p>
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
+                  <Search className="h-3.5 w-3.5 text-sky-600" /> Brief the surveyor
+                </p>
                 <p className="text-xs text-muted-foreground">{issue.surveyorBrief}</p>
               </div>
               <div className="rounded-md bg-muted/30 p-2.5">
-                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold"><HardHat className="h-3.5 w-3.5 text-orange-500" /> Brief the builder</p>
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
+                  <HardHat className="h-3.5 w-3.5 text-orange-500" /> Brief the builder
+                </p>
                 <p className="text-xs text-muted-foreground">{issue.builderBrief}</p>
               </div>
             </div>
@@ -130,8 +199,12 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
                 <span className="font-semibold">If confirmed — markdown to negotiate</span>
                 {asking > 0 && (
                   <span className="font-bold">
-                    {fmtGBP(Math.round(asking * issue.markdownLowPct))} – {fmtGBP(Math.round(asking * issue.markdownHighPct))}
-                    <span className="ml-1 font-normal text-amber-800">({Math.round(issue.markdownLowPct * 100)}–{Math.round(issue.markdownHighPct * 100)}% of asking)</span>
+                    {fmtGBP(Math.round(asking * issue.markdownLowPct))} –{" "}
+                    {fmtGBP(Math.round(asking * issue.markdownHighPct))}
+                    <span className="ml-1 font-normal text-amber-800">
+                      ({Math.round(issue.markdownLowPct * 100)}–
+                      {Math.round(issue.markdownHighPct * 100)}% of asking)
+                    </span>
                   </span>
                 )}
               </div>
@@ -141,18 +214,15 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
             {active && (
               <div className="mt-2.5 space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Confirmed by survey — severity</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Confirmed by survey
+                  </p>
                   {asking > 0 && (
-                    <span className="text-sm font-bold text-primary">−{fmtGBP(confirmedGbp)} applied to offer plan</span>
+                    <span className="text-sm font-bold text-primary">
+                      −{fmtGBP(confirmedGbp)} applied to offer plan
+                    </span>
                   )}
                 </div>
-                <ToggleGroup type="single" value={severity} onValueChange={(v) => v && setSeverity(issue.key, v as SurveySeverity)} className="justify-start">
-                  {(["low", "medium", "high"] as SurveySeverity[]).map((s) => (
-                    <ToggleGroupItem key={s} value={s} className="h-7 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                      {SEVERITY_LABEL[s]}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
                 <Input
                   placeholder="Optional note from the survey report (quoted in talking points)"
                   value={f?.note ?? ""}
@@ -174,7 +244,11 @@ export function SurveyStrategyPanel({ property }: { property: any }) {
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        These are starting briefs and indicative ranges to anchor the conversation. Tick a finding and set its severity once your surveyor confirms it — this feeds directly into the offer plan above and into the talking points as survey results; the actual figure should always be reconciled against your surveyor's and builder's specific findings and quotes before you put a number to the agent.
+        These are starting briefs and indicative ranges to anchor the conversation. Tick a finding
+        and set its severity once your surveyor confirms it — this feeds directly into the offer
+        plan above and into the talking points as survey results; the actual figure should always be
+        reconciled against your surveyor's and builder's specific findings and quotes before you put
+        a number to the agent.
       </p>
     </div>
   );

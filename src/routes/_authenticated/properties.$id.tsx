@@ -7,7 +7,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { analyseProperty } from "@/lib/analysis/engine";
-import type { AnalysisOutput, NegotiationGuidance, NegotiationPoint, OverrideKey, SliderOverrides, StrategyNumber, StrategyResult } from "@/lib/analysis/types";
+import type {
+  AnalysisOutput,
+  NegotiationGuidance,
+  NegotiationPoint,
+  OverrideKey,
+  SliderOverrides,
+  StrategyNumber,
+  StrategyResult,
+} from "@/lib/analysis/types";
 import { OVERRIDE_BOUNDS } from "@/lib/analysis/types";
 import { buildTalkingPointsScript } from "@/lib/analysis/talking-points";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -24,9 +32,8 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
-import { EpcPanel } from "@/components/EpcPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
-import { RefurbPanel } from "@/components/RefurbPanel";
+import { RefurbEpcPanel } from "@/components/RefurbEpcPanel";
 import { RiskChips } from "@/components/RiskChips";
 import { DealScoreInfo } from "@/components/DealScoreInfo";
 import { InsuranceInfo } from "@/components/InsuranceInfo";
@@ -41,16 +48,65 @@ import { MarketComparablesPanel } from "@/components/MarketComparablesPanel";
 import { computeSurveyLeverage } from "@/lib/analysis/survey-strategy";
 import { extractMarketDataFromPfJson } from "@/lib/parsers/json";
 import { FormulaInfo } from "@/components/FormulaInfo";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { enrichFromUrl, enrichFromPfJson } from "@/lib/enrich.functions";
 import { lookupArticle4ByPostcode } from "@/lib/article4.functions";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { fmtGBP, fmtNum, fmtPct } from "@/lib/format";
 import { bestOfSelected, strategiesInScope, useStrategyFilter } from "@/lib/strategy-filter";
 import { partitionImageUrls } from "@/lib/images";
-import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, AlertTriangle, Sparkles, CheckCircle2, XCircle, Link2, Loader2, Home, FileJson, RotateCcw, PencilLine, Wrench, Images, Target, ShieldCheck, MapPin, Camera, MessageSquareText, Copy, Check, Zap, ClipboardCheck, TrendingUp, Handshake, BedDouble, FileText, FileStack, RefreshCcw, Hotel, Repeat, Scissors, Users, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  EyeOff,
+  AlertTriangle,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  Link2,
+  Loader2,
+  Home,
+  FileJson,
+  RotateCcw,
+  PencilLine,
+  Wrench,
+  Images,
+  Target,
+  ShieldCheck,
+  MapPin,
+  Camera,
+  MessageSquareText,
+  Copy,
+  Check,
+  ClipboardCheck,
+  TrendingUp,
+  Handshake,
+  BedDouble,
+  FileText,
+  FileStack,
+  RefreshCcw,
+  Hotel,
+  Repeat,
+  Scissors,
+  Users,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
@@ -81,15 +137,30 @@ function PropertyDetail() {
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => listP({ data: {} } as any) });
   const personas = (personasQ.data ?? []) as any[];
   const [personaId, setPersonaId] = useState<string | null>(null);
-  const persona = useMemo(() => personas.find((p) => p.id === personaId) ?? personas.find((p) => p.is_default) ?? personas[0], [personas, personaId]);
+  const persona = useMemo(
+    () =>
+      personas.find((p) => p.id === personaId) ?? personas.find((p) => p.is_default) ?? personas[0],
+    [personas, personaId],
+  );
 
   const { selected: lensSelected } = useStrategyFilter();
   const [over, setOver] = useState<SliderOverrides>({});
   const tune = (key: OverrideKey, value: number) => setOver((o) => ({ ...o, [key]: value }));
-  const resetOne = (key: OverrideKey) => setOver((o) => { const { [key]: _drop, ...rest } = o; return rest; });
+  const resetOne = (key: OverrideKey) =>
+    setOver((o) => {
+      const { [key]: _drop, ...rest } = o;
+      return rest;
+    });
   const resetAll = () => setOver({});
   const toggleSourcingBuffer = (enabled: boolean) =>
-    setOver((o) => enabled ? { ...o, sourcingBufferEnabled: true } : (() => { const { sourcingBufferEnabled: _drop, ...rest } = o; return rest; })());
+    setOver((o) =>
+      enabled
+        ? { ...o, sourcingBufferEnabled: true }
+        : (() => {
+            const { sourcingBufferEnabled: _drop, ...rest } = o;
+            return rest;
+          })(),
+    );
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const sectionProps = (key: string) => ({
@@ -98,10 +169,28 @@ function PropertyDetail() {
     onOpenChange: (v: boolean) => setOpenSections((s) => ({ ...s, [key]: v })),
   });
 
+  // Draft overlay: local edits to refurb/EPC selections, seller context and survey findings take
+  // effect on `analysis` immediately, without waiting for a save round-trip + refetch. Each panel
+  // still debounce-persists to the DB in the background via its own mutation.
+  const [draftRefurb, setDraftRefurb] = useState<any>(null);
+  const [draftSellerContext, setDraftSellerContext] = useState<any>(null);
+  const [draftSurveyFindings, setDraftSurveyFindings] = useState<any>(null);
+
+  const effectiveProperty = useMemo(() => {
+    if (!prop.data) return null;
+    const pd = prop.data as any;
+    return {
+      ...pd,
+      refurb_estimate: draftRefurb ?? pd.refurb_estimate,
+      seller_context: draftSellerContext ?? pd.seller_context,
+      survey_findings: draftSurveyFindings ?? pd.survey_findings,
+    };
+  }, [prop.data, draftRefurb, draftSellerContext, draftSurveyFindings]);
+
   const analysis = useMemo(() => {
-    if (!prop.data || !persona) return null;
-    return analyseProperty(prop.data as any, persona as any, over);
-  }, [prop.data, persona, over]);
+    if (!effectiveProperty || !persona) return null;
+    return analyseProperty(effectiveProperty as any, persona as any, over);
+  }, [effectiveProperty, persona, over]);
 
   const updateMut = useMutation({
     mutationFn: (patch: any) => update({ data: { id, patch } }),
@@ -110,19 +199,24 @@ function PropertyDetail() {
   const [enrichUrl, setEnrichUrl] = useState("");
   const enrichMut = useMutation({
     mutationFn: (url: string) => enrich({ data: { propertyId: id, url } }),
-    onSuccess: (r: any) => { toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.imageCount} images`); setEnrichUrl(""); qc.invalidateQueries({ queryKey: ["property", id] }); },
+    onSuccess: (r: any) => {
+      toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.imageCount} images`);
+      setEnrichUrl("");
+      qc.invalidateQueries({ queryKey: ["property", id] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
   const [editingAsking, setEditingAsking] = useState(false);
   const [askingDraft, setAskingDraft] = useState("");
   const [pfJsonText, setPfJsonText] = useState("");
   const [heroOpenIndex, setHeroOpenIndex] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<"photos" | "refurb" | "library" | "enrich" | null>(null);
+  const [activePanel, setActivePanel] = useState<"photos" | "library" | "enrich" | null>(null);
   const enrichJsonMut = useMutation({
     mutationFn: (json: string) => enrichJson({ data: { propertyId: id, json } }),
     onSuccess: (r: any) => {
       toast.success(`Enriched: ${r.fieldsUpdated.length} fields, ${r.totalImages} images`);
-      setPfJsonText(""); setActivePanel(null);
+      setPfJsonText("");
+      setActivePanel(null);
       qc.invalidateQueries({ queryKey: ["property", id] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -133,25 +227,43 @@ function PropertyDetail() {
     onSuccess: (r: any) => {
       qc.invalidateQueries({ queryKey: ["property", id] });
       if (r.status === "inside") {
-        toast.warning(`Article 4 confirmed — ${r.areas.length} direction(s) found for ${r.postcode}. HMO strategy score has been adjusted.`);
+        toast.warning(
+          `Article 4 confirmed — ${r.areas.length} direction(s) found for ${r.postcode}. HMO strategy score has been adjusted.`,
+        );
       } else {
-        toast.success(`No Article 4 directions found for ${r.postcode} via the UK Planning Data API.`);
+        toast.success(
+          `No Article 4 directions found for ${r.postcode} via the UK Planning Data API.`,
+        );
       }
     },
     onError: (e: any) => toast.error(`Article 4 check failed: ${e.message}`),
   });
 
-  if (prop.isLoading || personasQ.isLoading) return <AppShell><p className="text-muted-foreground">Loading…</p></AppShell>;
-  if (!prop.data || !persona || !analysis) return <AppShell><p>Not found</p></AppShell>;
+  if (prop.isLoading || personasQ.isLoading)
+    return (
+      <AppShell>
+        <p className="text-muted-foreground">Loading…</p>
+      </AppShell>
+    );
+  if (!prop.data || !persona || !analysis || !effectiveProperty)
+    return (
+      <AppShell>
+        <p>Not found</p>
+      </AppShell>
+    );
 
-  const p = prop.data as any;
+  const p = effectiveProperty as any;
   const eff = analysis.effectiveInputs;
   const inScopeStrategies = strategiesInScope(analysis.strategies, lensSelected);
   const bestInScope = bestOfSelected(analysis.strategies, lensSelected);
   const overallBest = analysis.strategies.find((s) => s.key === analysis.bestStrategy)!;
   const best = bestInScope ?? overallBest;
   const noLensFit = !bestInScope;
-  const defaultStrategyTab = (inScopeStrategies.find((s) => s.key === best.key) ?? inScopeStrategies[0] ?? best).key;
+  const defaultStrategyTab = (
+    inScopeStrategies.find((s) => s.key === best.key) ??
+    inScopeStrategies[0] ??
+    best
+  ).key;
   const allImages: string[] = Array.isArray(p.image_urls) ? p.image_urls : [];
   const { photos: heroImagesRaw, floorPlans } = partitionImageUrls(allImages);
   const heroImages = Array.from(new Set(heroImagesRaw));
@@ -161,21 +273,37 @@ function PropertyDetail() {
     <AppShell>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <Link to="/properties" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            to="/properties"
+            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-4 w-4" /> All properties
           </Link>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold">{p.hide_address ? "Property (address hidden)" : p.address}</h1>
+            <h1 className="text-2xl font-bold">
+              {p.hide_address ? "Property (address hidden)" : p.address}
+            </h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => updateMut.mutate({ favourite: !p.favourite })}
+              title={p.favourite ? "Unfavourite" : "Favourite"}
+            >
+              <Star className={`h-4 w-4 ${p.favourite ? "fill-amber-400 text-amber-400" : ""}`} />
+            </Button>
             <Link to="/properties/$id/guide" params={{ id }}>
-              <Button size="sm" variant="outline"><Sparkles className="mr-2 h-4 w-4" />Guided walkthrough</Button>
+              <Button size="sm" variant="outline">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Guided walkthrough
+              </Button>
             </Link>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
             {p.baths && <Badge variant="outline">{p.baths} bath</Badge>}
             {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
-            {p.epc_rate && (
-              p.epc_data?.certificateUrl ? (
+            {p.epc_rate &&
+              (p.epc_data?.certificateUrl ? (
                 <a href={p.epc_data.certificateUrl} target="_blank" rel="noreferrer">
                   <Badge variant="outline" className="cursor-pointer hover:bg-muted">
                     EPC {p.epc_rate} <ExternalLink className="ml-1 h-3 w-3" />
@@ -183,8 +311,7 @@ function PropertyDetail() {
                 </a>
               ) : (
                 <Badge variant="outline">EPC {p.epc_rate}</Badge>
-              )
-            )}
+              ))}
             {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
             {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
             {editingAsking ? (
@@ -199,7 +326,10 @@ function PropertyDetail() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       const n = Number(askingDraft);
-                      if (n > 0) { updateMut.mutate({ asking_price_gbp: n }); setEditingAsking(false); }
+                      if (n > 0) {
+                        updateMut.mutate({ asking_price_gbp: n });
+                        setEditingAsking(false);
+                      }
                     } else if (e.key === "Escape") {
                       setEditingAsking(false);
                     }
@@ -211,33 +341,63 @@ function PropertyDetail() {
                   size="sm"
                   className="h-7 px-2 text-xs"
                   disabled={!(Number(askingDraft) > 0)}
-                  onClick={() => { const n = Number(askingDraft); updateMut.mutate({ asking_price_gbp: n }); setEditingAsking(false); }}
+                  onClick={() => {
+                    const n = Number(askingDraft);
+                    updateMut.mutate({ asking_price_gbp: n });
+                    setEditingAsking(false);
+                  }}
                 >
                   Save
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingAsking(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setEditingAsking(false)}
+                >
+                  Cancel
+                </Button>
               </span>
             ) : p.asking_price_gbp > 0 ? (
               <button
                 type="button"
-                onClick={() => { setAskingDraft(String(p.asking_price_gbp)); setEditingAsking(true); }}
+                onClick={() => {
+                  setAskingDraft(String(p.asking_price_gbp));
+                  setEditingAsking(true);
+                }}
                 title="Click to edit asking price"
               >
-                <Badge className="cursor-pointer hover:opacity-80">Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" /></Badge>
+                <Badge className="cursor-pointer hover:opacity-80">
+                  Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
+                </Badge>
               </button>
             ) : (
               <button
                 type="button"
-                onClick={() => { setAskingDraft(""); setEditingAsking(true); }}
+                onClick={() => {
+                  setAskingDraft("");
+                  setEditingAsking(true);
+                }}
                 title="Asking price is missing — click to enter it"
               >
-                <Badge variant="outline" className="cursor-pointer border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100">
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                >
                   <AlertTriangle className="mr-1 h-3 w-3" /> Set asking price
                 </Badge>
               </button>
             )}
-            {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — inside</Badge>}
-            {p.article4_status === "partial" && <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">Article 4 — partial</Badge>}
+            {p.article4_status === "inside" && (
+              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+                Article 4 — inside
+              </Badge>
+            )}
+            {p.article4_status === "partial" && (
+              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+                Article 4 — partial
+              </Badge>
+            )}
             {!p.article4_status && p.pf_json?.propertyLight?.article4Status && (
               <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
                 Article 4 — {String(p.pf_json.propertyLight.article4Status)}
@@ -252,29 +412,46 @@ function PropertyDetail() {
                 onClick={() => article4Mut.mutate(p.postcode)}
                 title="Check Article 4 status via UK Planning Data API"
               >
-                {article4Mut.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <MapPin className="mr-1 h-3 w-3" />}
+                {article4Mut.isPending ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <MapPin className="mr-1 h-3 w-3" />
+                )}
                 {p.article4_status ? "Re-check Article 4" : "Check Article 4"}
               </Button>
             )}
             {p.source_link && (
-              <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+              <a
+                href={p.source_link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
                 <ExternalLink className="h-3 w-3" /> View listing
               </a>
             )}
           </div>
           {analysis.riskFlags && analysis.riskFlags.length > 0 && (
-            <div className="mt-2"><RiskChips flags={analysis.riskFlags as any} /></div>
+            <div className="mt-2">
+              <RiskChips flags={analysis.riskFlags as any} />
+            </div>
           )}
         </div>
         <div className="text-right">
           <div className="text-5xl font-bold text-primary">{analysis.overallScore}</div>
           <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wide text-muted-foreground">
             Deal score
-            <DealScoreInfo overallScore={analysis.overallScore} breakdown={analysis.overallScoreBreakdown} best={best} />
+            <DealScoreInfo
+              overallScore={analysis.overallScore}
+              breakdown={analysis.overallScoreBreakdown}
+              best={best}
+            />
           </div>
           <div className="mt-2">
             <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
-              <SelectTrigger className="h-8 w-[220px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {personas.map((pp) => (
                   <SelectItem key={pp.id} value={pp.id}>
@@ -285,11 +462,16 @@ function PropertyDetail() {
             </Select>
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <Label htmlFor="hide" className="text-xs"><EyeOff className="inline h-3 w-3" /> Redact</Label>
+            <Label htmlFor="hide" className="text-xs">
+              <EyeOff className="inline h-3 w-3" /> Redact
+            </Label>
             <Switch
               id="hide"
               checked={p.hide_address}
-              onCheckedChange={(v) => { updateMut.mutate({ hide_address: v }); toast.success(v ? "Address hidden" : "Address visible"); }}
+              onCheckedChange={(v) => {
+                updateMut.mutate({ hide_address: v });
+                toast.success(v ? "Address hidden" : "Address visible");
+              }}
             />
           </div>
         </div>
@@ -299,7 +481,14 @@ function PropertyDetail() {
         section={sectionProps("offer-plan")}
         propertyId={id}
         setOpenSections={setOpenSections}
-        onOpenRefurb={() => setActivePanel("refurb")}
+        onOpenRefurb={() => {
+          setOpenSections((s) => ({ ...s, "refurb-epc": true }));
+          requestAnimationFrame(() => {
+            document
+              .getElementById("refurb-epc")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        }}
         analysis={analysis}
         best={best}
         guidance={analysis.negotiationGuidance}
@@ -318,7 +507,7 @@ function PropertyDetail() {
       {heroImages.length > 0 && (
         <CollapsibleCard
           {...sectionProps("photos")}
-          className="mb-4"
+          className="mb-3"
           icon={<Camera className="h-4 w-4 text-accent" />}
           title="Photos"
           summary={`${heroImages.length} photo${heroImages.length === 1 ? "" : "s"}`}
@@ -326,21 +515,40 @@ function PropertyDetail() {
         >
           <div className="-mx-6 -mt-4 overflow-hidden rounded-md sm:mx-0 sm:mt-0">
             <div className="grid grid-cols-4 gap-1">
-              <button className="col-span-4 sm:col-span-2 sm:row-span-2" onClick={() => setHeroOpenIndex(0)}>
-                <img src={heroImages[0]} alt="" className="h-full max-h-[360px] w-full object-cover transition hover:opacity-90" />
+              <button
+                className="col-span-4 sm:col-span-2 sm:row-span-2"
+                onClick={() => setHeroOpenIndex(0)}
+              >
+                <img
+                  src={heroImages[0]}
+                  alt=""
+                  className="h-full max-h-[360px] w-full object-cover transition hover:opacity-90"
+                />
               </button>
               {heroImages.slice(1, 5).map((u, i) => (
                 <button key={i} onClick={() => setHeroOpenIndex(i + 1)}>
-                  <img src={u} alt="" className="h-32 w-full object-cover transition hover:opacity-90 sm:h-[178px]" loading="lazy" />
+                  <img
+                    src={u}
+                    alt=""
+                    className="h-32 w-full object-cover transition hover:opacity-90 sm:h-[178px]"
+                    loading="lazy"
+                  />
                 </button>
               ))}
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <button onClick={() => setHeroOpenIndex(0)} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length} photos
+              <button
+                onClick={() => setHeroOpenIndex(0)}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Images className="h-3.5 w-3.5" /> View fullscreen — browse all {heroImages.length}{" "}
+                photos
               </button>
               {heroImages.length > 5 && (
-                <button onClick={() => setActivePanel("library")} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <button
+                  onClick={() => setActivePanel("library")}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
                   +{heroImages.length - 5} more — open in image library
                 </button>
               )}
@@ -349,40 +557,71 @@ function PropertyDetail() {
         </CollapsibleCard>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <button onClick={() => setActivePanel("photos")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Camera className="h-4 w-4 text-muted-foreground" /> Photos</div>
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <button
+          onClick={() => setActivePanel("photos")}
+          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Camera className="h-4 w-4 text-muted-foreground" /> Photos
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">AI condition scan</p>
         </button>
-        <button onClick={() => setActivePanel("refurb")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Wrench className="h-4 w-4 text-muted-foreground" /> Refurb Estimator</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Refurb estimate</p>
+        <button
+          onClick={() => setActivePanel("library")}
+          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Images className="h-4 w-4 text-muted-foreground" /> Image library
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {heroImages.length} photo{heroImages.length === 1 ? "" : "s"}, by room
+          </p>
         </button>
-        <button onClick={() => setActivePanel("library")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Images className="h-4 w-4 text-muted-foreground" /> Image library</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{heroImages.length} photo{heroImages.length === 1 ? "" : "s"}, by room</p>
-        </button>
-        <button onClick={() => setActivePanel("enrich")} className="rounded-md border p-3 text-left transition hover:bg-muted/40">
-          <div className="flex items-center gap-2 text-sm font-medium"><Link2 className="h-4 w-4 text-muted-foreground" /> Enrich listing</div>
+        <button
+          onClick={() => setActivePanel("enrich")}
+          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Link2 className="h-4 w-4 text-muted-foreground" /> Enrich listing
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">Details, images, PF JSON</p>
         </button>
       </div>
 
-      <ImageCarousel images={heroCarouselImages} index={heroOpenIndex} onIndexChange={setHeroOpenIndex} onClose={() => setHeroOpenIndex(null)} />
+      <ImageCarousel
+        images={heroCarouselImages}
+        index={heroOpenIndex}
+        onIndexChange={setHeroOpenIndex}
+        onClose={() => setHeroOpenIndex(null)}
+      />
 
       {floorPlans.length > 0 && (
         <CollapsibleCard
           {...sectionProps("floorplans")}
-          className="mb-4"
+          className="mb-3"
           icon={<FileStack className="h-4 w-4 text-accent" />}
           title={`Floor plan${floorPlans.length > 1 ? "s" : ""}`}
           summary={`${floorPlans.length} floor plan${floorPlans.length === 1 ? "" : "s"}`}
-          actions={<FeedbackWidget propertyId={id} sectionKey="floorplans" sectionLabel="Floorplans" />}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="floorplans" sectionLabel="Floorplans" />
+          }
         >
           <div className={cn("grid gap-3", floorPlans.length > 1 ? "sm:grid-cols-2" : "")}>
             {floorPlans.map((u, i) => (
-              <a key={i} href={u} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border bg-muted/40">
-                <img src={u} alt="Floor plan" className="h-[320px] w-full object-contain p-2" loading="lazy" />
+              <a
+                key={i}
+                href={u}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-md border bg-muted/40"
+              >
+                <img
+                  src={u}
+                  alt="Floor plan"
+                  className="h-[320px] w-full object-contain p-2"
+                  loading="lazy"
+                />
               </a>
             ))}
           </div>
@@ -392,11 +631,13 @@ function PropertyDetail() {
       {floorPlans.length > 0 && (
         <CollapsibleCard
           {...sectionProps("hmo-layout")}
-          className="mb-4"
+          className="mb-3"
           icon={<BedDouble className="h-4 w-4 text-accent" />}
           title="HMO / SA layout assessment"
           summary="Room-by-room conversion feasibility"
-          actions={<FeedbackWidget propertyId={id} sectionKey="hmo-layout" sectionLabel="HMO Layout" />}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="hmo-layout" sectionLabel="HMO Layout" />
+          }
         >
           <HmoLayoutPanel
             propertyId={id}
@@ -407,7 +648,10 @@ function PropertyDetail() {
         </CollapsibleCard>
       )}
 
-      <Dialog open={activePanel === "photos"} onOpenChange={(o) => setActivePanel(o ? "photos" : null)}>
+      <Dialog
+        open={activePanel === "photos"}
+        onOpenChange={(o) => setActivePanel(o ? "photos" : null)}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
             <DialogTitle>Photos</DialogTitle>
@@ -417,31 +661,35 @@ function PropertyDetail() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activePanel === "refurb"} onOpenChange={(o) => setActivePanel(o ? "refurb" : null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
-            <DialogTitle>Refurb Estimator</DialogTitle>
-            <FeedbackWidget propertyId={id} sectionKey="refurb-estimator" sectionLabel="Refurb Estimator" />
-          </DialogHeader>
-          <RefurbPanel property={p} onTotalChange={(t) => { /* live total — applied via Save in panel */ void t; }} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={activePanel === "library"} onOpenChange={(o) => setActivePanel(o ? "library" : null)}>
+      <Dialog
+        open={activePanel === "library"}
+        onOpenChange={(o) => setActivePanel(o ? "library" : null)}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
             <DialogTitle>Image library</DialogTitle>
-            <FeedbackWidget propertyId={id} sectionKey="image-library" sectionLabel="Image Library" />
+            <FeedbackWidget
+              propertyId={id}
+              sectionKey="image-library"
+              sectionLabel="Image Library"
+            />
           </DialogHeader>
           <ImageLibrary propertyId={id} urls={heroImages} defaultExpanded />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activePanel === "enrich"} onOpenChange={(o) => setActivePanel(o ? "enrich" : null)}>
+      <Dialog
+        open={activePanel === "enrich"}
+        onOpenChange={(o) => setActivePanel(o ? "enrich" : null)}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
             <DialogTitle>Enrich from listing URL</DialogTitle>
-            <FeedbackWidget propertyId={id} sectionKey="enrich-listing" sectionLabel="Enrich Listing" />
+            <FeedbackWidget
+              propertyId={id}
+              sectionKey="enrich-listing"
+              sectionLabel="Enrich Listing"
+            />
           </DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -450,17 +698,42 @@ function PropertyDetail() {
               onChange={(e) => setEnrichUrl(e.target.value)}
               className="h-8 flex-1 min-w-[260px]"
             />
-            <Button size="sm" disabled={!enrichUrl || enrichMut.isPending} onClick={() => enrichMut.mutate(enrichUrl)}>
-              {enrichMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Home className="mr-2 h-4 w-4" />}
+            <Button
+              size="sm"
+              disabled={!enrichUrl || enrichMut.isPending}
+              onClick={() => enrichMut.mutate(enrichUrl)}
+            >
+              {enrichMut.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Home className="mr-2 h-4 w-4" />
+              )}
               Pull details + images
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in Connectors.</p>
+          <p className="text-xs text-muted-foreground">
+            Supports Rightmove, Zoopla, OnTheMarket, Boomin, PrimeLocation. Requires Firecrawl in
+            Connectors.
+          </p>
           <div className="border-t pt-3">
-            <p className="mb-2 flex items-center gap-2 text-sm font-medium"><FileJson className="h-4 w-4" /> Paste PF JSON</p>
-            <p className="mb-2 text-sm text-muted-foreground">Paste the full JSON object from Property Filter. Existing fields are kept; only missing fields are filled. New image URLs are appended.</p>
-            <Textarea value={pfJsonText} onChange={(e) => setPfJsonText(e.target.value)} placeholder='{"propertyLight":{...},"propertyDetail":{...}}' className="h-48 font-mono text-xs" />
-            <Button className="mt-2" onClick={() => enrichJsonMut.mutate(pfJsonText)} disabled={!pfJsonText.trim() || enrichJsonMut.isPending}>
+            <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <FileJson className="h-4 w-4" /> Paste PF JSON
+            </p>
+            <p className="mb-2 text-sm text-muted-foreground">
+              Paste the full JSON object from Property Filter. Existing fields are kept; only
+              missing fields are filled. New image URLs are appended.
+            </p>
+            <Textarea
+              value={pfJsonText}
+              onChange={(e) => setPfJsonText(e.target.value)}
+              placeholder='{"propertyLight":{...},"propertyDetail":{...}}'
+              className="h-48 font-mono text-xs"
+            />
+            <Button
+              className="mt-2"
+              onClick={() => enrichJsonMut.mutate(pfJsonText)}
+              disabled={!pfJsonText.trim() || enrichJsonMut.isPending}
+            >
               {enrichJsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enrich now
             </Button>
@@ -469,27 +742,30 @@ function PropertyDetail() {
       </Dialog>
 
       {!analysis.personaMatch.pass && (
-        <Card className="mb-4 border-amber-300 bg-amber-50">
+        <Card className="mb-3 border-amber-300 bg-amber-50">
           <CardContent className="flex items-start gap-3 py-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
             <div>
               <p className="text-sm font-medium text-amber-900">Investor criteria mismatch</p>
               <ul className="mt-1 list-inside list-disc text-sm text-amber-800">
-                {analysis.personaMatch.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                {analysis.personaMatch.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {noLensFit && (
           <Card className="border-amber-300 bg-amber-50">
             <CardContent className="flex items-start gap-3 py-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
               <p className="text-sm text-amber-900">
-                No selected strategy in your lens is feasible for this property. Showing the overall best strategy
-                ({best.name}) instead — adjust the strategy lens in the top nav to broaden the view.
+                No selected strategy in your lens is feasible for this property. Showing the overall
+                best strategy ({best.name}) instead — adjust the strategy lens in the top nav to
+                broaden the view.
               </p>
             </CardContent>
           </Card>
@@ -500,54 +776,88 @@ function PropertyDetail() {
           icon={<Sparkles className="h-4 w-4 text-accent" />}
           title="Negotiation playbook"
           summary={`−${fmtGBP(analysis.negotiationTotal)} weighted leverage across ${analysis.negotiation.filter((n) => n.gbp_impact > 250).length} points`}
-          actions={<FeedbackWidget propertyId={id} sectionKey="negotiation-playbook" sectionLabel="Negotiation Playbook" />}
+          actions={
+            <FeedbackWidget
+              propertyId={id}
+              sectionKey="negotiation-playbook"
+              sectionLabel="Negotiation Playbook"
+            />
+          }
         >
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Weighted evidence to take to the agent. Full costs are shown where useful, but only the defensible share is counted into the offer.</p>
-            {analysis.negotiation.filter((n) => n.gbp_impact > 250).map((n, i) => (
-              <div key={i} className="rounded-md border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] capitalize">{n.category.replace("_", " ")}</Badge>
-                      <p className="font-medium">{n.title}</p>
-                      {n.title.startsWith("Survey:") && <JumpLink to="survey" setOpenSections={setOpenSections}>Survey</JumpLink>}
-                      {n.title.includes("EPC") && <JumpLink to="epc" setOpenSections={setOpenSections}>EPC</JumpLink>}
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
-                    {n.specOptions && n.specOptions.length > 0 && (
-                      <div className="mt-2">
-                        <SpecOptionsRow options={n.specOptions} />
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Weighted evidence to take to the agent. Full costs are shown where useful, but only
+              the defensible share is counted into the offer.
+            </p>
+            {analysis.negotiation
+              .filter((n) => n.gbp_impact > 250)
+              .map((n, i) => (
+                <div key={i} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] capitalize">
+                          {n.category.replace("_", " ")}
+                        </Badge>
+                        <p className="font-medium">{n.title}</p>
+                        {n.title.startsWith("Survey:") && (
+                          <JumpLink to="survey" setOpenSections={setOpenSections}>
+                            Survey
+                          </JumpLink>
+                        )}
+                        {n.title.includes("EPC") && (
+                          <JumpLink to="refurb-epc" setOpenSections={setOpenSections}>
+                            EPC
+                          </JumpLink>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
-                    <div className="text-[10px] uppercase text-muted-foreground">{n.confidence}</div>
+                      <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
+                      {n.specOptions && n.specOptions.length > 0 && (
+                        <div className="mt-2">
+                          <SpecOptionsRow options={n.specOptions} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
+                      <div className="text-[10px] uppercase text-muted-foreground">
+                        {n.confidence}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
             {analysis.negotiation.some((n) => n.gbp_impact <= 250) && (
               <TooltipProvider delayDuration={120}>
                 <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed p-2.5">
                   <span className="mr-1 text-xs text-muted-foreground">Also factored in:</span>
-                  {analysis.negotiation.filter((n) => n.gbp_impact <= 250).map((n, i) => (
-                    <Tooltip key={i}>
-                      <TooltipTrigger asChild>
-                        <Badge variant="outline" className="cursor-default gap-1 text-xs font-normal">
-                          {n.title} <span className="font-semibold text-primary">−{fmtGBP(n.gbp_impact)}</span>
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-[300px] text-xs">{n.description}</TooltipContent>
-                    </Tooltip>
-                  ))}
+                  {analysis.negotiation
+                    .filter((n) => n.gbp_impact <= 250)
+                    .map((n, i) => (
+                      <Tooltip key={i}>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className="cursor-default gap-1 text-xs font-normal"
+                          >
+                            {n.title}{" "}
+                            <span className="font-semibold text-primary">
+                              −{fmtGBP(n.gbp_impact)}
+                            </span>
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[300px] text-xs">
+                          {n.description}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
                 </div>
               </TooltipProvider>
             )}
             {!p.ai_payload?.landlordReadiness && (
               <p className="text-xs text-muted-foreground">
-                Run AI photo analysis (Photos &amp; AI condition report, above) to also factor white-goods and garden-clearance costs into this offer.
+                Run AI photo analysis (Photos &amp; AI condition report, above) to also factor
+                white-goods and garden-clearance costs into this offer.
               </p>
             )}
             <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
@@ -558,7 +868,9 @@ function PropertyDetail() {
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <p className="mb-1 font-medium">Credibility guardrails</p>
                 <ul className="list-inside list-disc">
-                  {analysis.negotiationGuidance.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  {analysis.negotiationGuidance.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -570,12 +882,22 @@ function PropertyDetail() {
           icon={<Handshake className="h-4 w-4 text-accent" />}
           title="Smart negotiation"
           summary={`Open ${fmtGBP(analysis.negotiationGuidance.openingOffer)} · Target ${fmtGBP(analysis.negotiationGuidance.targetOffer)}`}
-          actions={<FeedbackWidget propertyId={id} sectionKey="smart-negotiation" sectionLabel="Smart Negotiation" />}
+          actions={
+            <FeedbackWidget
+              propertyId={id}
+              sectionKey="smart-negotiation"
+              sectionLabel="Smart Negotiation"
+            />
+          }
         >
           <NegotiationPanel
             property={p}
             guidance={analysis.negotiationGuidance}
-            onApplyOffer={(gbp) => { tune("offer_price", gbp); toast.success(`Target offer set to ${fmtGBP(gbp)}`); }}
+            onLiveChange={setDraftSellerContext}
+            onApplyOffer={(gbp) => {
+              tune("offer_price", gbp);
+              toast.success(`Target offer set to ${fmtGBP(gbp)}`);
+            }}
           />
         </CollapsibleCard>
 
@@ -591,13 +913,17 @@ function PropertyDetail() {
                   <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset all tuning
                 </Button>
               )}
-              <FeedbackWidget propertyId={id} sectionKey="strategy-comparison" sectionLabel="Strategy Comparison" />
+              <FeedbackWidget
+                propertyId={id}
+                sectionKey="strategy-comparison"
+                sectionLabel="Strategy Comparison"
+              />
             </div>
           }
         >
           <p className="mb-3 text-sm text-muted-foreground">
-            Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator — drag any tunable
-            cell's slider to flex it and watch the rest ripple through.
+            Numbers start from the negotiation playbook, AI surveyor findings and refurb estimator —
+            drag any tunable cell's slider to flex it and watch the rest ripple through.
           </p>
           <Tabs defaultValue={defaultStrategyTab}>
             <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
@@ -605,7 +931,12 @@ function PropertyDetail() {
                 const meta = STRATEGY_META[s.key];
                 const Icon = meta.icon;
                 return (
-                  <TabsTrigger key={s.key} value={s.key} title={s.name} className="flex flex-col items-center gap-0.5 px-1 py-2 text-xs">
+                  <TabsTrigger
+                    key={s.key}
+                    value={s.key}
+                    title={s.name}
+                    className="flex flex-col items-center gap-0.5 px-1 py-2 text-xs"
+                  >
                     <Icon className="h-4 w-4" />
                     <span>{meta.short}</span>
                     <span className="text-[10px] opacity-60">{s.dealScore}</span>
@@ -626,15 +957,22 @@ function PropertyDetail() {
             {...sectionProps("pf-signals")}
             icon={<ClipboardCheck className="h-4 w-4 text-accent" />}
             title="Property Filter signals"
-            summary={p.pf_json.propertyLight?.lastSold
-              ? `Last sold ${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`
-              : p.pf_json.propertyLight?.equity != null
-                ? `Seller equity ${fmtPct(p.pf_json.propertyLight.equity)}`
-                : "Listing signals"}
+            summary={
+              p.pf_json.propertyLight?.lastSold
+                ? `Last sold ${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`
+                : p.pf_json.propertyLight?.equity != null
+                  ? `Seller equity ${fmtPct(p.pf_json.propertyLight.equity)}`
+                  : "Listing signals"
+            }
             actions={
               <div className="flex items-center gap-2">
                 {p.source_link && (
-                  <a href={p.source_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  <a
+                    href={p.source_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
                     <ExternalLink className="h-3.5 w-3.5" /> View listing
                   </a>
                 )}
@@ -644,44 +982,80 @@ function PropertyDetail() {
           >
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               {p.pf_json.propertyLight?.lastSold && (
-                <Stat label="Last sold" v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`} />
+                <Stat
+                  label="Last sold"
+                  v={`${fmtGBP(p.pf_json.propertyLight.lastSold.value)} (${new Date(p.pf_json.propertyLight.lastSold.date).getFullYear()})`}
+                />
               )}
-              {p.pf_json.propertyLight?.equity != null && <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />}
-              {p.pf_json.propertyLight?.article4Status && <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />}
-              {p.pf_json.propertyLight?.councilTax && <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />}
-              {p.pf_json.propertyLight?.multipleReduce != null && <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />}
-              {p.pf_json.propertyLight?.multipleBack != null && <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />}
+              {p.pf_json.propertyLight?.equity != null && (
+                <Stat label="Seller equity" v={fmtPct(p.pf_json.propertyLight.equity)} />
+              )}
+              {p.pf_json.propertyLight?.article4Status && (
+                <Stat label="Article 4" v={p.pf_json.propertyLight.article4Status} />
+              )}
+              {p.pf_json.propertyLight?.councilTax && (
+                <Stat label="Council tax" v={p.pf_json.propertyLight.councilTax} />
+              )}
+              {p.pf_json.propertyLight?.multipleReduce != null && (
+                <Stat label="Reductions" v={String(p.pf_json.propertyLight.multipleReduce)} />
+              )}
+              {p.pf_json.propertyLight?.multipleBack != null && (
+                <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />
+              )}
             </div>
             <PriceHistoryTimeline property={p} />
           </CollapsibleCard>
         )}
 
-        {p.pf_json && (() => {
-          const marketData = extractMarketDataFromPfJson(p.pf_json?.propertyLight ?? {}, p.pf_json?.propertyDetail ?? {});
-          if (!marketData) return null;
-          const { soldComparables, areaStats, subjectLastSold } = marketData;
-          if (soldComparables.length === 0 && !areaStats?.medianSoldPrice && !areaStats?.averageSoldPrice && !subjectLastSold) return null;
-          return (
-            <CollapsibleCard
-              {...sectionProps("market-comparables")}
-              icon={<TrendingUp className="h-4 w-4 text-accent" />}
-              title="Market comparables"
-              summary={`${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`}
-              actions={<FeedbackWidget propertyId={id} sectionKey="market-comparables" sectionLabel="Market Comparables" />}
-            >
-              <MarketComparablesPanel pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
-            </CollapsibleCard>
-          );
-        })()}
+        {p.pf_json &&
+          (() => {
+            const marketData = extractMarketDataFromPfJson(
+              p.pf_json?.propertyLight ?? {},
+              p.pf_json?.propertyDetail ?? {},
+            );
+            if (!marketData) return null;
+            const { soldComparables, areaStats, subjectLastSold } = marketData;
+            if (
+              soldComparables.length === 0 &&
+              !areaStats?.medianSoldPrice &&
+              !areaStats?.averageSoldPrice &&
+              !subjectLastSold
+            )
+              return null;
+            return (
+              <CollapsibleCard
+                {...sectionProps("market-comparables")}
+                icon={<TrendingUp className="h-4 w-4 text-accent" />}
+                title="Market comparables"
+                summary={`${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`}
+                actions={
+                  <FeedbackWidget
+                    propertyId={id}
+                    sectionKey="market-comparables"
+                    sectionLabel="Market Comparables"
+                  />
+                }
+              >
+                <MarketComparablesPanel pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
+              </CollapsibleCard>
+            );
+          })()}
 
         <CollapsibleCard
-          {...sectionProps("epc")}
-          icon={<Zap className="h-4 w-4 text-accent" />}
-          title="EPC — energy performance"
-          summary={`EPC ${p.epc_rate ?? "not fetched"}`}
-          actions={<FeedbackWidget propertyId={id} sectionKey="epc" sectionLabel="EPC" />}
+          {...sectionProps("refurb-epc")}
+          icon={<Wrench className="h-4 w-4 text-accent" />}
+          title="Refurb & EPC"
+          summary={`Refurb ${fmtGBP(p.refurb_estimate?.total ?? 0)} · EPC ${p.epc_rate ?? "not fetched"}`}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="refurb-epc" sectionLabel="Refurb & EPC" />
+          }
         >
-          <EpcPanel propertyId={id} property={p} />
+          <RefurbEpcPanel
+            propertyId={id}
+            property={p}
+            hasAnyPhotos={heroImages.length > 0}
+            onLiveChange={setDraftRefurb}
+          />
         </CollapsibleCard>
 
         <CollapsibleCard
@@ -692,9 +1066,11 @@ function PropertyDetail() {
             const { totalLeverage, flaggedCount } = computeSurveyLeverage(p);
             return `${flaggedCount} flagged · −${fmtGBP(totalLeverage)} confirmed`;
           })()}
-          actions={<FeedbackWidget propertyId={id} sectionKey="survey" sectionLabel="Survey Findings" />}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="survey" sectionLabel="Survey Findings" />
+          }
         >
-          <SurveyStrategyPanel property={p} />
+          <SurveyStrategyPanel property={p} onLiveChange={setDraftSurveyFindings} />
         </CollapsibleCard>
 
         <CollapsibleCard
@@ -702,18 +1078,34 @@ function PropertyDetail() {
           icon={<FileText className="h-4 w-4 text-accent" />}
           title="Deal sheet for investors"
           summary="Shareable PDF / link"
-          actions={<FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />
+          }
         >
-          <DealSheetPanel propertyId={id} overrides={over} personaId={persona.id} personaName={persona.name} />
+          <DealSheetPanel
+            propertyId={id}
+            overrides={over}
+            personaId={persona.id}
+            personaName={persona.name}
+          />
         </CollapsibleCard>
       </div>
     </AppShell>
   );
 }
 
-function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationGuidance; negotiation: NegotiationPoint[] }) {
+function TalkingPointsButton({
+  guidance,
+  negotiation,
+}: {
+  guidance: NegotiationGuidance;
+  negotiation: NegotiationPoint[];
+}) {
   const [copied, setCopied] = useState(false);
-  const script = useMemo(() => buildTalkingPointsScript(guidance, negotiation), [guidance, negotiation]);
+  const script = useMemo(
+    () => buildTalkingPointsScript(guidance, negotiation),
+    [guidance, negotiation],
+  );
 
   const copy = async () => {
     try {
@@ -740,15 +1132,32 @@ function TalkingPointsButton({ guidance, negotiation }: { guidance: NegotiationG
             {copied ? "Copied" : "Copy"}
           </Button>
         </div>
-        <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-muted-foreground">{script}</pre>
+        <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-muted-foreground">
+          {script}
+        </pre>
       </PopoverContent>
     </Popover>
   );
 }
 
 function OfferPlanCard({
-  section, propertyId, setOpenSections, onOpenRefurb, analysis, best, guidance, negotiation, personaPass, sourcingBufferEnabled, onToggleSourcingBuffer,
-  arv, arvOverridden, sourcingProfitPct, sourcingFeeGbp, onTune, onResetOne,
+  section,
+  propertyId,
+  setOpenSections,
+  onOpenRefurb,
+  analysis,
+  best,
+  guidance,
+  negotiation,
+  personaPass,
+  sourcingBufferEnabled,
+  onToggleSourcingBuffer,
+  arv,
+  arvOverridden,
+  sourcingProfitPct,
+  sourcingFeeGbp,
+  onTune,
+  onResetOne,
 }: {
   section: { id: string; open: boolean; onOpenChange: (open: boolean) => void };
   propertyId: string;
@@ -768,13 +1177,16 @@ function OfferPlanCard({
   onTune: (key: OverrideKey, v: number) => void;
   onResetOne: (key: OverrideKey) => void;
 }) {
-  const discount = guidance.askingPrice > 0 ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice : 0;
+  const discount =
+    guidance.askingPrice > 0
+      ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice
+      : 0;
   const sb = guidance.sourcingBuffer;
   const eq = guidance.equityPlan;
   return (
     <CollapsibleCard
       {...section}
-      className="mb-4 border-primary/30 bg-primary/[0.03]"
+      className="mb-3 border-primary/30 bg-primary/[0.03]"
       icon={<Target className="h-4 w-4 text-primary" />}
       title={
         <span className="flex items-center gap-2">
@@ -786,13 +1198,24 @@ function OfferPlanCard({
               {
                 label: "Weighted leverage",
                 value: `−${fmtGBP(analysis.negotiationTotal)}`,
-                hint: <JumpLink to="negotiation-playbook" setOpenSections={setOpenSections}>View playbook</JumpLink>,
+                hint: (
+                  <JumpLink to="negotiation-playbook" setOpenSections={setOpenSections}>
+                    View playbook
+                  </JumpLink>
+                ),
               },
-              { label: "Price band / stance", value: `${guidance.priceBand} · ${guidance.stance.replace("-", " ")}` },
+              {
+                label: "Price band / stance",
+                value: `${guidance.priceBand} · ${guidance.stance.replace("-", " ")}`,
+              },
               {
                 label: "Equity target",
                 value: eq ? fmtPct(eq.targetEquityPct) : "—",
-                hint: eq ? <JumpLink to="equity-check" setOpenSections={setOpenSections}>View equity check</JumpLink> : undefined,
+                hint: eq ? (
+                  <JumpLink to="equity-check" setOpenSections={setOpenSections}>
+                    View equity check
+                  </JumpLink>
+                ) : undefined,
               },
             ]}
           />
@@ -802,12 +1225,18 @@ function OfferPlanCard({
       actions={
         <div className="flex items-center gap-1">
           <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
-          <FeedbackWidget propertyId={propertyId} sectionKey="offer-plan" sectionLabel="Offer Plan" />
+          <FeedbackWidget
+            propertyId={propertyId}
+            sectionKey="offer-plan"
+            sectionLabel="Offer Plan"
+          />
         </div>
       }
     >
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">{best.name}: {best.summary}</p>
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          {best.name}: {best.summary}
+        </p>
         <DealIndicators indicators={analysis.dealIndicators} />
         <div className="grid gap-3 md:grid-cols-4">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
@@ -818,7 +1247,9 @@ function OfferPlanCard({
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-md bg-muted/50 p-2.5">
             <div className="flex items-center justify-between gap-1">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Insurance (est.)</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Insurance (est.)
+              </p>
               <InsuranceInfo insurance={analysis.insurance} />
             </div>
             <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
@@ -826,28 +1257,41 @@ function OfferPlanCard({
           {eq && (
             <div className="rounded-md bg-muted/50 p-2.5 md:col-span-3">
               <div className="flex items-center justify-between gap-1">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Built-in equity at target offer</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Built-in equity at target offer
+                </p>
                 <Badge className={eq.meetsTarget ? "bg-emerald-600" : "bg-amber-600"}>
                   {eq.meetsTarget ? "Meets 25% target" : "Below 25% target"}
                 </Badge>
               </div>
-              <p className="font-medium">{fmtGBP(eq.equityAtTarget)} ({fmtPct(eq.equityPctAtTarget)} of GDV)</p>
+              <p className="font-medium">
+                {fmtGBP(eq.equityAtTarget)} ({fmtPct(eq.equityPctAtTarget)} of GDV)
+              </p>
             </div>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="outline" className="capitalize">{guidance.stance.replace("-", " ")}</Badge>
+          <Badge variant="outline" className="capitalize">
+            {guidance.stance.replace("-", " ")}
+          </Badge>
           <Badge variant="outline">{guidance.priceBand}</Badge>
           <span className="inline-flex items-center gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
             Underwriting uses the target price, not the lower opening anchor.
           </span>
-          {!personaPass && <span className="text-amber-700">Current investor criteria do not fully fit this property.</span>}
+          {!personaPass && (
+            <span className="text-amber-700">
+              Current investor criteria do not fully fit this property.
+            </span>
+          )}
         </div>
         {guidance.epcToCCost != null && (
           <p className="text-xs text-muted-foreground">
-            EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away ceiling above — required to let from 2030 under MEES rules.{" "}
-            <JumpLink to="epc" setOpenSections={setOpenSections}>EPC details</JumpLink>
+            EPC-to-C spend (~{fmtGBP(guidance.epcToCCost)}) is partly baked into the walk-away
+            ceiling above — required to let from 2030 under MEES rules.{" "}
+            <JumpLink to="epc" setOpenSections={setOpenSections}>
+              EPC details
+            </JumpLink>
           </p>
         )}
         {eq && (
@@ -861,18 +1305,26 @@ function OfferPlanCard({
           >
             <p className="text-xs text-muted-foreground">
               GDV {fmtGBP(eq.gdv)} − offer {fmtGBP(guidance.targetOffer)} − refurb{" "}
-              <button type="button" onClick={onOpenRefurb} className="font-medium text-primary hover:underline">
+              <button
+                type="button"
+                onClick={onOpenRefurb}
+                className="font-medium text-primary hover:underline"
+              >
                 {fmtGBP(eq.refurbCost)}
-              </button>
-              {" "}− acquisition costs {fmtGBP(eq.acquisitionCosts)} (SDLT + legal/survey) leaves {fmtGBP(eq.equityAtTarget)} built-in equity ({fmtPct(eq.equityPctAtTarget)} of GDV).
+              </button>{" "}
+              − acquisition costs {fmtGBP(eq.acquisitionCosts)} (SDLT + legal/survey) leaves{" "}
+              {fmtGBP(eq.equityAtTarget)} built-in equity ({fmtPct(eq.equityPctAtTarget)} of GDV).
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              The {fmtPct(eq.targetEquityPct)} target gives a 75% LTV BRRR refinance enough headroom to return most/all capital, and gives a flip
-              ~{fmtPct(eq.targetEquityPct)} of GDV to cover buy/hold/sell costs (~10%) plus genuine profit.
+              The {fmtPct(eq.targetEquityPct)} target gives a 75% LTV BRRR refinance enough headroom
+              to return most/all capital, and gives a flip ~{fmtPct(eq.targetEquityPct)} of GDV to
+              cover buy/hold/sell costs (~10%) plus genuine profit.
             </p>
             {!eq.meetsTarget && (
               <p className="mt-2 text-xs text-amber-700">
-                To hit {fmtPct(eq.targetEquityPct)} equity, the offer would need to come down to around {fmtGBP(eq.maxOfferForTargetEquity)} (or the refurb scope/GDV would need to improve).
+                To hit {fmtPct(eq.targetEquityPct)} equity, the offer would need to come down to
+                around {fmtGBP(eq.maxOfferForTargetEquity)} (or the refurb scope/GDV would need to
+                improve).
               </p>
             )}
           </CollapsibleCard>
@@ -894,7 +1346,11 @@ function OfferPlanCard({
               <div className="rounded-md border p-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">GDV (post-refurb ARV)</p>
-                  {!arvOverridden && <span className="text-[10px] uppercase text-muted-foreground">est. (offer × 1.18)</span>}
+                  {!arvOverridden && (
+                    <span className="text-[10px] uppercase text-muted-foreground">
+                      est. (offer × 1.18)
+                    </span>
+                  )}
                 </div>
                 <p className="text-base font-semibold">{fmtGBP(arv)}</p>
                 <div className="mt-2 flex items-center gap-2">
@@ -916,7 +1372,9 @@ function OfferPlanCard({
                     <RotateCcw className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <p className="mt-1 text-[10px] text-muted-foreground">Set this to a comparable-evidenced post-refurb valuation, not the asking price.</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Set this to a comparable-evidenced post-refurb valuation, not the asking price.
+                </p>
               </div>
               <div className="rounded-md border p-2.5">
                 <p className="text-xs text-muted-foreground">Target profit margin</p>
@@ -981,22 +1439,43 @@ function PriceHistoryTimeline({ property }: { property: any }) {
   return (
     <div className="mt-4 border-t pt-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tracked price history</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Tracked price history
+        </p>
         {totalChange !== 0 && (
-          <span className={cn("text-xs font-medium", totalChange < 0 ? "text-emerald-700" : "text-amber-700")}>
-            {totalChange < 0 ? "−" : "+"}{fmtGBP(Math.abs(totalChange))} since {fmtHistoryDate(oldest.date)}
+          <span
+            className={cn(
+              "text-xs font-medium",
+              totalChange < 0 ? "text-emerald-700" : "text-amber-700",
+            )}
+          >
+            {totalChange < 0 ? "−" : "+"}
+            {fmtGBP(Math.abs(totalChange))} since {fmtHistoryDate(oldest.date)}
           </span>
         )}
       </div>
       <ul className="space-y-1 text-sm">
         {history.map((h, i) => (
           <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{fmtHistoryDate(h.date)}{i === 0 && <Badge variant="outline" className="ml-2 h-5 text-[10px]">current</Badge>}</span>
+            <span className="text-muted-foreground">
+              {fmtHistoryDate(h.date)}
+              {i === 0 && (
+                <Badge variant="outline" className="ml-2 h-5 text-[10px]">
+                  current
+                </Badge>
+              )}
+            </span>
             <span className="flex items-center gap-2">
               <span className="font-medium">{fmtGBP(h.value)}</span>
               {h.changeFromPrevious != null && h.changeFromPrevious !== 0 && (
-                <span className={cn("text-xs", h.changeFromPrevious < 0 ? "text-emerald-700" : "text-amber-700")}>
-                  ({h.changeFromPrevious < 0 ? "−" : "+"}{fmtGBP(Math.abs(h.changeFromPrevious))})
+                <span
+                  className={cn(
+                    "text-xs",
+                    h.changeFromPrevious < 0 ? "text-emerald-700" : "text-amber-700",
+                  )}
+                >
+                  ({h.changeFromPrevious < 0 ? "−" : "+"}
+                  {fmtGBP(Math.abs(h.changeFromPrevious))})
                 </span>
               )}
             </span>
@@ -1009,7 +1488,11 @@ function PriceHistoryTimeline({ property }: { property: any }) {
 
 /** Expands the target collapsible section (if collapsed) and scrolls it into view —
  *  used to make derived figures click-through to the section that explains them. */
-function JumpLink({ to, setOpenSections, children }: {
+function JumpLink({
+  to,
+  setOpenSections,
+  children,
+}: {
   to: string;
   setOpenSections: Dispatch<SetStateAction<Record<string, boolean>>>;
   children: ReactNode;
@@ -1040,11 +1523,15 @@ function Stat({ label, v }: { label: string; v: string }) {
 }
 
 function fmtNumber(n: StrategyNumber) {
-  return n.format === "gbp" ? fmtGBP(n.value)
-    : n.format === "pct" ? fmtPct(n.value)
-    : n.format === "months" ? `${fmtNum(n.value)} mo`
-    : n.format === "count" ? fmtNum(Math.round(n.value), 0)
-    : fmtNum(n.value, 2);
+  return n.format === "gbp"
+    ? fmtGBP(n.value)
+    : n.format === "pct"
+      ? fmtPct(n.value)
+      : n.format === "months"
+        ? `${fmtNum(n.value)} mo`
+        : n.format === "count"
+          ? fmtNum(Math.round(n.value), 0)
+          : fmtNum(n.value, 2);
 }
 
 // Reasons that stem from the *numbers* (cash needed, DSCR, margin, ARV headroom) — i.e. the kind a
@@ -1052,7 +1539,15 @@ function fmtNumber(n: StrategyNumber) {
 // title-split eligibility) are not "fixable" by nudging a slider back, so they're excluded.
 const TUNABLE_CONSTRAINT_RE = /cash in|dscr|margin|profit|arv \(|exceed/i;
 
-function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void }) {
+function StrategyView({
+  s,
+  onTune,
+  onReset,
+}: {
+  s: StrategyResult;
+  onTune: (key: OverrideKey, v: number) => void;
+  onReset: (key: OverrideKey) => void;
+}) {
   const overridden = s.numbers.filter((n) => n.overrideKey && n.overridden);
   const overriddenKeys = Array.from(new Set(overridden.map((n) => n.overrideKey as OverrideKey)));
   const overriddenLabels = Array.from(new Set(overridden.map((n) => n.label)));
@@ -1063,16 +1558,20 @@ function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key:
     <div className="space-y-4">
       <h3 className="text-sm font-semibold">{s.name}</h3>
       <div className="flex items-center gap-2">
-        {s.feasible
-          ? <CheckCircle2 className="h-5 w-5 text-primary" />
-          : <XCircle className="h-5 w-5 text-amber-600" />}
+        {s.feasible ? (
+          <CheckCircle2 className="h-5 w-5 text-primary" />
+        ) : (
+          <XCircle className="h-5 w-5 text-amber-600" />
+        )}
         <p className="text-sm">{s.summary}</p>
       </div>
       {s.reasons && s.reasons.length > 0 && (
         <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
           <p className="mb-1 font-medium">Watch outs</p>
           <ul className="list-inside list-disc">
-            {s.reasons.map((r, i) => <li key={i}>{r}</li>)}
+            {s.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -1082,41 +1581,69 @@ function StrategyView({ s, onTune, onReset }: { s: StrategyResult; onTune: (key:
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div>
-                <p className="text-sm font-medium text-destructive">That combination isn't realistic</p>
+                <p className="text-sm font-medium text-destructive">
+                  That combination isn't realistic
+                </p>
                 <p className="mt-0.5 text-xs text-destructive/80">
-                  You've moved <span className="font-medium">{overriddenLabels.join(", ")}</span> away from what the
-                  negotiation playbook, AI surveyor and refurb estimator computed — and at these settings the maths
-                  below say this strategy no longer stacks up:
+                  You've moved <span className="font-medium">{overriddenLabels.join(", ")}</span>{" "}
+                  away from what the negotiation playbook, AI surveyor and refurb estimator computed
+                  — and at these settings the maths below say this strategy no longer stacks up:
                 </p>
               </div>
             </div>
-            <Button size="sm" variant="destructive" className="shrink-0" onClick={() => overriddenKeys.forEach(onReset)}>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="shrink-0"
+              onClick={() => overriddenKeys.forEach(onReset)}
+            >
               <Wrench className="mr-1.5 h-3.5 w-3.5" /> Fix
             </Button>
           </div>
           <ul className="mt-2 list-inside list-disc pl-6 text-xs text-destructive/80">
-            {breakingReasons.map((r, i) => <li key={i}>{r}</li>)}
+            {breakingReasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
           </ul>
           <p className="mt-2 pl-6 text-[11px] text-destructive/70">
-            "Fix" snaps the tuned levers back to the computed values that made this strategy feasible.
+            "Fix" snaps the tuned levers back to the computed values that made this strategy
+            feasible.
           </p>
         </div>
       )}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         {s.numbers.map((n, i) => (
-          <TunableNumberCell key={i} n={n} onTune={onTune} onReset={onReset} highlight={s.conversionOptions?.recommendedRating} />
+          <TunableNumberCell
+            key={i}
+            n={n}
+            onTune={onTune}
+            onReset={onReset}
+            highlight={s.conversionOptions?.recommendedRating}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function TunableNumberCell({ n, onTune, onReset, highlight }: { n: StrategyNumber; onTune: (key: OverrideKey, v: number) => void; onReset: (key: OverrideKey) => void; highlight?: "L" | "M" | "H" }) {
+function TunableNumberCell({
+  n,
+  onTune,
+  onReset,
+  highlight,
+}: {
+  n: StrategyNumber;
+  onTune: (key: OverrideKey, v: number) => void;
+  onReset: (key: OverrideKey) => void;
+  highlight?: "L" | "M" | "H";
+}) {
   const isPct = n.format === "pct";
   const scale = isPct ? 100 : 1;
 
   return (
-    <div className={cn("rounded-md border p-3", n.overridden && "border-primary/40 bg-primary/[0.04]")}>
+    <div
+      className={cn("rounded-md border p-3", n.overridden && "border-primary/40 bg-primary/[0.04]")}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{n.label}</p>
         {n.overridden && (
@@ -1151,7 +1678,11 @@ function TunableNumberCell({ n, onTune, onReset, highlight }: { n: StrategyNumbe
             type="button"
             onClick={() => onReset(n.overrideKey as OverrideKey)}
             disabled={!n.overridden}
-            title={n.overridden ? `Reset to computed value (${n.baseline != null ? fmtNumber({ ...n, value: n.baseline }) : "default"})` : "Already at the computed value"}
+            title={
+              n.overridden
+                ? `Reset to computed value (${n.baseline != null ? fmtNumber({ ...n, value: n.baseline }) : "default"})`
+                : "Already at the computed value"
+            }
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
           >
             <RotateCcw className="h-3.5 w-3.5" />

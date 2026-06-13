@@ -1,6 +1,13 @@
 import type {
-  PersonaInput, PropertyInput, SliderOverrides, OverrideKey,
-  StrategyResult, StrategyNumber, AnalysisOutput, StrategyKey, DealIndicator,
+  PersonaInput,
+  PropertyInput,
+  SliderOverrides,
+  OverrideKey,
+  StrategyResult,
+  StrategyNumber,
+  AnalysisOutput,
+  StrategyKey,
+  DealIndicator,
 } from "./types";
 import { OVERRIDE_BOUNDS } from "./types";
 import { buildNegotiation } from "./negotiation";
@@ -9,19 +16,31 @@ import { resolveMonthlyRent, proposeRentRange } from "./rent";
 import { deriveLenderCriteria } from "./lender-criteria";
 import { estimateRefurb, tierFromConditionScore, locationModifier } from "./refurb";
 import { estimateInsurance } from "./insurance";
-import { estimateMaxHmoRoomsByArea, ENSUITE_CONVERSION_COST_GBP, ENSUITE_RENT_PREMIUM_PCM, SA_SELF_CONTAINED_UNIT_COST_GBP, SPEC_LABELS } from "./hmo-layout";
-import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "./epc-plan";
+import {
+  estimateMaxHmoRoomsByArea,
+  ENSUITE_CONVERSION_COST_GBP,
+  ENSUITE_RENT_PREMIUM_PCM,
+  SA_SELF_CONTAINED_UNIT_COST_GBP,
+  SPEC_LABELS,
+} from "./hmo-layout";
+import {
+  buildEpcRoadmap,
+  buildEpcMeasureCandidates,
+  resolveEpcMeasureSelection,
+  deriveAiEpcCategories,
+} from "./epc-plan";
 
 const SDLT_INVESTOR = (price: number) => {
   // UK SDLT additional-dwellings approximation (2024 rates +5% surcharge)
   const bands: [number, number][] = [
     [125_000, 0.05],
     [250_000, 0.07],
-    [925_000, 0.10],
+    [925_000, 0.1],
     [1_500_000, 0.15],
     [Infinity, 0.17],
   ];
-  let tax = 0, prev = 0;
+  let tax = 0,
+    prev = 0;
   for (const [cap, rate] of bands) {
     if (price <= prev) break;
     const slice = Math.min(price, cap) - prev;
@@ -49,9 +68,14 @@ function tunable(
 ): StrategyNumber {
   const bounds = OVERRIDE_BOUNDS[key];
   return {
-    label, value, format, hint,
+    label,
+    value,
+    format,
+    hint,
     overrideKey: key,
-    min: bounds.min, max: bounds.max, step: bounds.step,
+    min: bounds.min,
+    max: bounds.max,
+    step: bounds.step,
     baseline: defaults[key],
     overridden: overrides[key] !== undefined,
   };
@@ -61,20 +85,45 @@ function isArticle4Inside(status: unknown): boolean {
   if (status === true || status === 1) return true;
   if (!status || status === false || status === 0) return false;
   const s = String(status).toLowerCase().trim();
-  return ["inside", "in", "yes", "true", "1", "y", "confirmed", "restricted", "applicable", "present", "applies", "affected"].includes(s);
+  return [
+    "inside",
+    "in",
+    "yes",
+    "true",
+    "1",
+    "y",
+    "confirmed",
+    "restricted",
+    "applicable",
+    "present",
+    "applies",
+    "affected",
+  ].includes(s);
 }
 
 function isArticle4Partial(status: unknown): boolean {
   if (!status || status === false || status === 0) return false;
   const s = String(status).toLowerCase().trim();
-  return ["partial", "partly", "potential", "possible", "borderline", "nearby", "adjacent"].includes(s);
+  return [
+    "partial",
+    "partly",
+    "potential",
+    "possible",
+    "borderline",
+    "nearby",
+    "adjacent",
+  ].includes(s);
 }
 
 // NOTE: this is a SUITABILITY check — "would this deal work for this investor criteria profile" — not a
 // pricing input. The recommended offer is what the property and playbook justify regardless of who
 // might buy it; a criteria budget only tells us whether THIS deal fits THIS investor (or a different
 // profile would be a better match).
-function evalPersonaMatch(p: PropertyInput, persona: PersonaInput, targetOffer: number): { pass: boolean; reasons: string[] } {
+function evalPersonaMatch(
+  p: PropertyInput,
+  persona: PersonaInput,
+  targetOffer: number,
+): { pass: boolean; reasons: string[] } {
   const reasons: string[] = [];
   if (p.beds != null && (p.beds < persona.min_beds || p.beds > persona.max_beds)) {
     reasons.push(`Beds ${p.beds} outside target ${persona.min_beds}-${persona.max_beds}`);
@@ -83,12 +132,20 @@ function evalPersonaMatch(p: PropertyInput, persona: PersonaInput, targetOffer: 
   if (epc && EPC_RANK.indexOf(epc) > EPC_RANK.indexOf(persona.min_epc)) {
     reasons.push(`EPC ${epc} worse than required ${persona.min_epc}`);
   }
-  const keywords: string[] = (p.pf_json?.propertyLight?.keywords || []).map((k: string) => k.toLowerCase());
-  if (persona.require_parking && keywords.length && !keywords.some((k) => k.includes("parking") || k.includes("garage") || k.includes("driveway"))) {
+  const keywords: string[] = (p.pf_json?.propertyLight?.keywords || []).map((k: string) =>
+    k.toLowerCase(),
+  );
+  if (
+    persona.require_parking &&
+    keywords.length &&
+    !keywords.some((k) => k.includes("parking") || k.includes("garage") || k.includes("driveway"))
+  ) {
     reasons.push("No parking mentioned in listing");
   }
   if (targetOffer > persona.max_offer_gbp) {
-    reasons.push(`Target offer £${Math.round(targetOffer).toLocaleString()} exceeds this criteria profile's max budget of £${persona.max_offer_gbp.toLocaleString()} — better matched to a higher-budget investor`);
+    reasons.push(
+      `Target offer £${Math.round(targetOffer).toLocaleString()} exceeds this criteria profile's max budget of £${persona.max_offer_gbp.toLocaleString()} — better matched to a higher-budget investor`,
+    );
   }
   return { pass: reasons.length === 0, reasons };
 }
@@ -104,7 +161,13 @@ function interestOnlyMonthly(principal: number, annualRate: number): number {
   return (principal * annualRate) / 12;
 }
 
-function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
+function btlAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+  defaults: ResolvedDefaults,
+  overrides: SliderOverrides,
+): StrategyResult {
   const reasons: string[] = [];
   const purchase = eff.offer_price;
   const refurb = eff.refurb_cost;
@@ -113,11 +176,14 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const deposit = purchase * (1 - eff.ltv);
   const loan = purchase * eff.ltv;
   const cashIn = deposit + sdlt + fees + refurb;
-  if (cashIn > persona.cash_available_gbp * 1.05) reasons.push(`Cash in (£${Math.round(cashIn)}) exceeds available £${persona.cash_available_gbp}`);
+  if (cashIn > persona.cash_available_gbp * 1.05)
+    reasons.push(
+      `Cash in (£${Math.round(cashIn)}) exceeds available £${persona.cash_available_gbp}`,
+    );
 
   const monthlyInt = interestOnlyMonthly(loan, eff.mortgage_rate);
   const monthlyRent = eff.monthly_rent;
-  const mgmt = monthlyRent * 0.10;
+  const mgmt = monthlyRent * 0.1;
   const voids = monthlyRent * 0.05;
   const maint = monthlyRent * 0.05;
   const insurance = estimateInsurance(p, "BTL").monthlyPremiumGbp;
@@ -132,15 +198,44 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const icrThreshold = eff.lender_criteria?.icr_threshold ?? 1.25;
   const stressInt = interestOnlyMonthly(loan, eff.stress_rate);
   const stressICR = monthlyRent / stressInt;
-  if (stressICR < icrThreshold) reasons.push(`Fails ${Math.round(icrThreshold * 100)}% ICR at ${(eff.stress_rate * 100).toFixed(1)}% stress (got ${stressICR.toFixed(2)}x)`);
+  if (stressICR < icrThreshold)
+    reasons.push(
+      `Fails ${Math.round(icrThreshold * 100)}% ICR at ${(eff.stress_rate * 100).toFixed(1)}% stress (got ${stressICR.toFixed(2)}x)`,
+    );
 
   const scoreBreakdown = [
-    { label: "Gross yield", points: Math.round(Math.min(40, grossYield * 100 * 5)), max: 40, detail: `${(grossYield * 100).toFixed(1)}% yield × 5, capped at 40` },
-    { label: "Annual ROI", points: Math.round(Math.min(30, annualROI * 100 * 3)), max: 30, detail: `${(annualROI * 100).toFixed(1)}% ROI × 3, capped at 30` },
-    { label: "Net cashflow", points: monthlyCashflow > 200 ? 20 : monthlyCashflow > 0 ? 10 : 0, max: 20, detail: `£${Math.round(monthlyCashflow)}/mo — 20 if over £200, 10 if positive, 0 otherwise` },
-    { label: "Stress test", points: stressICR >= icrThreshold ? 10 : 0, max: 10, detail: `ICR ${stressICR.toFixed(2)}x at ${(eff.stress_rate * 100).toFixed(1)}% stress — 10 if ≥${Math.round(icrThreshold * 100)}%, 0 otherwise` },
+    {
+      label: "Gross yield",
+      points: Math.round(Math.min(40, grossYield * 100 * 5)),
+      max: 40,
+      detail: `${(grossYield * 100).toFixed(1)}% yield × 5, capped at 40`,
+    },
+    {
+      label: "Annual ROI",
+      points: Math.round(Math.min(30, annualROI * 100 * 3)),
+      max: 30,
+      detail: `${(annualROI * 100).toFixed(1)}% ROI × 3, capped at 30`,
+    },
+    {
+      label: "Net cashflow",
+      points: monthlyCashflow > 200 ? 20 : monthlyCashflow > 0 ? 10 : 0,
+      max: 20,
+      detail: `£${Math.round(monthlyCashflow)}/mo — 20 if over £200, 10 if positive, 0 otherwise`,
+    },
+    {
+      label: "Stress test",
+      points: stressICR >= icrThreshold ? 10 : 0,
+      max: 10,
+      detail: `ICR ${stressICR.toFixed(2)}x at ${(eff.stress_rate * 100).toFixed(1)}% stress — 10 if ≥${Math.round(icrThreshold * 100)}%, 0 otherwise`,
+    },
   ];
-  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      scoreBreakdown.reduce((s, c) => s + c.points, 0),
+    ),
+  );
 
   return {
     key: "BTL",
@@ -152,11 +247,20 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     annualROI,
     dealScore: score,
     scoreBreakdown,
-    scoreFormula: "Gross yield + Annual ROI + Net cashflow + Stress test (each capped, then summed and clamped to 0-100)",
+    scoreFormula:
+      "Gross yield + Annual ROI + Net cashflow + Stress test (each capped, then summed and clamped to 0-100)",
     summary: `${(grossYield * 100).toFixed(1)}% gross yield, £${Math.round(monthlyCashflow)}/mo cashflow, ${(annualROI * 100).toFixed(1)}% ROI on £${Math.round(cashIn)} in`,
     numbers: [
       tunable("Offer price", purchase, "gbp", "offer_price", overrides, defaults),
-      tunable("Refurb budget", refurb, "gbp", "refurb_cost", overrides, defaults),
+      tunable(
+        "Refurb estimate",
+        refurb,
+        "gbp",
+        "refurb_cost",
+        overrides,
+        defaults,
+        "Proposed by the Refurb & EPC estimator — adjust there or override here",
+      ),
       tunable("Mortgage rate", eff.mortgage_rate, "pct", "mortgage_rate", overrides, defaults),
       tunable("LTV", eff.ltv, "pct", "ltv", overrides, defaults),
       { label: "SDLT (additional)", value: sdlt, format: "gbp" },
@@ -164,21 +268,49 @@ function btlAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
       { label: "Deposit", value: deposit, format: "gbp" },
       { label: "Loan", value: loan, format: "gbp" },
       { label: "Total cash in", value: cashIn, format: "gbp" },
-      tunable("Monthly rent", monthlyRent, "gbp", "monthly_rent", overrides, defaults,
+      tunable(
+        "Monthly rent",
+        monthlyRent,
+        "gbp",
+        "monthly_rent",
+        overrides,
+        defaults,
         eff.rent_range
           ? `Proposed range £${eff.rent_range.low.toLocaleString()}-£${eff.rent_range.high.toLocaleString()}/mo · ${eff.rent_range.basis}`
-          : undefined),
+          : undefined,
+      ),
       { label: "Interest-only payment", value: monthlyInt, format: "gbp" },
-      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "Estimated from rebuild cost, age, location and risk factors — see Insurance breakdown" },
-      { label: "Monthly cashflow (net)", value: monthlyCashflow, format: "gbp", hint: "after mgmt 10%, voids 5%, maintenance 5%, insurance" },
+      {
+        label: "Buildings insurance",
+        value: insurance,
+        format: "gbp",
+        hint: "Estimated from rebuild cost, age, location and risk factors — see Insurance breakdown",
+      },
+      {
+        label: "Monthly cashflow (net)",
+        value: monthlyCashflow,
+        format: "gbp",
+        hint: "after mgmt 10%, voids 5%, maintenance 5%, insurance",
+      },
       { label: "Gross yield", value: grossYield, format: "pct" },
       { label: "Annual ROI", value: annualROI, format: "pct" },
-      { label: `ICR @ ${(eff.stress_rate * 100).toFixed(1)}% stress`, value: stressICR, format: "num", hint: `≥${Math.round(icrThreshold * 100)}% needed for ${eff.lender_criteria?.label ?? "this lending structure"}` },
+      {
+        label: `ICR @ ${(eff.stress_rate * 100).toFixed(1)}% stress`,
+        value: stressICR,
+        format: "num",
+        hint: `≥${Math.round(icrThreshold * 100)}% needed for ${eff.lender_criteria?.label ?? "this lending structure"}`,
+      },
     ],
   };
 }
 
-function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
+function brrrAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+  defaults: ResolvedDefaults,
+  overrides: SliderOverrides,
+): StrategyResult {
   const reasons: string[] = [];
   const purchase = eff.offer_price;
   const refurb = eff.refurb_cost;
@@ -187,7 +319,7 @@ function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
   const initialDeposit = purchase * 0.25;
   const bridge = purchase * 0.75;
   const bridgeMonths = 6;
-  const bridgeCost = bridge * 0.10 * (bridgeMonths / 12) + bridge * 0.02;
+  const bridgeCost = bridge * 0.1 * (bridgeMonths / 12) + bridge * 0.02;
   const cashInPre = initialDeposit + sdlt + fees + refurb + bridgeCost;
 
   const arv = eff.arv;
@@ -199,17 +331,44 @@ function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
 
   const monthlyInt = interestOnlyMonthly(refiLoan, eff.mortgage_rate);
   const monthlyRent = eff.monthly_rent;
-  const monthlyCashflow = monthlyRent * 0.80 - monthlyInt;
-  const annualROI = cashLeftIn > 100 ? (monthlyCashflow * 12) / cashLeftIn : monthlyCashflow > 0 ? 999 : 0;
+  const monthlyCashflow = monthlyRent * 0.8 - monthlyInt;
+  const annualROI =
+    cashLeftIn > 100 ? (monthlyCashflow * 12) / cashLeftIn : monthlyCashflow > 0 ? 999 : 0;
 
   const refurbUplift = arv - purchase - refurb;
   const scoreBreakdown = [
-    { label: "Capital recycled", points: cashLeftIn <= 5000 ? 40 : cashLeftIn <= 15000 ? 25 : cashLeftIn <= 30000 ? 10 : 0, max: 40, detail: `£${Math.round(cashLeftIn)} left in — 40 if ≤£5k, 25 if ≤£15k, 10 if ≤£30k, 0 otherwise` },
-    { label: "Net cashflow", points: monthlyCashflow > 200 ? 25 : monthlyCashflow > 0 ? 10 : 0, max: 25, detail: `£${Math.round(monthlyCashflow)}/mo post-refi — 25 if over £200, 10 if positive, 0 otherwise` },
-    { label: "Refurb uplift", points: refurbUplift > 20000 ? 25 : refurbUplift > 0 ? 10 : 0, max: 25, detail: `ARV − purchase − refurb = £${Math.round(refurbUplift)} — 25 if over £20k, 10 if positive, 0 otherwise` },
-    { label: "Within cash budget", points: monthlyCashflow > 0 && cashLeftIn < persona.cash_available_gbp ? 10 : 0, max: 10, detail: `10 if cashflow positive and cash left in is under your available £${persona.cash_available_gbp.toLocaleString()}, 0 otherwise` },
+    {
+      label: "Capital recycled",
+      points: cashLeftIn <= 5000 ? 40 : cashLeftIn <= 15000 ? 25 : cashLeftIn <= 30000 ? 10 : 0,
+      max: 40,
+      detail: `£${Math.round(cashLeftIn)} left in — 40 if ≤£5k, 25 if ≤£15k, 10 if ≤£30k, 0 otherwise`,
+    },
+    {
+      label: "Net cashflow",
+      points: monthlyCashflow > 200 ? 25 : monthlyCashflow > 0 ? 10 : 0,
+      max: 25,
+      detail: `£${Math.round(monthlyCashflow)}/mo post-refi — 25 if over £200, 10 if positive, 0 otherwise`,
+    },
+    {
+      label: "Refurb uplift",
+      points: refurbUplift > 20000 ? 25 : refurbUplift > 0 ? 10 : 0,
+      max: 25,
+      detail: `ARV − purchase − refurb = £${Math.round(refurbUplift)} — 25 if over £20k, 10 if positive, 0 otherwise`,
+    },
+    {
+      label: "Within cash budget",
+      points: monthlyCashflow > 0 && cashLeftIn < persona.cash_available_gbp ? 10 : 0,
+      max: 10,
+      detail: `10 if cashflow positive and cash left in is under your available £${persona.cash_available_gbp.toLocaleString()}, 0 otherwise`,
+    },
   ];
-  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      scoreBreakdown.reduce((s, c) => s + c.points, 0),
+    ),
+  );
 
   return {
     key: "BRRR",
@@ -221,24 +380,57 @@ function brrrAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
     annualROI,
     dealScore: score,
     scoreBreakdown,
-    scoreFormula: "Capital recycled + Net cashflow + Refurb uplift + Within cash budget (each capped, then summed and clamped to 0-100)",
+    scoreFormula:
+      "Capital recycled + Net cashflow + Refurb uplift + Within cash budget (each capped, then summed and clamped to 0-100)",
     summary: `Recycle ${cashLeftIn <= 5000 ? "all" : `£${Math.round(cashOut)}`} of capital. £${Math.round(monthlyCashflow)}/mo cashflow after refi.`,
     numbers: [
       tunable("Purchase", purchase, "gbp", "offer_price", overrides, defaults),
-      tunable("Refurb", refurb, "gbp", "refurb_cost", overrides, defaults),
-      tunable("ARV (After Refurb Value)", arv, "gbp", "arv", overrides, defaults, "Drives how much you can refinance out"),
+      tunable(
+        "Refurb estimate",
+        refurb,
+        "gbp",
+        "refurb_cost",
+        overrides,
+        defaults,
+        "Proposed by the Refurb & EPC estimator — adjust there or override here",
+      ),
+      tunable(
+        "ARV (After Refurb Value)",
+        arv,
+        "gbp",
+        "arv",
+        overrides,
+        defaults,
+        "Drives how much you can refinance out",
+      ),
       { label: "Bridging cost (6mo)", value: bridgeCost, format: "gbp" },
       { label: "Cash in pre-refi", value: cashInPre, format: "gbp" },
       { label: "Refi loan @ 75% LTV", value: refiLoan, format: "gbp" },
-      { label: "Cash pulled out", value: cashOut, format: "gbp", hint: "Rises as ARV rises or refurb/purchase fall" },
-      { label: "Cash LEFT in", value: cashLeftIn, format: "gbp", hint: "Lower is better — under £5k = full recycle" },
+      {
+        label: "Cash pulled out",
+        value: cashOut,
+        format: "gbp",
+        hint: "Rises as ARV rises or refurb/purchase fall",
+      },
+      {
+        label: "Cash LEFT in",
+        value: cashLeftIn,
+        format: "gbp",
+        hint: "Lower is better — under £5k = full recycle",
+      },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
       { label: "Annual ROI on left-in", value: annualROI, format: "pct" },
     ],
   };
 }
 
-function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
+function saAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+  defaults: ResolvedDefaults,
+  overrides: SliderOverrides,
+): StrategyResult {
   const reasons: string[] = [];
   const nightly = overrides.sa_nightly ?? defaults.sa_nightly;
   const occ = overrides.sa_occupancy ?? defaults.sa_occupancy;
@@ -270,50 +462,78 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
   const refurb = eff.refurb_cost + furnishings + smartLocks;
   const cashInBase = purchase * (1 - eff.ltv) + sdlt + 4000 + refurb;
 
-  const article4Status = p.article4_status ?? (p as any).ai_payload?.article4?.status ?? p.pf_json?.propertyLight?.article4Status ?? null;
-  if (isArticle4Inside(article4Status)) reasons.push("Article 4 area — short-let (sui generis) use class change may require planning permission");
+  const article4Status =
+    p.article4_status ??
+    (p as any).ai_payload?.article4?.status ??
+    p.pf_json?.propertyLight?.article4Status ??
+    null;
+  if (isArticle4Inside(article4Status))
+    reasons.push(
+      "Article 4 area — short-let (sui generis) use class change may require planning permission",
+    );
   if (p.tenure === "Leasehold") reasons.push("Leasehold — check short-let permitted");
 
   // AI floor-plan read: self-contained ensuite + kitchenette units it flags as possible, costed
   // at L/M/H spec tiers and folded into cash-in (no revenue uplift assumed — conservative).
   const layout: any = (p as any).ai_payload?.hmoLayout;
-  const selfContainedCount: number = layout?.saUnits?.filter((u: any) => u.ensuiteAndKitchenettePossible).length ?? 0;
+  const selfContainedCount: number =
+    layout?.saUnits?.filter((u: any) => u.ensuiteAndKitchenettePossible).length ?? 0;
   const saTierScenarios = (["L", "M", "H"] as const).map((rating) => {
     const unitCost = selfContainedCount * SA_SELF_CONTAINED_UNIT_COST_GBP[rating];
     const cashIn = cashInBase + unitCost;
     return { rating, unitCost, cashIn, annualROI: (monthlyCashflow * 12) / cashIn };
   });
-  const saRecommendedRating: "L" | "M" | "H" = selfContainedCount > 0
-    ? (saTierScenarios.find((t) => t.annualROI > 0) ?? saTierScenarios[0]).rating
-    : "L";
+  const saRecommendedRating: "L" | "M" | "H" =
+    selfContainedCount > 0
+      ? (saTierScenarios.find((t) => t.annualROI > 0) ?? saTierScenarios[0]).rating
+      : "L";
   const saChosen = saTierScenarios.find((t) => t.rating === saRecommendedRating)!;
   const cashIn = saChosen.cashIn;
   const annualROI = saChosen.annualROI;
 
-  const conversionOptions = selfContainedCount > 0 ? {
-    aiRecommendedCount: selfContainedCount,
-    appliedCount: selfContainedCount,
-    countLabel: "self-contained unit conversions",
-    options: saTierScenarios.map((t) => ({
-      rating: t.rating,
-      label: SPEC_LABELS[t.rating],
-      totalCostGbp: t.unitCost,
-      addedMonthlyRevenue: 0,
-      monthlyCashflow,
-      annualROI: t.annualROI,
-    })),
-    recommendedRating: saRecommendedRating,
-  } : undefined;
+  const conversionOptions =
+    selfContainedCount > 0
+      ? {
+          aiRecommendedCount: selfContainedCount,
+          appliedCount: selfContainedCount,
+          countLabel: "self-contained unit conversions",
+          options: saTierScenarios.map((t) => ({
+            rating: t.rating,
+            label: SPEC_LABELS[t.rating],
+            totalCostGbp: t.unitCost,
+            addedMonthlyRevenue: 0,
+            monthlyCashflow,
+            annualROI: t.annualROI,
+          })),
+          recommendedRating: saRecommendedRating,
+        }
+      : undefined;
 
   if (selfContainedCount > 0) {
-    reasons.push(`Floor-plan assessment flags space for ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — conversion cost is included in cash-in below at ${SPEC_LABELS[saRecommendedRating].toLowerCase()}.`);
+    reasons.push(
+      `Floor-plan assessment flags space for ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — conversion cost is included in cash-in below at ${SPEC_LABELS[saRecommendedRating].toLowerCase()}.`,
+    );
   }
 
   const scoreBreakdown = [
-    { label: "Net cashflow", points: Math.round(monthlyCashflow / 10), detail: `£${Math.round(monthlyCashflow)}/mo ÷ 10 — uncapped, then summed and clamped to 0-100` },
-    { label: "Annual ROI", points: Math.round(annualROI * 100 * 2), detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100` },
+    {
+      label: "Net cashflow",
+      points: Math.round(monthlyCashflow / 10),
+      detail: `£${Math.round(monthlyCashflow)}/mo ÷ 10 — uncapped, then summed and clamped to 0-100`,
+    },
+    {
+      label: "Annual ROI",
+      points: Math.round(annualROI * 100 * 2),
+      detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100`,
+    },
   ];
-  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      scoreBreakdown.reduce((s, c) => s + c.points, 0),
+    ),
+  );
   return {
     key: "SA",
     name: "Serviced Accommodation",
@@ -329,31 +549,92 @@ function saAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput
     conversionOptions,
     numbers: [
       tunable("Nightly rate", nightly, "gbp", "sa_nightly", overrides, defaults),
-      tunable("Occupancy", occ, "pct", "sa_occupancy", overrides, defaults,
-        "Already nets out void periods between bookings — UK short-lets typically run 60-75% occupancy"),
-      { label: "Monthly revenue", value: monthlyRevenue, format: "gbp", hint: "nightly × 30 nights × occupancy" },
-      { label: "Bills", value: bills, format: "gbp", hint: "gas/electric/water/council tax/broadband/TV licence" },
-      { label: "Cleaning & laundry", value: cleaning, format: "gbp", hint: `~${turnoversPerMonth.toFixed(1)} changeovers/mo at an assumed ~4-night average stay` },
-      { label: "Platform commissions", value: platformFees, format: "gbp", hint: "blended Airbnb host fee + Booking.com commission, ~15% of revenue" },
-      { label: "Channel manager", value: channelManager, format: "gbp", hint: "multi-channel listing sync / PMS" },
-      { label: "Consumables & amenities", value: consumables, format: "gbp", hint: "toiletries, welcome packs, restocking — per occupied night, scaled by bedrooms" },
-      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "Short-let/SA landlord policy — see Insurance breakdown" },
+      tunable(
+        "Occupancy",
+        occ,
+        "pct",
+        "sa_occupancy",
+        overrides,
+        defaults,
+        "Already nets out void periods between bookings — UK short-lets typically run 60-75% occupancy",
+      ),
+      {
+        label: "Monthly revenue",
+        value: monthlyRevenue,
+        format: "gbp",
+        hint: "nightly × 30 nights × occupancy",
+      },
+      {
+        label: "Bills",
+        value: bills,
+        format: "gbp",
+        hint: "gas/electric/water/council tax/broadband/TV licence",
+      },
+      {
+        label: "Cleaning & laundry",
+        value: cleaning,
+        format: "gbp",
+        hint: `~${turnoversPerMonth.toFixed(1)} changeovers/mo at an assumed ~4-night average stay`,
+      },
+      {
+        label: "Platform commissions",
+        value: platformFees,
+        format: "gbp",
+        hint: "blended Airbnb host fee + Booking.com commission, ~15% of revenue",
+      },
+      {
+        label: "Channel manager",
+        value: channelManager,
+        format: "gbp",
+        hint: "multi-channel listing sync / PMS",
+      },
+      {
+        label: "Consumables & amenities",
+        value: consumables,
+        format: "gbp",
+        hint: "toiletries, welcome packs, restocking — per occupied night, scaled by bedrooms",
+      },
+      {
+        label: "Buildings insurance",
+        value: insurance,
+        format: "gbp",
+        hint: "Short-let/SA landlord policy — see Insurance breakdown",
+      },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
-      ...(selfContainedCount > 0 ? [{
-        label: "Self-contained unit conversions (AI)",
-        value: selfContainedCount,
-        format: "count" as const,
-        hint: `AI floor-plan read flags ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — costed at ${SPEC_LABELS[saRecommendedRating].toLowerCase()} above`,
-        specOptions: saTierScenarios.map((t) => ({ rating: t.rating, label: SPEC_LABELS[t.rating], gbp: t.unitCost })),
-      }] : []),
-      { label: "Cash in (incl. furnishings & smart locks)", value: cashIn, format: "gbp", hint: `£${Math.round(furnishings).toLocaleString()} furnishings + £${Math.round(smartLocks).toLocaleString()} smart locks for ${beds} bedroom(s)` },
+      ...(selfContainedCount > 0
+        ? [
+            {
+              label: "Self-contained unit conversions (AI)",
+              value: selfContainedCount,
+              format: "count" as const,
+              hint: `AI floor-plan read flags ${selfContainedCount} self-contained ensuite + kitchenette unit${selfContainedCount === 1 ? "" : "s"} — costed at ${SPEC_LABELS[saRecommendedRating].toLowerCase()} above`,
+              specOptions: saTierScenarios.map((t) => ({
+                rating: t.rating,
+                label: SPEC_LABELS[t.rating],
+                gbp: t.unitCost,
+              })),
+            },
+          ]
+        : []),
+      {
+        label: "Cash in (incl. furnishings & smart locks)",
+        value: cashIn,
+        format: "gbp",
+        hint: `£${Math.round(furnishings).toLocaleString()} furnishings + £${Math.round(smartLocks).toLocaleString()} smart locks for ${beds} bedroom(s)`,
+      },
       { label: "Annual ROI", value: annualROI, format: "pct" },
     ],
   };
 }
 
-function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
+function hmoAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+  defaults: ResolvedDefaults,
+  overrides: SliderOverrides,
+): StrategyResult {
   const reasons: string[] = [];
   // Rooms is a headcount, never a fraction — round whatever the slider/default produced before
   // it touches any downstream maths or display (a "4.00-room HMO" is meaningless).
@@ -364,7 +645,7 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const purchase = eff.offer_price;
   const loan = purchase * eff.ltv;
   const monthlyInt = interestOnlyMonthly(loan, eff.mortgage_rate);
-  const baseConversionCost = (rooms >= 5 ? 25000 : 12000);
+  const baseConversionCost = rooms >= 5 ? 25000 : 12000;
   const sdlt = SDLT_INVESTOR(purchase);
 
   // AI floor-plan read: ensuite conversions it recommends (own-room + adjacent knock-throughs),
@@ -374,16 +655,29 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const aiEnsuites: number = layout?.recommendedEnsuites ?? 0;
   const appliedEnsuites = Math.max(0, Math.min(aiEnsuites, rooms));
   const tierScenarios = (["L", "M", "H"] as const).map((rating) => {
-    const conversionCostTier = baseConversionCost + appliedEnsuites * ENSUITE_CONVERSION_COST_GBP[rating];
+    const conversionCostTier =
+      baseConversionCost + appliedEnsuites * ENSUITE_CONVERSION_COST_GBP[rating];
     const addedRent = appliedEnsuites * ENSUITE_RENT_PREMIUM_PCM;
     const revenue = baseRevenue + addedRent;
     const opexTier = 350 + revenue * 0.08; // bills + mgmt
     const cashflow = revenue - opexTier - insurance - monthlyInt;
-    const cashInTier = purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCostTier;
-    return { rating, conversionCost: conversionCostTier, revenue, opex: opexTier, cashflow, cashIn: cashInTier, annualROI: (cashflow * 12) / cashInTier, addedRent };
+    const cashInTier =
+      purchase * (1 - eff.ltv) + sdlt + 3500 + eff.refurb_cost + conversionCostTier;
+    return {
+      rating,
+      conversionCost: conversionCostTier,
+      revenue,
+      opex: opexTier,
+      cashflow,
+      cashIn: cashInTier,
+      annualROI: (cashflow * 12) / cashInTier,
+      addedRent,
+    };
   });
   const recommendedRating: "L" | "M" | "H" =
-    appliedEnsuites > 0 ? tierScenarios.reduce((best, t) => (t.annualROI > best.annualROI ? t : best)).rating : "M";
+    appliedEnsuites > 0
+      ? tierScenarios.reduce((best, t) => (t.annualROI > best.annualROI ? t : best)).rating
+      : "M";
   const chosen = tierScenarios.find((t) => t.rating === recommendedRating)!;
 
   const monthlyRevenue = chosen.revenue;
@@ -393,20 +687,23 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   const cashIn = chosen.cashIn;
   const annualROI = chosen.annualROI;
 
-  const conversionOptions = appliedEnsuites > 0 ? {
-    aiRecommendedCount: aiEnsuites,
-    appliedCount: appliedEnsuites,
-    countLabel: "ensuite conversions",
-    options: tierScenarios.map((t) => ({
-      rating: t.rating,
-      label: SPEC_LABELS[t.rating],
-      totalCostGbp: t.conversionCost,
-      addedMonthlyRevenue: t.addedRent,
-      monthlyCashflow: t.cashflow,
-      annualROI: t.annualROI,
-    })),
-    recommendedRating,
-  } : undefined;
+  const conversionOptions =
+    appliedEnsuites > 0
+      ? {
+          aiRecommendedCount: aiEnsuites,
+          appliedCount: appliedEnsuites,
+          countLabel: "ensuite conversions",
+          options: tierScenarios.map((t) => ({
+            rating: t.rating,
+            label: SPEC_LABELS[t.rating],
+            totalCostGbp: t.conversionCost,
+            addedMonthlyRevenue: t.addedRent,
+            monthlyCashflow: t.cashflow,
+            annualROI: t.annualROI,
+          })),
+          recommendedRating,
+        }
+      : undefined;
 
   // Commercial (NOI ÷ yield) valuation — "the same formula RICS surveyors use" for HMOs, per
   // Property Filter's HMO valuation calculator. 23% operating costs is its self-managed default;
@@ -415,19 +712,31 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
   // separate yield dataset.
   const { mod: regionMod } = locationModifier(p.postcode);
   const hmoOpexPct = 0.23;
-  const investmentYieldPct = Math.max(0.08, Math.min(0.12, 0.12 - ((regionMod - 0.9) / 0.65) * 0.04));
+  const investmentYieldPct = Math.max(
+    0.08,
+    Math.min(0.12, 0.12 - ((regionMod - 0.9) / 0.65) * 0.04),
+  );
   const noi = monthlyRevenue * 12 * (1 - hmoOpexPct);
   const commercialValuation = noi / investmentYieldPct;
   const valueUplift = commercialValuation - purchase;
 
   if (rooms >= 5) reasons.push("Mandatory HMO licence required (5+ rooms)");
-  const article4Status = p.article4_status ?? (p as any).ai_payload?.article4?.status ?? p.pf_json?.propertyLight?.article4Status ?? null;
+  const article4Status =
+    p.article4_status ??
+    (p as any).ai_payload?.article4?.status ??
+    p.pf_json?.propertyLight?.article4Status ??
+    null;
   const article4Blocks = isArticle4Inside(article4Status);
-  if (article4Blocks) reasons.push("Article 4 area — planning permission required for change of use to HMO (C3→C4/Sui Generis)");
+  if (article4Blocks)
+    reasons.push(
+      "Article 4 area — planning permission required for change of use to HMO (C3→C4/Sui Generis)",
+    );
 
   const areaEstimate = estimateMaxHmoRoomsByArea(p.area_sqm);
   if (areaEstimate && rooms > areaEstimate.maxRooms) {
-    reasons.push(`At the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m²), ${p.area_sqm}m² total only realistically supports ~${areaEstimate.maxRooms} lettable room(s) after kitchen/bathroom/communal space — ${rooms} may not be achievable without an extension.`);
+    reasons.push(
+      `At the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m²), ${p.area_sqm}m² total only realistically supports ~${areaEstimate.maxRooms} lettable room(s) after kitchen/bathroom/communal space — ${rooms} may not be achievable without an extension.`,
+    );
   }
 
   // Layout-grounded ceiling: existing bedrooms plus the reception rooms a property of this type
@@ -437,15 +746,31 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     const isFlat = (p.property_type || "").toLowerCase().includes("flat");
     const layoutCeiling = p.beds + (isFlat ? 1 : 2);
     if (rooms > layoutCeiling) {
-      reasons.push(`This is a ${p.beds}-bed ${isFlat ? "flat" : "house"} — converting every realistic reception room${isFlat ? " (lounge)" : " (lounge + dining room)"} while keeping the kitchen as the only shared space tops out around ${layoutCeiling} lettable room(s); ${rooms} would likely need an extension or loft conversion.`);
+      reasons.push(
+        `This is a ${p.beds}-bed ${isFlat ? "flat" : "house"} — converting every realistic reception room${isFlat ? " (lounge)" : " (lounge + dining room)"} while keeping the kitchen as the only shared space tops out around ${layoutCeiling} lettable room(s); ${rooms} would likely need an extension or loft conversion.`,
+      );
     }
   }
 
   const scoreBreakdown = [
-    { label: "Net cashflow", points: Math.round(monthlyCashflow / 15), detail: `£${Math.round(monthlyCashflow)}/mo ÷ 15 — uncapped, then summed and clamped to 0-100` },
-    { label: "Annual ROI", points: Math.round(annualROI * 100 * 2), detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100` },
+    {
+      label: "Net cashflow",
+      points: Math.round(monthlyCashflow / 15),
+      detail: `£${Math.round(monthlyCashflow)}/mo ÷ 15 — uncapped, then summed and clamped to 0-100`,
+    },
+    {
+      label: "Annual ROI",
+      points: Math.round(annualROI * 100 * 2),
+      detail: `${(annualROI * 100).toFixed(1)}% ROI × 2 — uncapped, then summed and clamped to 0-100`,
+    },
   ];
-  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      scoreBreakdown.reduce((s, c) => s + c.points, 0),
+    ),
+  );
   return {
     key: "HMO",
     name: "HMO",
@@ -457,42 +782,81 @@ function hmoAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutpu
     dealScore: score,
     scoreBreakdown,
     scoreFormula: "Net cashflow ÷ 15 + Annual ROI × 2, summed and clamped to 0-100",
-    summary: appliedEnsuites > 0
-      ? `${rooms} rooms (+${appliedEnsuites} ensuite${appliedEnsuites === 1 ? "" : "s"}) — £${Math.round(monthlyRevenue)}/mo at ${SPEC_LABELS[recommendedRating].toLowerCase()}. £${Math.round(monthlyCashflow)} net cashflow.`
-      : `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
+    summary:
+      appliedEnsuites > 0
+        ? `${rooms} rooms (+${appliedEnsuites} ensuite${appliedEnsuites === 1 ? "" : "s"}) — £${Math.round(monthlyRevenue)}/mo at ${SPEC_LABELS[recommendedRating].toLowerCase()}. £${Math.round(monthlyCashflow)} net cashflow.`
+        : `${rooms} rooms × £${rentPerRoom} = £${monthlyRevenue}/mo. £${Math.round(monthlyCashflow)} net cashflow.`,
     conversionOptions,
     numbers: [
-      tunable("Rooms", rooms, "count", "room_count", overrides, defaults,
-        areaEstimate ? `Up to ~${areaEstimate.maxRooms} rooms fit at the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m², ${Math.round(areaEstimate.communalReservePct * 100)}% reserved for kitchen/bathrooms/circulation)` : undefined),
+      tunable(
+        "Rooms",
+        rooms,
+        "count",
+        "room_count",
+        overrides,
+        defaults,
+        areaEstimate
+          ? `Up to ~${areaEstimate.maxRooms} rooms fit at the statutory minimum bedroom size (${areaEstimate.minRoomSqm}m², ${Math.round(areaEstimate.communalReservePct * 100)}% reserved for kitchen/bathrooms/circulation)`
+          : undefined,
+      ),
       tunable("Rent per room", rentPerRoom, "gbp", "rent_per_room", overrides, defaults),
       { label: "Monthly revenue", value: monthlyRevenue, format: "gbp" },
       { label: "Bills + mgmt", value: opex, format: "gbp" },
-      { label: "Buildings insurance", value: insurance, format: "gbp", hint: "HMO landlord policy — see Insurance breakdown" },
+      {
+        label: "Buildings insurance",
+        value: insurance,
+        format: "gbp",
+        hint: "HMO landlord policy — see Insurance breakdown",
+      },
       { label: "Mortgage interest", value: monthlyInt, format: "gbp" },
       { label: "HMO conversion cost", value: conversionCost, format: "gbp" },
-      ...(appliedEnsuites > 0 ? [{
-        label: "Ensuite conversions (AI)",
-        value: appliedEnsuites,
-        format: "count" as const,
-        hint: `AI floor-plan read recommends ${aiEnsuites} ensuite${aiEnsuites === 1 ? "" : "s"} — costed at ${SPEC_LABELS[recommendedRating].toLowerCase()} above`,
-        specOptions: tierScenarios.map((t) => ({ rating: t.rating, label: SPEC_LABELS[t.rating], gbp: t.conversionCost })),
-      }] : []),
+      ...(appliedEnsuites > 0
+        ? [
+            {
+              label: "Ensuite conversions (AI)",
+              value: appliedEnsuites,
+              format: "count" as const,
+              hint: `AI floor-plan read recommends ${aiEnsuites} ensuite${aiEnsuites === 1 ? "" : "s"} — costed at ${SPEC_LABELS[recommendedRating].toLowerCase()} above`,
+              specOptions: tierScenarios.map((t) => ({
+                rating: t.rating,
+                label: SPEC_LABELS[t.rating],
+                gbp: t.conversionCost,
+              })),
+            },
+          ]
+        : []),
       { label: "Cash in", value: cashIn, format: "gbp" },
       { label: "Monthly cashflow", value: monthlyCashflow, format: "gbp" },
       { label: "Annual ROI", value: annualROI, format: "pct" },
-      { label: "Commercial valuation (NOI ÷ yield)", value: commercialValuation, format: "gbp", hint: `NOI £${Math.round(noi).toLocaleString()} ÷ ${(investmentYieldPct * 100).toFixed(1)}% yield — RICS-style HMO valuation, not a bricks-and-mortar comparable` },
-      { label: "Value uplift vs purchase", value: valueUplift, format: "gbp", hint: "Commercial valuation minus purchase price — potential refinance headroom on an HMO valuation basis" },
+      {
+        label: "Commercial valuation (NOI ÷ yield)",
+        value: commercialValuation,
+        format: "gbp",
+        hint: `NOI £${Math.round(noi).toLocaleString()} ÷ ${(investmentYieldPct * 100).toFixed(1)}% yield — RICS-style HMO valuation, not a bricks-and-mortar comparable`,
+      },
+      {
+        label: "Value uplift vs purchase",
+        value: valueUplift,
+        format: "gbp",
+        hint: "Commercial valuation minus purchase price — potential refinance headroom on an HMO valuation basis",
+      },
     ],
   };
 }
 
-function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"], defaults: ResolvedDefaults, overrides: SliderOverrides): StrategyResult {
+function flipAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+  defaults: ResolvedDefaults,
+  overrides: SliderOverrides,
+): StrategyResult {
   const purchase = eff.offer_price;
   const refurb = eff.refurb_cost;
   const arv = eff.arv;
   const sdlt = SDLT_INVESTOR(purchase);
   const fees = 4000 + arv * 0.015; // buy + sell legals + EA
-  const financeCost = purchase * 0.75 * 0.10 * 0.5; // 6mo bridge
+  const financeCost = purchase * 0.75 * 0.1 * 0.5; // 6mo bridge
   const totalCost = purchase + refurb + sdlt + fees + financeCost;
   const profit = arv - totalCost;
   const margin = profit / arv;
@@ -501,10 +865,25 @@ function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
   if (margin < 0.15) reasons.push(`Margin ${(margin * 100).toFixed(1)}% below 15% rule of thumb`);
   if (profit < 20000) reasons.push("Profit below £20k benchmark");
   const scoreBreakdown = [
-    { label: "Margin on GDV", points: Math.round(margin * 100 * 4), detail: `${(margin * 100).toFixed(1)}% margin × 4 — uncapped, then summed and clamped to 0-100` },
-    { label: "Profit", points: Math.round(Math.min(40, profit / 1000)), max: 40, detail: `£${Math.round(profit)} profit ÷ 1,000, capped at 40` },
+    {
+      label: "Margin on GDV",
+      points: Math.round(margin * 100 * 4),
+      detail: `${(margin * 100).toFixed(1)}% margin × 4 — uncapped, then summed and clamped to 0-100`,
+    },
+    {
+      label: "Profit",
+      points: Math.round(Math.min(40, profit / 1000)),
+      max: 40,
+      detail: `£${Math.round(profit)} profit ÷ 1,000, capped at 40`,
+    },
   ];
-  const score = Math.max(0, Math.min(100, scoreBreakdown.reduce((s, c) => s + c.points, 0)));
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      scoreBreakdown.reduce((s, c) => s + c.points, 0),
+    ),
+  );
   return {
     key: "FLIP",
     name: "Flip",
@@ -518,8 +897,24 @@ function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
     summary: `£${Math.round(profit)} profit at ${(margin * 100).toFixed(1)}% margin`,
     numbers: [
       tunable("Purchase", purchase, "gbp", "offer_price", overrides, defaults),
-      tunable("Refurb", refurb, "gbp", "refurb_cost", overrides, defaults),
-      tunable("GDV (resale)", arv, "gbp", "arv", overrides, defaults, "Gross Development Value — your expected resale price"),
+      tunable(
+        "Refurb estimate",
+        refurb,
+        "gbp",
+        "refurb_cost",
+        overrides,
+        defaults,
+        "Proposed by the Refurb & EPC estimator — adjust there or override here",
+      ),
+      tunable(
+        "GDV (resale)",
+        arv,
+        "gbp",
+        "arv",
+        overrides,
+        defaults,
+        "Gross Development Value — your expected resale price",
+      ),
       { label: "SDLT + fees + finance", value: sdlt + fees + financeCost, format: "gbp" },
       { label: "Total cost", value: totalCost, format: "gbp" },
       { label: "Profit", value: profit, format: "gbp" },
@@ -529,7 +924,11 @@ function flipAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutp
   };
 }
 
-function titleSplitAnalysis(p: PropertyInput, persona: PersonaInput, eff: AnalysisOutput["effectiveInputs"]): StrategyResult {
+function titleSplitAnalysis(
+  p: PropertyInput,
+  persona: PersonaInput,
+  eff: AnalysisOutput["effectiveInputs"],
+): StrategyResult {
   const reasons: string[] = [];
   const feasible =
     (p.property_type || "").toLowerCase().includes("flat") === false &&
@@ -547,7 +946,14 @@ function titleSplitAnalysis(p: PropertyInput, persona: PersonaInput, eff: Analys
     reasons,
     dealScore: feasible ? 60 : 5,
     scoreBreakdown: [
-      { label: "Eligibility check", points: feasible ? 60 : 5, max: 60, detail: feasible ? "Meets the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 60" : "Doesn't meet the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 5" },
+      {
+        label: "Eligibility check",
+        points: feasible ? 60 : 5,
+        max: 60,
+        detail: feasible
+          ? "Meets the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 60"
+          : "Doesn't meet the freehold + 4 beds + 110m² rule of thumb — flat fixed score of 5",
+      },
     ],
     scoreFormula: "Fixed score: 60 if the freehold/beds/area rule of thumb is met, otherwise 5",
     summary: feasible
@@ -565,41 +971,106 @@ function titleSplitAnalysis(p: PropertyInput, persona: PersonaInput, eff: Analys
 // the deal score so "62/100" comes with a "why". Each is derived straight from figures already
 // computed elsewhere (risk severity, the lead strategy's cashflow/key, the overall score) —
 // nothing here is a separate model, just a translation of numbers already on screen into words.
-function deriveDealIndicators(riskFlags: any[], best: StrategyResult, overallScore: number): DealIndicator[] {
+function deriveDealIndicators(
+  riskFlags: any[],
+  best: StrategyResult,
+  overallScore: number,
+): DealIndicator[] {
   const red = riskFlags.filter((f) => f.severity === "red").length;
   const amber = riskFlags.filter((f) => f.severity === "amber").length;
 
   let risk: DealIndicator;
   if (red > 0) {
-    risk = { key: "risk", label: "Risk", value: "High risk", tone: "bad", detail: `${red} red flag${red > 1 ? "s" : ""}${amber ? ` and ${amber} amber` : ""} on file — see the risk breakdown for what to verify.` };
+    risk = {
+      key: "risk",
+      label: "Risk",
+      value: "High risk",
+      tone: "bad",
+      detail: `${red} red flag${red > 1 ? "s" : ""}${amber ? ` and ${amber} amber` : ""} on file — see the risk breakdown for what to verify.`,
+    };
   } else if (amber > 0) {
-    risk = { key: "risk", label: "Risk", value: "Moderate risk", tone: "warn", detail: `${amber} amber flag${amber > 1 ? "s" : ""} on file, no red flags — see the risk breakdown for what to verify.` };
+    risk = {
+      key: "risk",
+      label: "Risk",
+      value: "Moderate risk",
+      tone: "warn",
+      detail: `${amber} amber flag${amber > 1 ? "s" : ""} on file, no red flags — see the risk breakdown for what to verify.`,
+    };
   } else {
-    risk = { key: "risk", label: "Risk", value: "Low risk", tone: "good", detail: "No risk flags raised against this listing." };
+    risk = {
+      key: "risk",
+      label: "Risk",
+      value: "Low risk",
+      tone: "good",
+      detail: "No risk flags raised against this listing.",
+    };
   }
 
   const cashflow = best.monthlyCashflow ?? 0;
   let income: DealIndicator;
   if (best.key === "FLIP" || best.key === "TITLE_SPLIT") {
-    income = { key: "income", label: "Income", value: "Capital growth play", tone: "neutral", detail: `${best.name} is a one-off profit play rather than a monthly-income strategy — see its own numbers for projected proceeds.` };
+    income = {
+      key: "income",
+      label: "Income",
+      value: "Capital growth play",
+      tone: "neutral",
+      detail: `${best.name} is a one-off profit play rather than a monthly-income strategy — see its own numbers for projected proceeds.`,
+    };
   } else if (cashflow > 200) {
-    income = { key: "income", label: "Income", value: "Steady income", tone: "good", detail: `£${Math.round(cashflow)}/mo net cashflow projected on the lead strategy (${best.name}).` };
+    income = {
+      key: "income",
+      label: "Income",
+      value: "Steady income",
+      tone: "good",
+      detail: `£${Math.round(cashflow)}/mo net cashflow projected on the lead strategy (${best.name}).`,
+    };
   } else if (cashflow > 0) {
-    income = { key: "income", label: "Income", value: "Tight margins", tone: "neutral", detail: `Only £${Math.round(cashflow)}/mo net cashflow projected on ${best.name} — a thin buffer against voids or rate rises.` };
+    income = {
+      key: "income",
+      label: "Income",
+      value: "Tight margins",
+      tone: "neutral",
+      detail: `Only £${Math.round(cashflow)}/mo net cashflow projected on ${best.name} — a thin buffer against voids or rate rises.`,
+    };
   } else {
-    income = { key: "income", label: "Income", value: "Negative cashflow", tone: "bad", detail: `${best.name} projects a £${Math.round(Math.abs(cashflow))}/mo shortfall at these numbers — you'd be funding the gap each month.` };
+    income = {
+      key: "income",
+      label: "Income",
+      value: "Negative cashflow",
+      tone: "bad",
+      detail: `${best.name} projects a £${Math.round(Math.abs(cashflow))}/mo shortfall at these numbers — you'd be funding the gap each month.`,
+    };
   }
 
   let reward: DealIndicator;
   if (overallScore >= 70) {
-    reward = { key: "reward", label: "Reward", value: "Strong upside", tone: "good", detail: `Deal score ${overallScore}/100 — one of the stronger reads this engine produces; lead strategy ${best.name} scores ${best.dealScore}/100.` };
+    reward = {
+      key: "reward",
+      label: "Reward",
+      value: "Strong upside",
+      tone: "good",
+      detail: `Deal score ${overallScore}/100 — one of the stronger reads this engine produces; lead strategy ${best.name} scores ${best.dealScore}/100.`,
+    };
   } else if (overallScore >= 45) {
-    reward = { key: "reward", label: "Reward", value: "Moderate upside", tone: "neutral", detail: `Deal score ${overallScore}/100 — workable but unremarkable; lead strategy ${best.name} scores ${best.dealScore}/100.` };
+    reward = {
+      key: "reward",
+      label: "Reward",
+      value: "Moderate upside",
+      tone: "neutral",
+      detail: `Deal score ${overallScore}/100 — workable but unremarkable; lead strategy ${best.name} scores ${best.dealScore}/100.`,
+    };
   } else {
-    const bestNote = best.dealScore >= 60
-      ? `Best individual strategy is ${best.name} (${best.dealScore}/100), but the average across all six strategies is dragging the headline down.`
-      : `Best available strategy is ${best.name} at ${best.dealScore}/100 — weak overall.`;
-    reward = { key: "reward", label: "Reward", value: "Limited upside", tone: "warn", detail: `Deal score ${overallScore}/100 — the numbers are weak at the current price. ${bestNote}` };
+    const bestNote =
+      best.dealScore >= 60
+        ? `Best individual strategy is ${best.name} (${best.dealScore}/100), but the average across all six strategies is dragging the headline down.`
+        : `Best available strategy is ${best.name} at ${best.dealScore}/100 — weak overall.`;
+    reward = {
+      key: "reward",
+      label: "Reward",
+      value: "Limited upside",
+      tone: "warn",
+      detail: `Deal score ${overallScore}/100 — the numbers are weak at the current price. ${bestNote}`,
+    };
   }
 
   return [risk, income, reward];
@@ -617,11 +1088,13 @@ export function analyseProperty(
   const blocked = strategiesBlockedByRisk(riskFlags as any);
   // Article 4 status: prefer the verified DB lookup, then the AI surveyor's web-grounded read,
   // then whatever the listing JSON itself claims — "any info provided in JSON or available online".
-  const article4Status = prop.article4_status
-    ?? (prop as any).ai_payload?.article4?.status
-    ?? prop.pf_json?.propertyLight?.article4Status
-    ?? null;
-  const article4Council = (prop as any).article4_council ?? (prop as any).ai_payload?.article4?.council ?? null;
+  const article4Status =
+    prop.article4_status ??
+    (prop as any).ai_payload?.article4?.status ??
+    prop.pf_json?.propertyLight?.article4Status ??
+    null;
+  const article4Council =
+    (prop as any).article4_council ?? (prop as any).ai_payload?.article4?.council ?? null;
 
   // ---- Resolve every tunable input to its "natural" baseline (no override) AND its effective (possibly overridden) value ----
 
@@ -645,7 +1118,12 @@ export function analyseProperty(
           (prop as any).refurb_estimate?.epcMeasures,
         ).totals
       : null;
-    const est = estimateRefurb(prop, tierFromConditionScore(conditionScore), aiRefurb?.items, epcSelection);
+    const est = estimateRefurb(
+      prop,
+      tierFromConditionScore(conditionScore),
+      aiRefurb?.items,
+      epcSelection,
+    );
     refurb_default = est.total;
     refurb_default_source = aiRefurb ? "ai" : "algo";
   }
@@ -683,9 +1161,18 @@ export function analyseProperty(
   const arv = overrides.arv ?? arv_default;
 
   const eff = {
-    offer_price, monthly_rent, refurb_cost, mortgage_rate, ltv, arv, stress_rate,
-    rent_source: rent.source, rent_trustworthy: rent.trustworthy, refurb_source,
-    rent_range, lender_criteria: lenderCriteria,
+    offer_price,
+    monthly_rent,
+    refurb_cost,
+    mortgage_rate,
+    ltv,
+    arv,
+    stress_rate,
+    rent_source: rent.source,
+    rent_trustworthy: rent.trustworthy,
+    refurb_source,
+    rent_range,
+    lender_criteria: lenderCriteria,
   };
 
   // Built-in-equity check: a refurb offer isn't just "asking minus refurb minus issues" — good
@@ -710,11 +1197,23 @@ export function analyseProperty(
     const sourcingProfitPct = overrides.sourcingProfitPct ?? 0.25;
     const sourcingFeeGbp = overrides.sourcingFeeGbp ?? 5000;
     const gdv = eff.arv;
-    const sourcingOffer = Math.max(0, Math.min(asking, Math.round(gdv * (1 - sourcingProfitPct) - eff.refurb_cost - sourcingFeeGbp)));
+    const sourcingOffer = Math.max(
+      0,
+      Math.min(
+        asking,
+        Math.round(gdv * (1 - sourcingProfitPct) - eff.refurb_cost - sourcingFeeGbp),
+      ),
+    );
     const delta = sourcingOffer - negotiation.guidance.openingOffer;
     negotiation.guidance.openingOffer = sourcingOffer;
-    negotiation.guidance.targetOffer = Math.max(0, Math.min(asking, negotiation.guidance.targetOffer + delta));
-    negotiation.guidance.walkAwayOffer = Math.max(0, Math.min(asking, negotiation.guidance.walkAwayOffer + delta));
+    negotiation.guidance.targetOffer = Math.max(
+      0,
+      Math.min(asking, negotiation.guidance.targetOffer + delta),
+    );
+    negotiation.guidance.walkAwayOffer = Math.max(
+      0,
+      Math.min(asking, negotiation.guidance.walkAwayOffer + delta),
+    );
     negotiation.guidance.appliedLeverage = Math.max(0, asking - negotiation.guidance.targetOffer);
     negotiation.guidance.sourcingBuffer = {
       enabled: true,
@@ -728,12 +1227,12 @@ export function analyseProperty(
     // sourcing offer. Flag it so the user verifies GDV against real comparables before quoting it.
     if (overrides.arv == null) {
       negotiation.guidance.warnings.push(
-        `Sourcing buffer GDV (£${gdv.toLocaleString()}) is an estimate (offer price × 1.18), not an independent post-refurb valuation — adjust the GDV slider to a comparable-evidenced figure before relying on this offer.`
+        `Sourcing buffer GDV (£${gdv.toLocaleString()}) is an estimate (offer price × 1.18), not an independent post-refurb valuation — adjust the GDV slider to a comparable-evidenced figure before relying on this offer.`,
       );
     }
     if (sourcingOffer < negotiation.guidance.walkAwayOffer * 0.85) {
       negotiation.guidance.warnings.push(
-        `Sourcing buffer offer (£${sourcingOffer.toLocaleString()}) is well below the walk-away ceiling (£${negotiation.guidance.walkAwayOffer.toLocaleString()}) — a reduction this large needs strong, evidenced justification (e.g. confirmed refurb scope + comparable GDV) to put to an agent.`
+        `Sourcing buffer offer (£${sourcingOffer.toLocaleString()}) is well below the walk-away ceiling (£${negotiation.guidance.walkAwayOffer.toLocaleString()}) — a reduction this large needs strong, evidenced justification (e.g. confirmed refurb scope + comparable GDV) to put to an agent.`,
       );
     }
   }
@@ -743,7 +1242,10 @@ export function analyseProperty(
     const totalCostAtTarget = targetForEquity + refurb_cost + acquisitionCosts;
     const equityAtTarget = arv - totalCostAtTarget;
     const equityPctAtTarget = arv > 0 ? equityAtTarget / arv : 0;
-    const maxOfferForTargetEquity = Math.max(0, Math.round(arv * (1 - TARGET_EQUITY_PCT) - refurb_cost - acquisitionCosts));
+    const maxOfferForTargetEquity = Math.max(
+      0,
+      Math.round(arv * (1 - TARGET_EQUITY_PCT) - refurb_cost - acquisitionCosts),
+    );
     const meetsTarget = equityPctAtTarget >= TARGET_EQUITY_PCT;
     negotiation.guidance.equityPlan = {
       gdv: arv,
@@ -756,9 +1258,13 @@ export function analyseProperty(
       meetsTarget,
       maxOfferForTargetEquity,
     };
-    if (!meetsTarget && negotiation.guidance.askingPrice > 0 && maxOfferForTargetEquity < targetForEquity) {
+    if (
+      !meetsTarget &&
+      negotiation.guidance.askingPrice > 0 &&
+      maxOfferForTargetEquity < targetForEquity
+    ) {
       negotiation.guidance.warnings.push(
-        `At the target offer of £${targetForEquity.toLocaleString()}, built-in equity is only ${(equityPctAtTarget * 100).toFixed(1)}% of GDV (£${arv.toLocaleString()}) — below the ~25% most BRRR/refinance plans need. To hit 25%, the offer would need to come down to around £${maxOfferForTargetEquity.toLocaleString()} (or the refurb scope/GDV would need to improve).`
+        `At the target offer of £${targetForEquity.toLocaleString()}, built-in equity is only ${(equityPctAtTarget * 100).toFixed(1)}% of GDV (£${arv.toLocaleString()}) — below the ~25% most BRRR/refinance plans need. To hit 25%, the offer would need to come down to around £${maxOfferForTargetEquity.toLocaleString()} (or the refurb scope/GDV would need to improve).`,
       );
     }
   }
@@ -777,7 +1283,10 @@ export function analyseProperty(
   const isFlat = (prop.property_type || "").toLowerCase().includes("flat");
   const roomsByLayout = prop.beds != null ? prop.beds + (isFlat ? 1 : 2) : null;
   const roomsByArea = estimateMaxHmoRoomsByArea(prop.area_sqm)?.maxRooms ?? null;
-  const layoutCeiling = roomsByLayout != null && roomsByArea != null ? Math.min(roomsByLayout, roomsByArea) : (roomsByLayout ?? roomsByArea ?? 4);
+  const layoutCeiling =
+    roomsByLayout != null && roomsByArea != null
+      ? Math.min(roomsByLayout, roomsByArea)
+      : (roomsByLayout ?? roomsByArea ?? 4);
   const room_count_default = Math.max(1, Math.min(layoutCeiling, OVERRIDE_BOUNDS.room_count.max));
 
   // Baselines for every slider-tunable lever — what the engine would compute with zero overrides.
@@ -817,35 +1326,55 @@ export function analyseProperty(
   // hmoAnalysis() already explains "inside" via its own reasons; we add the licensing-risk
   // framing for "partial" here since that's a postcode-level signal, not a property one.
   if (isArticle4Inside(article4Status)) {
-    strategies = strategies.map((s) => s.key === "HMO" ? {
-      ...s,
-      feasible: false,
-      dealScore: Math.min(s.dealScore, 35),
-      reasons: [...(s.reasons ?? []).filter((r) => !r.includes("Article 4")), "Article 4 direction in this area — new HMO licences are unlikely to be granted. Verify with the council before pursuing this strategy."],
-    } : s);
+    strategies = strategies.map((s) =>
+      s.key === "HMO"
+        ? {
+            ...s,
+            feasible: false,
+            dealScore: Math.min(s.dealScore, 35),
+            reasons: [
+              ...(s.reasons ?? []).filter((r) => !r.includes("Article 4")),
+              "Article 4 direction in this area — new HMO licences are unlikely to be granted. Verify with the council before pursuing this strategy.",
+            ],
+          }
+        : s,
+    );
   } else if (isArticle4Partial(article4Status)) {
-    strategies = strategies.map((s) => s.key === "HMO" ? {
-      ...s,
-      feasible: false,
-      dealScore: Math.min(s.dealScore, 35),
-      reasons: [...(s.reasons ?? []), "Partial Article 4 in this postcode — councils typically draw these directions to manage HMO concentration and commonly run additional/selective licensing alongside them, so a new HMO licence here is likely to be hard-won even where this exact street turns out to sit outside the boundary. Verify with the council before relying on this strategy."],
-    } : s);
+    strategies = strategies.map((s) =>
+      s.key === "HMO"
+        ? {
+            ...s,
+            feasible: false,
+            dealScore: Math.min(s.dealScore, 35),
+            reasons: [
+              ...(s.reasons ?? []),
+              "Partial Article 4 in this postcode — councils typically draw these directions to manage HMO concentration and commonly run additional/selective licensing alongside them, so a new HMO licence here is likely to be hard-won even where this exact street turns out to sit outside the boundary. Verify with the council before relying on this strategy.",
+            ],
+          }
+        : s,
+    );
   }
 
   // Risk-flag strategy blocks + score caps
   if (blocked.size) {
-    strategies = strategies.map((s) => blocked.has(s.key) ? {
-      ...s,
-      dealScore: Math.min(s.dealScore, 15),
-      feasible: false,
-      reasons: [...(s.reasons ?? []), "Disabled by risk flag — see warnings above."],
-    } : s);
+    strategies = strategies.map((s) =>
+      blocked.has(s.key)
+        ? {
+            ...s,
+            dealScore: Math.min(s.dealScore, 15),
+            feasible: false,
+            reasons: [...(s.reasons ?? []), "Disabled by risk flag — see warnings above."],
+          }
+        : s,
+    );
   }
 
   // "Best" must never be a strategy we've just marked infeasible (e.g. HMO blocked by Article 4) —
   // prefer the highest-scoring FEASIBLE strategy, only falling back to the raw top score if none qualify.
   const feasiblePool = strategies.filter((s) => s.feasible);
-  const best = (feasiblePool.length ? feasiblePool : strategies).reduce((a, b) => (b.dealScore > a.dealScore ? b : a));
+  const best = (feasiblePool.length ? feasiblePool : strategies).reduce((a, b) =>
+    b.dealScore > a.dealScore ? b : a,
+  );
   // Overall score = the plain mean of the six strategy scores, rounded — then optionally
   // capped by the worst risk-flag severity on file. Both steps are recorded in
   // `overallScoreBreakdown` so the headline number can be hand-checked against the strategy
@@ -860,12 +1389,15 @@ export function analyseProperty(
   const overallScoreBreakdown: AnalysisOutput["overallScoreBreakdown"] = {
     strategyScores: strategies.map((s) => ({ key: s.key, name: s.name, score: s.dealScore })),
     average: Math.round(rawAverage * 10) / 10,
-    ...(overallScore < uncappedScore ? {
-      cappedAt: overallScore,
-      capReason: sev === "red"
-        ? "One or more red risk flags on file — overall score capped at 20 regardless of the strategy average."
-        : "Amber risk flags on file — overall score capped at 55 regardless of the strategy average.",
-    } : {}),
+    ...(overallScore < uncappedScore
+      ? {
+          cappedAt: overallScore,
+          capReason:
+            sev === "red"
+              ? "One or more red risk flags on file — overall score capped at 20 regardless of the strategy average."
+              : "Amber risk flags on file — overall score capped at 55 regardless of the strategy average.",
+        }
+      : {}),
   };
 
   return {

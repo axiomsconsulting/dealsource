@@ -2,7 +2,13 @@ import type { PropertyInput, NegotiationGuidance, NegotiationPoint } from "./typ
 import { extractPriceHistory, summarisePriceHistory } from "./price-history";
 import { buildSurveyNegotiationPoints } from "./survey-strategy";
 import { estimateLeaseExtensionPremium } from "./lease-extension";
-import { buildEpcRoadmap, buildEpcMeasureCandidates, resolveEpcMeasureSelection, deriveAiEpcCategories } from "./epc-plan";
+import {
+  buildEpcRoadmap,
+  buildEpcMeasureCandidates,
+  resolveEpcMeasureSelection,
+  deriveAiEpcCategories,
+} from "./epc-plan";
+import { circumstanceFlexPct } from "../seller-context";
 
 export interface NegotiationResult {
   points: NegotiationPoint[];
@@ -32,6 +38,13 @@ function roundOfferBelowAsking(n: number, asking: number): number {
   return Math.max(0, Math.min(asking - step, roundMoney(n)));
 }
 
+function roundOfferCtx(n: number, asking: number, allowAsking: boolean): number {
+  if (asking <= 0) return roundMoney(n);
+  const step = n < 125_000 ? 500 : 1_000;
+  const rounded = roundMoney(n);
+  return Math.max(0, Math.min(allowAsking ? asking : asking - step, rounded));
+}
+
 function impactPct(asking: number, pct: number, capPct: number): number {
   return Math.round(Math.min(asking * pct, asking * capPct));
 }
@@ -50,12 +63,15 @@ function priceBand(asking: number): { label: string; baseDiscountPct: number } {
 function maxCredibleOpeningDiscount(asking: number, points: NegotiationPoint[]): number {
   if (asking <= 0) return 0;
   const band = priceBand(asking);
-  const motivation = points
-    .filter((p) => p.category === "leverage")
-    .reduce((s, p) => s + p.gbp_impact, 0) / asking;
-  const defects = points
-    .filter((p) => p.category === "fault" || p.category === "condition" || p.category === "improvement_gap")
-    .reduce((s, p) => s + p.gbp_impact, 0) / asking;
+  const motivation =
+    points.filter((p) => p.category === "leverage").reduce((s, p) => s + p.gbp_impact, 0) / asking;
+  const defects =
+    points
+      .filter(
+        (p) =>
+          p.category === "fault" || p.category === "condition" || p.category === "improvement_gap",
+      )
+      .reduce((s, p) => s + p.gbp_impact, 0) / asking;
   const highConfidenceCount = points.filter((p) => p.confidence === "high").length;
 
   // A normal sub-asking opener lives around the base band. Verified defects and seller motivation
@@ -66,7 +82,7 @@ function maxCredibleOpeningDiscount(asking: number, points: NegotiationPoint[]):
     Math.min(0.055, defects * 0.55) +
     Math.min(0.015, highConfidenceCount * 0.004);
 
-  return clamp(band.baseDiscountPct + evidenceUplift, 0.05, 0.30);
+  return clamp(band.baseDiscountPct + evidenceUplift, 0.05, 0.3);
 }
 
 function stanceFor(discountPct: number, points: NegotiationPoint[]): NegotiationGuidance["stance"] {
@@ -77,10 +93,7 @@ function stanceFor(discountPct: number, points: NegotiationPoint[]): Negotiation
 }
 
 /** Pure, criteria-independent negotiation playbook: what the numbers themselves justify offering. */
-export function buildNegotiation(
-  prop: PropertyInput,
-  refurbCost: number,
-): NegotiationResult {
+export function buildNegotiation(prop: PropertyInput, refurbCost: number): NegotiationResult {
   const points: NegotiationPoint[] = [];
   const pf = prop.pf_json?.propertyLight ?? {};
   const pd = prop.pf_json?.propertyDetail ?? {};
@@ -88,7 +101,11 @@ export function buildNegotiation(
 
   // Market signals
   if (pf.multipleReduce && pf.multipleReduce > 1) {
-    const impact = impactPct(asking, 0.015 + Math.min(0.0225, (pf.multipleReduce - 1) * 0.0075), 0.04);
+    const impact = impactPct(
+      asking,
+      0.015 + Math.min(0.0225, (pf.multipleReduce - 1) * 0.0075),
+      0.04,
+    );
     // Where the feed gives us the actual tracked price points, cite pounds and dates rather than
     // just a reduction count — a concrete trajectory is much harder for an agent to wave away.
     const trail = summarisePriceHistory(extractPriceHistory(prop));
@@ -129,20 +146,26 @@ export function buildNegotiation(
     // the midpoint, the number actually used to frame the ask.
     const aiCategories = deriveAiEpcCategories((prop as any).ai_payload);
     const candidates = buildEpcMeasureCandidates(roadmap, aiCategories);
-    const { totals } = resolveEpcMeasureSelection(candidates, (prop as any).refurb_estimate?.epcMeasures);
+    const { totals } = resolveEpcMeasureSelection(
+      candidates,
+      (prop as any).refurb_estimate?.epcMeasures,
+    );
     if (totals.mid > 0) {
       const lowSpec = totals.low;
       const highSpec = Math.max(totals.high, lowSpec);
       const midSpec = totals.mid;
       const recoveryRate = epc === "D" ? 0.45 : 0.5;
-      const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
+      const negotiationImpact = Math.round(
+        Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)),
+      );
       epcToCCost = midSpec;
       epcRecoveryAmount = Math.round(midSpec * recoveryRate);
       points.push({
         category: "improvement_gap",
         title: `EPC ${epc || "rating"} — selected upgrade measures`,
-        description: `Based on the ${totals.count} measure${totals.count === 1 ? "" : "s"} selected on the EPC card, the register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.`
-          + (["D", "E", "F", "G"].includes(epc)
+        description:
+          `Based on the ${totals.count} measure${totals.count === 1 ? "" : "s"} selected on the EPC card, the register's improvement roadmap indicates roughly £${midSpec.toLocaleString()} at midpoint. Only £${negotiationImpact.toLocaleString()} is treated as offer leverage because buyers rarely recover every pound of future capex upfront unless the work is urgent or lender-blocking.` +
+          (["D", "E", "F", "G"].includes(epc)
             ? ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`
             : ""),
         gbp_impact: negotiationImpact,
@@ -161,14 +184,17 @@ export function buildNegotiation(
     const highSpec = Math.round(base * 1.6);
     const midSpec = Math.round((lowSpec + highSpec) / 2);
     const recoveryRate = epc === "D" ? 0.35 : 0.45;
-    const negotiationImpact = Math.round(Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)));
+    const negotiationImpact = Math.round(
+      Math.min(midSpec * recoveryRate, asking * (epc === "D" ? 0.025 : 0.045)),
+    );
     epcToCCost = midSpec;
     epcRecoveryAmount = Math.round(midSpec * recoveryRate);
     points.push({
       category: "improvement_gap",
       title: `EPC ${epc} spend to reach C`,
-      description: `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.`
-        + ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`,
+      description:
+        `No assessor-costed roadmap is on file, so the cost range is heuristic. Use the midpoint as evidence, but weight only £${negotiationImpact.toLocaleString()} into the first offer; the rest is reserve for survey-stage negotiation.` +
+        ` Letting an EPC ${epc} property will be illegal under MEES rules from 2030 without reaching band C, so £${epcRecoveryAmount.toLocaleString()} of this is also baked into your walk-away ceiling below as a hard cost regardless of how the rest of the negotiation goes.`,
       gbp_impact: negotiationImpact,
       confidence: "medium",
       specOptions: [
@@ -184,7 +210,11 @@ export function buildNegotiation(
   // reversionary-interest (+ marriage value below 80 years) structure as Property Filter's
   // lease-extension calculator.
   if ((prop.tenure || "").toLowerCase().includes("leasehold")) {
-    const leaseYrs = (prop as any).lease_years_remaining ?? prop.pf_json?.propertyLight?.leaseYearsRemaining ?? prop.pf_json?.propertyDetail?.leaseYearsRemaining ?? null;
+    const leaseYrs =
+      (prop as any).lease_years_remaining ??
+      prop.pf_json?.propertyLight?.leaseYearsRemaining ??
+      prop.pf_json?.propertyDetail?.leaseYearsRemaining ??
+      null;
     if (typeof leaseYrs === "number" && leaseYrs > 0 && leaseYrs < 90 && asking > 0) {
       const ASSUMED_GROUND_RENT_PA = 250; // typical modern flat ground rent — refine once the lease/title is seen
       const lease = estimateLeaseExtensionPremium(leaseYrs, ASSUMED_GROUND_RENT_PA, asking);
@@ -206,13 +236,16 @@ export function buildNegotiation(
   // plus AI-detected gaps from photo analysis. These are routine pre-letting costs a buyer
   // factors into their opening number, not survey-stage surprises.
   const newBuildSignal =
-    /new[\s-]?build/i.test(`${prop.property_type ?? ""} ${pf.description ?? pd?.description ?? ""}`) ||
+    /new[\s-]?build/i.test(
+      `${prop.property_type ?? ""} ${pf.description ?? pd?.description ?? ""}`,
+    ) ||
     (typeof pd?.yearBuilt === "number" && pd.yearBuilt >= 2020);
   if (!newBuildSignal) {
     points.push({
       category: "improvement_gap",
       title: "EICR (Electrical Installation Condition Report)",
-      description: "A valid EICR is a legal requirement before letting. Budget ~£150-250 for a fresh report (plus any remedial work it flags). Treat this as a routine compliance line in your opening number, not a point to debate.",
+      description:
+        "A valid EICR is a legal requirement before letting. Budget ~£150-250 for a fresh report (plus any remedial work it flags). Treat this as a routine compliance line in your opening number, not a point to debate.",
       gbp_impact: 200,
       confidence: "high",
     });
@@ -224,14 +257,17 @@ export function buildNegotiation(
     points.push({
       category: "improvement_gap",
       title: "CP12 (Gas Safety Certificate)",
-      description: "An annual CP12 gas safety check is a legal requirement for let properties with gas appliances. Budget ~£80-120 for the check (more if remedial work is needed) — a routine compliance cost to fold into your opening number.",
+      description:
+        "An annual CP12 gas safety check is a legal requirement for let properties with gas appliances. Budget ~£80-120 for the check (more if remedial work is needed) — a routine compliance cost to fold into your opening number.",
       gbp_impact: 100,
       confidence: heatingText.includes("gas") ? "high" : "medium",
     });
   }
 
   const landlordReadiness = (prop as any).ai_payload?.landlordReadiness;
-  const whiteGoodsMissing: string[] = Array.isArray(landlordReadiness?.whiteGoodsMissing) ? landlordReadiness.whiteGoodsMissing : [];
+  const whiteGoodsMissing: string[] = Array.isArray(landlordReadiness?.whiteGoodsMissing)
+    ? landlordReadiness.whiteGoodsMissing
+    : [];
   if (whiteGoodsMissing.length > 0) {
     const perItem = 450;
     points.push({
@@ -246,7 +282,8 @@ export function buildNegotiation(
     points.push({
       category: "improvement_gap",
       title: "Garden / yard clearance",
-      description: "AI photo analysis flagged the garden or front yard as overgrown or cluttered. Budget ~£300-800 for clearance before the property is lettable — a routine pre-letting cost worth weighting into your opening number.",
+      description:
+        "AI photo analysis flagged the garden or front yard as overgrown or cluttered. Budget ~£300-800 for clearance before the property is lettable — a routine pre-letting cost worth weighting into your opening number.",
       gbp_impact: 550,
       confidence: "low",
     });
@@ -285,11 +322,16 @@ export function buildNegotiation(
   // (Reductions already covered above by multipleReduce.)
 
   // Condition / property-detail signals
-  if (!["D", "E", "F", "G"].includes(epc) && typeof pd?.epcEfficiency === "number" && pd.epcEfficiency < 60) {
+  if (
+    !["D", "E", "F", "G"].includes(epc) &&
+    typeof pd?.epcEfficiency === "number" &&
+    pd.epcEfficiency < 60
+  ) {
     points.push({
       category: "condition",
       title: "Low EPC efficiency score",
-      description: "Energy efficiency is poor — expect older windows/insulation/boiler. Get quotes from a local heating engineer and factor into your offer.",
+      description:
+        "Energy efficiency is poor — expect older windows/insulation/boiler. Get quotes from a local heating engineer and factor into your offer.",
       gbp_impact: Math.min(2500, Math.round(asking * 0.015)),
       confidence: "low",
     });
@@ -300,7 +342,8 @@ export function buildNegotiation(
     points.push({
       category: "fault",
       title: "Covenant restrictions on title",
-      description: "Property has registered covenants — could limit extensions, use class change, or HMO conversion. Ask solicitor for full schedule before exchange and use this as leverage if it affects your strategy.",
+      description:
+        "Property has registered covenants — could limit extensions, use class change, or HMO conversion. Ask solicitor for full schedule before exchange and use this as leverage if it affects your strategy.",
       gbp_impact: 2500,
       confidence: "medium",
     });
@@ -330,33 +373,103 @@ export function buildNegotiation(
   const band = priceBand(asking);
   const maxOpeningDiscountPct = maxCredibleOpeningDiscount(asking, points);
   const uncappedDiscountPct = asking > 0 ? totalLeverage / asking : 0;
-  const credibleDiscountPct = clamp(Math.min(uncappedDiscountPct, maxOpeningDiscountPct), 0, maxOpeningDiscountPct);
+  const credibleDiscountPct = clamp(
+    Math.min(uncappedDiscountPct, maxOpeningDiscountPct),
+    0,
+    maxOpeningDiscountPct,
+  );
   const retainedLeverage = Math.max(0, Math.round(totalLeverage - asking * credibleDiscountPct));
-  const openingOffer = credibleDiscountPct > 0 ? roundOfferBelowAsking(asking * (1 - credibleDiscountPct), asking) : asking;
-  const walkAwayDiscountPct = credibleDiscountPct > 0
-    ? clamp(credibleDiscountPct * 0.45, Math.min(0.0125, credibleDiscountPct), Math.max(0.0125, credibleDiscountPct - 0.01))
-    : 0;
-  const walkAwayOfferBeforeEpc = asking > 0 && credibleDiscountPct > 0
-    ? roundOfferBelowAsking(Math.max(openingOffer + 500, asking * (1 - walkAwayDiscountPct)), asking)
-    : asking;
+  const preOpeningOffer =
+    credibleDiscountPct > 0
+      ? roundOfferBelowAsking(asking * (1 - credibleDiscountPct), asking)
+      : asking;
+  const walkAwayDiscountPct =
+    credibleDiscountPct > 0
+      ? clamp(
+          credibleDiscountPct * 0.45,
+          Math.min(0.0125, credibleDiscountPct),
+          Math.max(0.0125, credibleDiscountPct - 0.01),
+        )
+      : 0;
+  const walkAwayOfferBeforeEpc =
+    asking > 0 && credibleDiscountPct > 0
+      ? roundOfferBelowAsking(
+          Math.max(preOpeningOffer + 500, asking * (1 - walkAwayDiscountPct)),
+          asking,
+        )
+      : asking;
   // 5c: even if the rest of the negotiation goes the seller's way, don't pay more than the
   // walk-away ceiling minus what reaching EPC band C will cost — MEES makes this a hard
   // requirement to let the property from 2030, not a discussion point.
-  const walkAwayOffer = epcRecoveryAmount > 0
-    ? roundOfferBelowAsking(Math.max(openingOffer, walkAwayOfferBeforeEpc - epcRecoveryAmount), asking)
-    : walkAwayOfferBeforeEpc;
-  const targetOffer = asking > 0 && walkAwayOffer > openingOffer
-    ? roundOfferBelowAsking(openingOffer + (walkAwayOffer - openingOffer) * 0.45, asking)
-    : openingOffer;
+  const preWalkAwayOffer =
+    epcRecoveryAmount > 0
+      ? roundOfferBelowAsking(
+          Math.max(preOpeningOffer, walkAwayOfferBeforeEpc - epcRecoveryAmount),
+          asking,
+        )
+      : walkAwayOfferBeforeEpc;
+  const preTargetOffer =
+    asking > 0 && preWalkAwayOffer > preOpeningOffer
+      ? roundOfferBelowAsking(preOpeningOffer + (preWalkAwayOffer - preOpeningOffer) * 0.45, asking)
+      : preOpeningOffer;
+
+  // Seller-context flex (circumstances + AI comparables) — softens the offer plan further,
+  // moved here from NegotiationPanel so every consumer of `guidance` sees the same numbers
+  // without an extra "Apply" click.
+  const sellerCtx = (prop as any).seller_context ?? null;
+  const circFlex = circumstanceFlexPct(sellerCtx);
+  const compMid = sellerCtx?.aiFlex?.reductionPctMid ?? 0;
+  const combinedFlexPct = Math.max(-0.03, Math.min(0.1, compMid + circFlex));
+  const sellerContextAdjustment = asking * combinedFlexPct * 0.5;
+  const maxContextDiscountPct = Math.min(
+    0.24,
+    maxOpeningDiscountPct + Math.max(0, combinedFlexPct * 0.35),
+  );
+  const contextFloor = asking * (1 - maxContextDiscountPct);
+
+  const openingOffer =
+    asking > 0
+      ? roundOfferCtx(
+          Math.max(contextFloor, Math.min(asking, preOpeningOffer - sellerContextAdjustment)),
+          asking,
+          preOpeningOffer >= asking && sellerContextAdjustment <= 0,
+        )
+      : preOpeningOffer;
+  const targetOffer =
+    asking > 0
+      ? roundOfferCtx(
+          Math.max(openingOffer, Math.min(asking, preTargetOffer - sellerContextAdjustment * 0.45)),
+          asking,
+          preTargetOffer >= asking && sellerContextAdjustment <= 0,
+        )
+      : preTargetOffer;
+  const walkAwayOffer =
+    asking > 0
+      ? roundOfferCtx(
+          Math.min(
+            asking,
+            Math.max(targetOffer + 500, preWalkAwayOffer - sellerContextAdjustment * 0.25),
+          ),
+          asking,
+          preWalkAwayOffer >= asking && sellerContextAdjustment <= 0,
+        )
+      : preWalkAwayOffer;
+
   const warnings: string[] = [];
   if (uncappedDiscountPct > maxOpeningDiscountPct) {
-    warnings.push(`The evidence totals ${(uncappedDiscountPct * 100).toFixed(1)}% of asking, but the credible opening range for a ${band.label} property is capped at ${(maxOpeningDiscountPct * 100).toFixed(1)}% unless survey/legal defects get stronger.`);
+    warnings.push(
+      `The evidence totals ${(uncappedDiscountPct * 100).toFixed(1)}% of asking, but the credible opening range for a ${band.label} property is capped at ${(maxOpeningDiscountPct * 100).toFixed(1)}% unless survey/legal defects get stronger.`,
+    );
   }
   if (retainedLeverage > 0) {
-    warnings.push(`Keep £${retainedLeverage.toLocaleString()} of evidence back for counter-offers or survey-stage renegotiation rather than trying to win it all in the first bid.`);
+    warnings.push(
+      `Keep £${retainedLeverage.toLocaleString()} of evidence back for counter-offers or survey-stage renegotiation rather than trying to win it all in the first bid.`,
+    );
   }
   if (epcRecoveryAmount > 0) {
-    warnings.push(`Walk-away ceiling reduced by £${epcRecoveryAmount.toLocaleString()} to cover bringing the EPC up to band C — required to let the property under MEES rules from 2030.`);
+    warnings.push(
+      `Walk-away ceiling reduced by £${epcRecoveryAmount.toLocaleString()} to cover bringing the EPC up to band C — required to let the property under MEES rules from 2030.`,
+    );
   }
   const guidance: NegotiationGuidance = {
     askingPrice: asking,

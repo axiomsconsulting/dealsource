@@ -9,7 +9,17 @@ import { ChevronDown, ChevronUp } from "lucide-react";
  *  State is uncontrolled (`defaultOpen`) by default; pass `open`/`onOpenChange` to let a parent
  *  drive it (e.g. for "expand all" controls or jump-to-section links). */
 export function CollapsibleCard({
-  icon, title, summary, actions, defaultOpen = true, open: openProp, onOpenChange, variant = "card", id, className, children,
+  icon,
+  title,
+  summary,
+  actions,
+  defaultOpen = true,
+  open: openProp,
+  onOpenChange,
+  variant = "card",
+  id,
+  className,
+  children,
 }: {
   icon?: ReactNode;
   title: ReactNode;
@@ -37,17 +47,40 @@ export function CollapsibleCard({
 
   const header = (
     <div className="flex w-full items-center justify-between gap-3">
-      <button type="button" onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <h2 className={variant === "plain" ? "flex min-w-0 items-center gap-2 text-sm font-medium" : "flex min-w-0 items-center gap-2 text-xl font-semibold"}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <h2
+          className={
+            variant === "plain"
+              ? "flex min-w-0 items-center gap-2 text-sm font-medium"
+              : "flex min-w-0 items-center gap-2 text-xl font-semibold"
+          }
+        >
           {icon}
           <span className="truncate">{title}</span>
         </h2>
-        {!open && summary && <span className="hidden min-w-0 truncate text-sm font-normal text-muted-foreground sm:inline">{summary}</span>}
+        {!open && summary && (
+          <span className="hidden min-w-0 truncate text-sm font-normal text-muted-foreground sm:inline">
+            {summary}
+          </span>
+        )}
       </button>
       <div className="flex shrink-0 items-center gap-2">
         {actions}
-        <button type="button" onClick={() => setOpen(!open)} aria-label={open ? "Collapse" : "Expand"} className="text-muted-foreground hover:text-foreground">
-          {open ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-label={open ? "Collapse" : "Expand"}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {open ? (
+            <ChevronUp className="h-4 w-4 shrink-0" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          )}
         </button>
       </div>
     </div>
@@ -55,18 +88,21 @@ export function CollapsibleCard({
 
   if (variant === "plain") {
     return (
-      <div id={id} className={className ? `rounded-md border p-3 ${className}` : "rounded-md border p-3"}>
+      <div
+        id={id}
+        className={className ? `rounded-md border p-2.5 ${className}` : "rounded-md border p-2.5"}
+      >
         {header}
-        {open && <div className="mt-3">{children}</div>}
+        {open && <div className="mt-2">{children}</div>}
       </div>
     );
   }
 
   return (
     <Card id={id} className={className}>
-      <CardContent className="pt-6">
+      <CardContent className="pt-4">
         {header}
-        {open && <div className="mt-4">{children}</div>}
+        {open && <div className="mt-3">{children}</div>}
       </CardContent>
     </Card>
   );

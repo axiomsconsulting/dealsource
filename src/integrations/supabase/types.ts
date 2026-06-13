@@ -351,6 +351,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
           display_name: string | null
           email: string | null
@@ -359,6 +360,7 @@ export type Database = {
           role: string
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
@@ -367,6 +369,7 @@ export type Database = {
           role?: string
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
@@ -456,6 +459,7 @@ export type Database = {
           epc_fetched_at: string | null
           epc_rate: string | null
           estimated_rent_pcm: number | null
+          favourite: boolean
           hidden: boolean
           hide_address: boolean
           id: string
@@ -492,6 +496,7 @@ export type Database = {
           epc_fetched_at?: string | null
           epc_rate?: string | null
           estimated_rent_pcm?: number | null
+          favourite?: boolean
           hidden?: boolean
           hide_address?: boolean
           id?: string
@@ -528,6 +533,7 @@ export type Database = {
           epc_fetched_at?: string | null
           epc_rate?: string | null
           estimated_rent_pcm?: number | null
+          favourite?: boolean
           hidden?: boolean
           hide_address?: boolean
           id?: string

@@ -36,20 +36,22 @@ export const bulkIngestProperties = createServerFn({ method: "POST" })
     z.object({ items: z.array(PropertyInputSchema).max(500) }).parse(input),
   )
   .handler(async ({ data, context }) => {
-    const rows = await Promise.all(data.items.map(async (it) => {
-      const propInput: any = { ...it };
-      const risks = computeRiskFlags(propInput);
-      const a4 = await lookupArticle4WithClient(context.supabase, it.postcode ?? null);
-      const refurb = estimateRefurb(propInput, "medium");
-      return {
-        ...it,
-        user_id: context.userId,
-        risk_flags: { flags: risks, computed_at: new Date().toISOString() } as any,
-        article4_status: a4.status,
-        article4_source: a4.status !== "unknown" ? "cache" : null,
-        refurb_estimate: refurb as any,
-      };
-    }));
+    const rows = await Promise.all(
+      data.items.map(async (it) => {
+        const propInput: any = { ...it };
+        const risks = computeRiskFlags(propInput);
+        const a4 = await lookupArticle4WithClient(context.supabase, it.postcode ?? null);
+        const refurb = estimateRefurb(propInput, "medium");
+        return {
+          ...it,
+          user_id: context.userId,
+          risk_flags: { flags: risks, computed_at: new Date().toISOString() } as any,
+          article4_status: a4.status,
+          article4_source: a4.status !== "unknown" ? "cache" : null,
+          refurb_estimate: refurb as any,
+        };
+      }),
+    );
     const { data: inserted, error } = await context.supabase
       .from("properties")
       .insert(rows)
@@ -64,7 +66,8 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     assertSupportedListingUrl(data.url);
     const scraped = await scrapeListing(data.url);
-    if (!scraped.address) throw new Error("Could not extract a property address from that listing.");
+    if (!scraped.address)
+      throw new Error("Could not extract a property address from that listing.");
 
     const propInput: any = {
       address: scraped.address,
@@ -83,7 +86,11 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
       source_link: data.url,
     };
     if (scraped.price_reduced_date) {
-      propInput.pf_json = mergePriceReductionIntoPfJson(null, scraped.price_reduced_date, scraped.asking_price_gbp);
+      propInput.pf_json = mergePriceReductionIntoPfJson(
+        null,
+        scraped.price_reduced_date,
+        scraped.asking_price_gbp,
+      );
     }
     const risks = computeRiskFlags(propInput);
     const a4 = await lookupArticle4WithClient(context.supabase, propInput.postcode ?? null);
@@ -105,7 +112,13 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
 
     // Auto-fetch EPC immediately if the postcode is unambiguous and the user has a register
     // token configured — silently skipped otherwise (user can resolve via the EPC panel).
-    const epcMatch = await tryAutoMatchEpc(context.supabase, context.userId, inserted.id, propInput.address, propInput.postcode ?? null);
+    const epcMatch = await tryAutoMatchEpc(
+      context.supabase,
+      context.userId,
+      inserted.id,
+      propInput.address,
+      propInput.postcode ?? null,
+    );
     if (epcMatch?.epc_data?.currentRating) {
       const epc_rate = String(epcMatch.epc_data.currentRating).toUpperCase().slice(0, 1);
       const refurbWithEpc = estimateRefurb({ ...propInput, epc_rate }, "medium");
@@ -146,9 +159,7 @@ export const listProperties = createServerFn({ method: "GET" })
 
 export const getProperty = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ id: z.string().uuid() }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase
       .from("properties")
@@ -161,25 +172,34 @@ export const getProperty = createServerFn({ method: "GET" })
     // Negotiation playbook reads ai_payload.landlordReadiness (white goods / garden clearance,
     // from analysePhotosForRefurb) — it lives on the analyses row, not properties.
     const { data: analysis } = await context.supabase
-      .from("analyses").select("ai_payload").eq("property_id", data.id).eq("user_id", context.userId).maybeSingle();
+      .from("analyses")
+      .select("ai_payload")
+      .eq("property_id", data.id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
     return { ...row, ai_payload: analysis?.ai_payload ?? null };
   });
 
 export const updateProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({
-      id: z.string().uuid(),
-      patch: z.object({
-        hide_address: z.boolean().optional(),
-        notes: z.string().max(5000).optional(),
-        asking_price_gbp: z.number().nullable().optional(),
-        seller_context: z.any().optional(),
-        survey_findings: z.any().optional(),
-        refurb_estimate: z.any().optional(),
-        estimated_rent_pcm: z.number().nullable().optional(),
-      }),
-    }).parse(input),
+    z
+      .object({
+        id: z.string().uuid(),
+        patch: z.object({
+          hide_address: z.boolean().optional(),
+          notes: z.string().max(5000).optional(),
+          asking_price_gbp: z.number().nullable().optional(),
+          seller_context: z.any().optional(),
+          survey_findings: z.any().optional(),
+          refurb_estimate: z.any().optional(),
+          epc_rate: z.string().max(3).nullable().optional(),
+          epc_data: z.any().optional(),
+          estimated_rent_pcm: z.number().nullable().optional(),
+          favourite: z.boolean().optional(),
+        }),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
@@ -192,9 +212,7 @@ export const updateProperty = createServerFn({ method: "POST" })
 
 export const deleteProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ id: z.string().uuid() }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("properties").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
