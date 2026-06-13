@@ -176,7 +176,20 @@ export function RefurbEpcPanel({
 
   const est = useMemo(
     () => estimateRefurb(property, tier, aiItems, epcSelection),
-    [property, tier, aiItems, epcSelection],
+    // estimateRefurb only reads postcode/beds/baths/area_sqm/epc_rate — depend on those instead
+    // of `property` itself, which is a new object on every draftRefurb update (parent's
+    // effectiveProperty merge), and would otherwise loop: est -> nextEstimate -> onLiveChange ->
+    // draftRefurb -> new `property` -> est ...
+    [
+      property?.postcode,
+      property?.beds,
+      property?.baths,
+      property?.area_sqm,
+      property?.epc_rate,
+      tier,
+      aiItems,
+      epcSelection,
+    ],
   );
 
   // user choices keyed by line index
