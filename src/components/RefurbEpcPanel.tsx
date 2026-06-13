@@ -159,8 +159,13 @@ export function RefurbEpcPanel({
     () => property?.refurb_estimate?.epcMeasures ?? {},
   );
   useEffect(() => {
+    // Resync only when switching to a different property, not on every render —
+    // `property.refurb_estimate.epcMeasures` becomes a new object reference each time
+    // `nextEstimate` round-trips through the parent's draft overlay, which would otherwise
+    // ping-pong `overrides` between equal-but-distinct `{}` references forever (loop).
     setOverrides(property?.refurb_estimate?.epcMeasures ?? {});
-  }, [property?.refurb_estimate?.epcMeasures]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyId]);
   const { selected, totals: epcTotals } = useMemo(
     () => resolveEpcMeasureSelection(epcMeasureCandidates, overrides),
     [epcMeasureCandidates, overrides],
