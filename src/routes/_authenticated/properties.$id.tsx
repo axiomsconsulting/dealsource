@@ -557,7 +557,7 @@ function PropertyDetail() {
         </CollapsibleCard>
       )}
 
-      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <button
           onClick={() => setActivePanel("photos")}
           className="rounded-md border p-3 text-left transition hover:bg-muted/40"
