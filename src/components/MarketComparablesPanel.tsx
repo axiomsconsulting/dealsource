@@ -3,12 +3,25 @@ import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { fmtGBP } from "@/lib/format";
 import { extractMarketDataFromPfJson, type MarketData, type SoldComparable } from "@/lib/parsers/json";
-import { findNearbyListings } from "@/lib/ai.functions";
+import {
+  findNearbyListings,
+  NEARBY_PROPERTY_TYPES,
+  NEARBY_RADIUS_OPTIONS,
+  type NearbyPropertyType,
+  type NearbyRadiusMiles,
+} from "@/lib/ai.functions";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+
+const RADIUS_LABEL: Record<NearbyRadiusMiles, string> = {
+  0.25: "1/4 mile",
+  0.5: "1/2 mile",
+  1: "1 mile",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   for_sale: "For sale",
@@ -45,8 +58,10 @@ interface Props {
 export function MarketComparablesPanel({ propertyId, pf_json, askingPrice }: Props) {
   const findNearbyFn = useServerFn(findNearbyListings);
   const [nearby, setNearby] = useState<{ street: string | null; listings: any[] } | null>(null);
+  const [radiusMiles, setRadiusMiles] = useState<NearbyRadiusMiles>(0.25);
+  const [propertyType, setPropertyType] = useState<NearbyPropertyType>("all");
   const nearbyMut = useMutation({
-    mutationFn: () => findNearbyFn({ data: { propertyId } }),
+    mutationFn: () => findNearbyFn({ data: { propertyId, radiusMiles, propertyType } }),
     onSuccess: (r: any) => {
       setNearby(r);
       if (!r.listings.length) toast.info("No nearby listings found");
@@ -73,6 +88,10 @@ export function MarketComparablesPanel({ propertyId, pf_json, askingPrice }: Pro
         nearby={nearby}
         isPending={nearbyMut.isPending}
         onRun={() => nearbyMut.mutate()}
+        radiusMiles={radiusMiles}
+        onRadiusChange={setRadiusMiles}
+        propertyType={propertyType}
+        onPropertyTypeChange={setPropertyType}
       />
     );
   }
@@ -200,7 +219,15 @@ export function MarketComparablesPanel({ propertyId, pf_json, askingPrice }: Pro
           </div>
         )}
 
-        <NearbySection nearby={nearby} isPending={nearbyMut.isPending} onRun={() => nearbyMut.mutate()} />
+        <NearbySection
+          nearby={nearby}
+          isPending={nearbyMut.isPending}
+          onRun={() => nearbyMut.mutate()}
+          radiusMiles={radiusMiles}
+          onRadiusChange={setRadiusMiles}
+          propertyType={propertyType}
+          onPropertyTypeChange={setPropertyType}
+        />
     </div>
   );
 }
@@ -209,25 +236,65 @@ function NearbySection({
   nearby,
   isPending,
   onRun,
+  radiusMiles,
+  onRadiusChange,
+  propertyType,
+  onPropertyTypeChange,
 }: {
   nearby: { street: string | null; listings: any[] } | null;
   isPending: boolean;
   onRun: () => void;
+  radiusMiles: NearbyRadiusMiles;
+  onRadiusChange: (v: NearbyRadiusMiles) => void;
+  propertyType: NearbyPropertyType;
+  onPropertyTypeChange: (v: NearbyPropertyType) => void;
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Nearby — for sale, STC &amp; sold (~1/4 mile)
+          Nearby — for sale, STC &amp; sold
         </p>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={onRun}>
-          {isPending ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Search className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          {nearby ? "Refresh" : "Find nearby listings"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={String(radiusMiles)}
+            onValueChange={(v) => onRadiusChange(Number(v) as NearbyRadiusMiles)}
+          >
+            <SelectTrigger className="h-10 w-[110px] sm:h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NEARBY_RADIUS_OPTIONS.map((r) => (
+                <SelectItem key={r} value={String(r)}>
+                  {RADIUS_LABEL[r]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={propertyType}
+            onValueChange={(v) => onPropertyTypeChange(v as NearbyPropertyType)}
+          >
+            <SelectTrigger className="h-10 w-[160px] sm:h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(NEARBY_PROPERTY_TYPES).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" disabled={isPending} onClick={onRun}>
+            {isPending ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Search className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {nearby ? "Refresh" : "Find nearby listings"}
+          </Button>
+        </div>
       </div>
       {nearby && nearby.listings.length === 0 && (
         <p className="text-sm text-muted-foreground">No nearby listings found.</p>
@@ -251,7 +318,10 @@ function NearbySection({
               }
             >
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>{l.date ? fmtDate(l.date) : "Date not shown"}</span>
+                <span>
+                  {l.date ? fmtDate(l.date) : "Date not shown"}
+                  {l.propertyType ? ` · ${l.propertyType}` : ""}
+                </span>
                 <a
                   href={l.url}
                   target="_blank"

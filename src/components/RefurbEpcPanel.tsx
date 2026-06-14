@@ -376,14 +376,13 @@ export function RefurbEpcPanel({
           <Button
             size="icon"
             variant="outline"
-            className="h-8 w-8"
             title={epc ? "Edit EPC manually" : "Enter EPC manually"}
             onClick={() => setManualOpen(true)}
           >
             <PencilLine className="h-4 w-4" />
           </Button>
           <Select value={tier} onValueChange={(v) => setTier(v as RefurbTier)}>
-            <SelectTrigger className="h-8 w-[140px]">
+            <SelectTrigger className="h-10 w-[140px] sm:h-8">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -398,7 +397,6 @@ export function RefurbEpcPanel({
               <Button
                 size="icon"
                 variant="outline"
-                className="h-8 w-8"
                 title="EPC register settings"
               >
                 <Settings className="h-4 w-4" />

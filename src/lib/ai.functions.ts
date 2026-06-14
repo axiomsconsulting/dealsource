@@ -552,12 +552,36 @@ const NearbyListingsSchema = z.object({
     status: z.enum(["for_sale", "stc", "sold"]),
     price: z.number().nullable().optional(),
     date: z.string().nullable().optional(),
+    propertyType: z.string().nullable().optional(),
   })),
 });
 
+export const NEARBY_RADIUS_OPTIONS = [0.25, 0.5, 1] as const;
+export type NearbyRadiusMiles = (typeof NEARBY_RADIUS_OPTIONS)[number];
+
+export const NEARBY_PROPERTY_TYPES = {
+  all: "All property types",
+  detached: "Detached",
+  semi_detached: "Semi-detached",
+  terraced: "Terraced",
+  flat: "Flats / apartments",
+  bungalow: "Bungalows",
+} as const;
+export type NearbyPropertyType = keyof typeof NEARBY_PROPERTY_TYPES;
+
+const RADIUS_LABEL: Record<NearbyRadiusMiles, string> = {
+  0.25: "1/4 mile",
+  0.5: "1/2 mile",
+  1: "1 mile",
+};
+
 export const findNearbyListings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({
+    propertyId: z.string().uuid(),
+    radiusMiles: z.union([z.literal(0.25), z.literal(0.5), z.literal(1)]).optional().default(0.25),
+    propertyType: z.enum(["all", "detached", "semi_detached", "terraced", "flat", "bungalow"]).optional().default("all"),
+  }).parse(i))
   .handler(async ({ data, context }) => {
     const { data: prop } = await context.supabase
       .from("properties").select("address, postcode").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
@@ -567,21 +591,30 @@ export const findNearbyListings = createServerFn({ method: "POST" })
     const area = [street, prop.postcode].filter(Boolean).join(" ");
     if (!area) throw new Error("Property has no address/postcode to search from");
 
+    const radiusMiles = data.radiusMiles as NearbyRadiusMiles;
+    const propertyType = data.propertyType as NearbyPropertyType;
+    const radiusLabel = RADIUS_LABEL[radiusMiles];
+    const typeTerm = propertyType !== "all" ? `${NEARBY_PROPERTY_TYPES[propertyType].replace(/s$/, "").toLowerCase()} ` : "";
+    const limit = radiusMiles >= 1 ? 8 : 5;
+
     const queries = [
-      `${area} for sale site:rightmove.co.uk`,
-      `${area} for sale site:zoopla.co.uk`,
-      `${area} sold house prices`,
+      `${typeTerm}${area} for sale within ${radiusLabel} site:rightmove.co.uk`,
+      `${typeTerm}${area} for sale within ${radiusLabel} site:zoopla.co.uk`,
+      `${typeTerm}${area} sold house prices within ${radiusLabel}`,
     ];
-    const results = (await Promise.all(queries.map((q) => searchListings(q, 5).catch(() => []))))
+    const results = (await Promise.all(queries.map((q) => searchListings(q, limit).catch(() => []))))
       .flat()
       .filter((r, i, arr) => arr.findIndex((x) => x.url === r.url) === i)
-      .slice(0, 10);
+      .slice(0, limit * 2);
 
     if (!results.length) return { street, listings: [] };
 
     const provider = createLovableAiGatewayProvider(getKey());
     const model = provider("google/gemini-2.5-flash");
-    const system = `You classify UK property listing search results for properties near "${area}". For each numbered result, read its title/description and decide: status — "for_sale" (currently advertised), "stc" (sold/under offer/STC — sale agreed but not completed), or "sold" (a completed sale with a recorded price/date); the property address as shown; the price in GBP if shown; a date if shown (sold date or "reduced on" date). Output STRICT JSON ONLY: {"listings":[{"index":0,"address":"...","status":"for_sale","price":250000,"date":null}]}. Omit a result if you can't tell what it is. Never invent a price, address or date that isn't in the text — use null instead.`;
+    const typeFilter = propertyType !== "all"
+      ? ` Only include results that are (or very likely are) a ${NEARBY_PROPERTY_TYPES[propertyType].toLowerCase()} — omit anything that's clearly a different property type.`
+      : "";
+    const system = `You classify UK property listing search results for properties within ${radiusLabel} of "${area}". For each numbered result, read its title/description and decide: status — "for_sale" (currently advertised), "stc" (sold/under offer/STC — sale agreed but not completed), or "sold" (a completed sale with a recorded price/date); the property address as shown; the price in GBP if shown; a date if shown (sold date or "reduced on" date); the property type if shown (e.g. "Detached", "Semi-detached", "Terraced", "Flat", "Bungalow").${typeFilter} Output STRICT JSON ONLY: {"listings":[{"index":0,"address":"...","status":"for_sale","price":250000,"date":null,"propertyType":null}]}. Omit a result if you can't tell what it is. Never invent a price, address, date or property type that isn't in the text — use null instead.`;
     const user = results.map((r, i) => `${i}: ${r.title ?? ""}\n${r.description ?? ""}\n${r.url}`).join("\n\n");
 
     let parsed: any;
@@ -592,13 +625,14 @@ export const findNearbyListings = createServerFn({ method: "POST" })
       throw new Error("Nearby listings AI failed: " + e.message);
     }
 
-    const listings = (parsed.listings as Array<{ index: number; address?: string | null; status: string; price?: number | null; date?: string | null }>)
+    const listings = (parsed.listings as Array<{ index: number; address?: string | null; status: string; price?: number | null; date?: string | null; propertyType?: string | null }>)
       .filter((l) => results[l.index])
       .map((l) => ({
         address: l.address ?? null,
         status: l.status,
         price: l.price ?? null,
         date: l.date ?? null,
+        propertyType: l.propertyType ?? null,
         url: results[l.index].url,
       }));
 
