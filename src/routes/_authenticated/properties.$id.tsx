@@ -271,7 +271,7 @@ function PropertyDetail() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link
             to="/properties"
@@ -295,6 +295,12 @@ function PropertyDetail() {
               <Button size="sm" variant="outline">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Guided walkthrough
+              </Button>
+            </Link>
+            <Link to="/properties/$id/viewing" params={{ id }}>
+              <Button size="sm" variant="outline">
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Property viewing
               </Button>
             </Link>
           </div>
@@ -653,7 +659,7 @@ function PropertyDetail() {
         onOpenChange={(o) => setActivePanel(o ? "photos" : null)}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0 pr-8">
             <DialogTitle>Photos</DialogTitle>
             <FeedbackWidget propertyId={id} sectionKey="photos-scan" sectionLabel="AI Photo Scan" />
           </DialogHeader>
@@ -666,7 +672,7 @@ function PropertyDetail() {
         onOpenChange={(o) => setActivePanel(o ? "library" : null)}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0 pr-8">
             <DialogTitle>Image library</DialogTitle>
             <FeedbackWidget
               propertyId={id}
@@ -683,7 +689,7 @@ function PropertyDetail() {
         onOpenChange={(o) => setActivePanel(o ? "enrich" : null)}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0 pr-8">
             <DialogTitle>Enrich from listing URL</DialogTitle>
             <FeedbackWidget
               propertyId={id}
@@ -772,6 +778,38 @@ function PropertyDetail() {
         )}
 
         <CollapsibleCard
+          {...sectionProps("refurb-epc")}
+          icon={<Wrench className="h-4 w-4 text-accent" />}
+          title="Refurb & EPC"
+          summary={`Refurb ${fmtGBP(p.refurb_estimate?.total ?? 0)} · EPC ${p.epc_rate ?? "not fetched"}`}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="refurb-epc" sectionLabel="Refurb & EPC" />
+          }
+        >
+          <RefurbEpcPanel
+            propertyId={id}
+            property={p}
+            hasAnyPhotos={heroImages.length > 0}
+            onLiveChange={setDraftRefurb}
+          />
+        </CollapsibleCard>
+
+        <CollapsibleCard
+          {...sectionProps("survey")}
+          icon={<ClipboardCheck className="h-4 w-4 text-accent" />}
+          title="Survey & condition leverage"
+          summary={(() => {
+            const { totalLeverage, flaggedCount } = computeSurveyLeverage(p);
+            return `${flaggedCount} flagged · −${fmtGBP(totalLeverage)} confirmed`;
+          })()}
+          actions={
+            <FeedbackWidget propertyId={id} sectionKey="survey" sectionLabel="Survey Findings" />
+          }
+        >
+          <SurveyStrategyPanel property={p} onLiveChange={setDraftSurveyFindings} />
+        </CollapsibleCard>
+
+        <CollapsibleCard
           {...sectionProps("negotiation-playbook")}
           icon={<Sparkles className="h-4 w-4 text-accent" />}
           title="Negotiation playbook"
@@ -793,9 +831,9 @@ function PropertyDetail() {
               .filter((n) => n.gbp_impact > 250)
               .map((n, i) => (
                 <div key={i} className="rounded-md border p-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="text-[10px] capitalize">
                           {n.category.replace("_", " ")}
                         </Badge>
@@ -818,7 +856,7 @@ function PropertyDetail() {
                         </div>
                       )}
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center justify-between gap-2 sm:block sm:text-right">
                       <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
                       <div className="text-[10px] uppercase text-muted-foreground">
                         {n.confidence}
@@ -1042,38 +1080,6 @@ function PropertyDetail() {
           })()}
 
         <CollapsibleCard
-          {...sectionProps("refurb-epc")}
-          icon={<Wrench className="h-4 w-4 text-accent" />}
-          title="Refurb & EPC"
-          summary={`Refurb ${fmtGBP(p.refurb_estimate?.total ?? 0)} · EPC ${p.epc_rate ?? "not fetched"}`}
-          actions={
-            <FeedbackWidget propertyId={id} sectionKey="refurb-epc" sectionLabel="Refurb & EPC" />
-          }
-        >
-          <RefurbEpcPanel
-            propertyId={id}
-            property={p}
-            hasAnyPhotos={heroImages.length > 0}
-            onLiveChange={setDraftRefurb}
-          />
-        </CollapsibleCard>
-
-        <CollapsibleCard
-          {...sectionProps("survey")}
-          icon={<ClipboardCheck className="h-4 w-4 text-accent" />}
-          title="Survey & condition leverage"
-          summary={(() => {
-            const { totalLeverage, flaggedCount } = computeSurveyLeverage(p);
-            return `${flaggedCount} flagged · −${fmtGBP(totalLeverage)} confirmed`;
-          })()}
-          actions={
-            <FeedbackWidget propertyId={id} sectionKey="survey" sectionLabel="Survey Findings" />
-          }
-        >
-          <SurveyStrategyPanel property={p} onLiveChange={setDraftSurveyFindings} />
-        </CollapsibleCard>
-
-        <CollapsibleCard
           {...sectionProps("deal-sheet")}
           icon={<FileText className="h-4 w-4 text-accent" />}
           title="Deal sheet for investors"
@@ -1238,13 +1244,13 @@ function OfferPlanCard({
           {best.name}: {best.summary}
         </p>
         <DealIndicators indicators={analysis.dealIndicators} />
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
           <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
           <Stat label="Walk-away ceiling" v={fmtGBP(guidance.walkAwayOffer)} />
           <Stat label="Discount at target" v={fmtPct(discount)} />
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-md bg-muted/50 p-2.5">
             <div className="flex items-center justify-between gap-1">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -1255,7 +1261,7 @@ function OfferPlanCard({
             <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
           </div>
           {eq && (
-            <div className="rounded-md bg-muted/50 p-2.5 md:col-span-3">
+            <div className="col-span-2 rounded-md bg-muted/50 p-2.5 md:col-span-3">
               <div className="flex items-center justify-between gap-1">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   Built-in equity at target offer

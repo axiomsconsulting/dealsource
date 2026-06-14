@@ -414,7 +414,7 @@ function PropertiesPage() {
                       )}
                     </div>
                   )}
-                  <div className="flex flex-1 items-start justify-between gap-4 p-4">
+                  <div className="flex flex-1 flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link to="/properties/$id" params={{ id: p.id }} className="font-semibold hover:underline">
@@ -452,7 +452,7 @@ function PropertiesPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2 sm:justify-end">
                     {a && (
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${a.overallScore >= 60 ? "text-primary" : a.overallScore >= 40 ? "text-amber-600" : "text-muted-foreground"}`}>

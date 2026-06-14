@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
@@ -408,16 +408,17 @@ export function RefurbEpcPanel({
             <tr>
               <th className="w-8 px-3 py-2"></th>
               <th className="px-3 py-2 text-left">Item</th>
-              <th className="px-3 py-2 text-right">Low</th>
+              <th className="hidden px-3 py-2 text-right sm:table-cell">Low</th>
               <th className="px-3 py-2 text-right">Mid</th>
-              <th className="px-3 py-2 text-right">High</th>
+              <th className="hidden px-3 py-2 text-right sm:table-cell">High</th>
               <th className="px-3 py-2 text-center">Pick</th>
               <th className="px-3 py-2 text-right">Selected</th>
             </tr>
           </thead>
           <tbody>
             {live.rows.map(({ l, k, c, value }, i) => (
-              <tr key={i} className={`border-t ${!c.include ? "opacity-40" : ""}`}>
+              <Fragment key={i}>
+                <tr className={`border-t ${!c.include ? "opacity-40" : ""}`}>
                 <td className="px-3 py-2">
                   <Checkbox
                     checked={c.include}
@@ -426,7 +427,7 @@ export function RefurbEpcPanel({
                 </td>
                 <td className="px-3 py-2">
                   <div className="font-medium">{l.label}</div>
-                  {l.note && <div className="text-xs text-muted-foreground">{l.note}</div>}
+                  {l.note && <div className="hidden text-xs text-muted-foreground sm:block">{l.note}</div>}
                   <div className="text-[10px] text-muted-foreground">
                     {l.qty} {l.unit} · @ {fmtGBP(l.rate)}
                   </div>
@@ -444,9 +445,9 @@ export function RefurbEpcPanel({
                     </Badge>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right text-muted-foreground">{fmtGBP(l.low)}</td>
+                <td className="hidden px-3 py-2 text-right text-muted-foreground sm:table-cell">{fmtGBP(l.low)}</td>
                 <td className="px-3 py-2 text-right font-medium">{fmtGBP(l.mid)}</td>
-                <td className="px-3 py-2 text-right text-muted-foreground">{fmtGBP(l.high)}</td>
+                <td className="hidden px-3 py-2 text-right text-muted-foreground sm:table-cell">{fmtGBP(l.high)}</td>
                 <td className="px-3 py-2">
                   <ToggleGroup
                     type="single"
@@ -471,7 +472,15 @@ export function RefurbEpcPanel({
                 <td className="px-3 py-2 text-right font-semibold">
                   {c.include ? fmtGBP(value) : "—"}
                 </td>
-              </tr>
+                </tr>
+                {l.note && (
+                  <tr className={`border-t sm:hidden ${!c.include ? "opacity-40" : ""}`}>
+                    <td colSpan={6} className="px-3 pb-2 text-xs text-muted-foreground">
+                      {l.note}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
