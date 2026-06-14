@@ -258,11 +258,15 @@ async function loadCertificateAndPersist(context: any, propertyId: string, certi
 
 const FULL_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
-/** Best-effort, silent EPC auto-match for newly-imported properties — same exact-match-only
- *  matching as `fetchEpcForProperty` below, but returns null instead of throwing when the user
- *  has no register token configured, the property has no full postcode yet, or there's no exact
- *  (or unambiguous) match. Used by `ingestFromUrl` so a freshly-scraped property gets its EPC
- *  band/recommendations without an extra click, when it unambiguously can. */
+/** Best-effort, silent EPC auto-match for newly-imported properties. Prefers a single exact
+ *  address match, same as `fetchEpcForProperty` below. If there's no unambiguous exact match but
+ *  the postcode search returned candidates, takes the best-ranked one as a starting guess —
+ *  `epc_data.address` carries the certificate's own address so the user can cross-check it
+ *  against the property and pick a different certificate (via the existing "Refresh EPC" →
+ *  candidate picker, or manual entry) if it's wrong. Returns null instead of throwing when the
+ *  user has no register token configured, the property has no full postcode yet, or the register
+ *  has no candidates at all. Used by `ingestFromUrl` so a freshly-scraped property gets an EPC
+ *  band/recommendations without an extra click. */
 export async function tryAutoMatchEpc(
   supabase: any,
   userId: string,
@@ -285,10 +289,14 @@ export async function tryAutoMatchEpc(
         || String(b.row.registrationDate ?? "").localeCompare(String(a.row.registrationDate ?? "")));
 
     const exactMatches = scored.filter((s) => s.exact);
-    if (exactMatches.length !== 1) return null;
+    const best = exactMatches.length === 1 ? exactMatches[0] : scored[0];
 
     const context = { supabase, userId };
-    const result = await loadCertificateAndPersist(context, propertyId, exactMatches[0].row.certificateNumber, token, false);
+    const result = await loadCertificateAndPersist(context, propertyId, best.row.certificateNumber, token, false);
+    if (exactMatches.length !== 1) {
+      result.epc_data.autoMatchConfidence = "best_guess";
+      await supabase.from("properties").update({ epc_data: result.epc_data }).eq("id", propertyId).eq("user_id", userId);
+    }
     return { epc_data: result.epc_data, epc_fetched_at: result.epc_fetched_at };
   } catch {
     return null;

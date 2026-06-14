@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { fmtGBP } from "@/lib/format";
 import { Sparkles, Loader2, TrendingDown } from "lucide-react";
 import {
@@ -38,6 +39,15 @@ export function NegotiationPanel({
     const inferred = inferSellerCircumstances(property);
     return { ...ctx, circumstances: { ...inferred, ...(ctx.circumstances ?? {}) } };
   });
+
+  // Inferred circumstances are pre-ticked in the UI above before the user touches anything, but
+  // `effectiveProperty.seller_context` (and so the offer-plan guidance) only reflects `local`
+  // once `onLiveChange` fires. Push the initial merged state up on mount so the displayed
+  // checkboxes and the computed opening/target/walk-away offers agree from the first render.
+  useEffect(() => {
+    onLiveChange?.(local);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveMut = useMutation({
     mutationFn: (patch: SellerContext) =>
@@ -175,40 +185,58 @@ export function NegotiationPanel({
         <div className="grid gap-2 sm:grid-cols-2">
           {SELLER_CIRCUMSTANCES.map((c) => {
             const v = local.circumstances?.[c.key];
+            const flexGbp = asking > 0 ? Math.round(asking * c.flexPct) : 0;
             return (
-              <div
+              <CollapsibleCard
                 key={c.key}
-                className={`rounded-md border p-2 ${v?.active ? "border-primary bg-primary/5" : ""}`}
-              >
-                <label className="flex cursor-pointer items-start gap-2">
-                  <Checkbox
-                    checked={!!v?.active}
-                    onCheckedChange={(b) => toggle(c.key, !!b)}
-                    className="mt-0.5"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{c.label}</span>
+                variant="plain"
+                defaultOpen={false}
+                title={c.label}
+                summary={c.hint}
+                className={v?.active ? "border-primary bg-primary/5" : ""}
+                actions={
+                  <div className="flex items-center gap-2">
+                    {flexGbp !== 0 && (
                       <span
-                        className={`text-xs ${c.flexPct >= 0 ? "text-primary" : "text-destructive"}`}
+                        className={`text-xs font-semibold ${flexGbp > 0 ? "text-primary" : "text-destructive"}`}
                       >
-                        {c.flexPct >= 0 ? "+" : ""}
-                        {(c.flexPct * 100).toFixed(1)}%
+                        {flexGbp > 0 ? "−" : "+"}
+                        {fmtGBP(Math.abs(flexGbp))}
                       </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">{c.hint}</p>
-                    {v?.active && (
-                      <Input
-                        placeholder="Optional note (source, evidence)"
-                        value={v.note ?? ""}
-                        onChange={(e) => setNote(c.key, e.target.value)}
-                        onBlur={() => saveMut.mutate(local)}
-                        className="mt-1 h-7 text-xs"
-                      />
                     )}
+                    <Checkbox
+                      checked={!!v?.active}
+                      onCheckedChange={(b) => toggle(c.key, !!b)}
+                      title="Apply this circumstance"
+                    />
                   </div>
-                </label>
-              </div>
+                }
+              >
+                <p className="text-xs text-muted-foreground">{c.hint}</p>
+                <p className="mt-1 text-xs">
+                  Flex:{" "}
+                  <span className={c.flexPct >= 0 ? "text-primary" : "text-destructive"}>
+                    {c.flexPct >= 0 ? "+" : ""}
+                    {(c.flexPct * 100).toFixed(1)}%
+                  </span>
+                  {flexGbp !== 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ({flexGbp > 0 ? "−" : "+"}
+                      {fmtGBP(Math.abs(flexGbp))})
+                    </span>
+                  )}
+                </p>
+                {v?.active && (
+                  <Input
+                    placeholder="Optional note (source, evidence)"
+                    value={v.note ?? ""}
+                    onChange={(e) => setNote(c.key, e.target.value)}
+                    onBlur={() => saveMut.mutate(local)}
+                    className="mt-2 h-7 text-xs"
+                  />
+                )}
+              </CollapsibleCard>
             );
           })}
         </div>
@@ -244,26 +272,32 @@ export function NegotiationPanel({
             Negotiation ladder — up to 3 rounds, never to asking
           </p>
           <div className="space-y-2">
-            {offerLadder.map((o) => (
-              <div key={o.round} className="flex items-start gap-3 rounded-md border p-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                  {o.round}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-semibold">{fmtGBP(o.offer)}</span>
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {o.round === 1
-                        ? "Opening offer"
-                        : o.round === offerLadder.length
-                          ? "Final position (walk-away)"
-                          : "Counter-offer"}
-                    </span>
-                  </div>
+            {offerLadder.map((o) => {
+              const roundLabel =
+                o.round === 1
+                  ? "Opening offer"
+                  : o.round === offerLadder.length
+                    ? "Final position (walk-away)"
+                    : "Counter-offer";
+              const reduction = asking > 0 ? asking - o.offer : 0;
+              return (
+                <CollapsibleCard
+                  key={o.round}
+                  variant="plain"
+                  defaultOpen={false}
+                  title={`Round ${o.round} — ${roundLabel}`}
+                  summary={fmtGBP(o.offer)}
+                  actions={
+                    reduction > 0 ? (
+                      <span className="font-bold text-primary">−{fmtGBP(reduction)}</span>
+                    ) : undefined
+                  }
+                >
+                  <p className="font-semibold">{fmtGBP(o.offer)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{o.compromise}</p>
-                </div>
-              </div>
-            ))}
+                </CollapsibleCard>
+              );
+            })}
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
             Each round trades a price increment for a concession. The model underwrites the deal at{" "}

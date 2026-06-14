@@ -359,15 +359,38 @@ export function RefurbEpcPanel({
             )}
             Photos → Refurb
           </Button>
+          {credQ.isSuccess && configured && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={mut.isPending}
+              onClick={() => {
+                setCandidates(null);
+                mut.mutate();
+              }}
+            >
+              <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
+              Refresh EPC
+            </Button>
+          )}
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            title={epc ? "Edit EPC manually" : "Enter EPC manually"}
+            onClick={() => setManualOpen(true)}
+          >
+            <PencilLine className="h-4 w-4" />
+          </Button>
           <Select value={tier} onValueChange={(v) => setTier(v as RefurbTier)}>
             <SelectTrigger className="h-8 w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="light">Light refresh</SelectItem>
-              <SelectItem value="medium">Medium refurb</SelectItem>
-              <SelectItem value="heavy">Heavy refurb</SelectItem>
-              <SelectItem value="full_gut">Full gut</SelectItem>
+              <SelectItem value="light">Light</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="heavy">Heavy</SelectItem>
+              <SelectItem value="full_gut">Full</SelectItem>
             </SelectContent>
           </Select>
           <Popover>
@@ -470,43 +493,22 @@ export function RefurbEpcPanel({
 
       {/* ---- EPC section ---- */}
       <div className="space-y-3 border-t pt-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            {epc?.source === "pf_json" ? (
-              <>
-                Band and SAP score from the listing JSON — fetching from the register adds the full
-                element-by-element breakdown, assessor-costed improvement roadmap, and official
-                certificate link.
-              </>
-            ) : epc ? (
-              <>
-                From the government EPC register — matched on the exact registered address
-                {epc.matchedManually ? " (you confirmed this one)" : ""}
-                {fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}
-              </>
-            ) : (
-              "Pulls the lodged certificate, full element-by-element breakdown and the assessor's costed improvement recommendations straight from the register."
-            )}
+        {epc?.source === "register" && epc.autoMatchConfidence === "best_guess" && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Auto-matched to the closest register entry — check the address below is this
+              property. If it's wrong, use "Refresh EPC" to pick the right certificate.
+            </p>
+          </div>
+        )}
+        {epc?.source !== "register" && (
+          <p className="text-xs text-muted-foreground">
+            {epc?.source === "pf_json"
+              ? "Band and SAP score from the listing JSON."
+              : "No EPC data found yet."}
           </p>
-          {credQ.isSuccess && configured && (
-            <Button
-              size="sm"
-              variant={epc ? "outline" : "default"}
-              disabled={mut.isPending}
-              onClick={() => {
-                setCandidates(null);
-                mut.mutate();
-              }}
-            >
-              <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
-              {epc?.source === "pf_json"
-                ? "Enrich from EPC register"
-                : epc
-                  ? "Refetch from register"
-                  : "Fetch from EPC register"}
-            </Button>
-          )}
-        </div>
+        )}
 
         {showMismatch && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900">
@@ -646,6 +648,7 @@ export function RefurbEpcPanel({
                 {epc.lodgementDate
                   ? new Date(epc.lodgementDate).toLocaleDateString("en-GB")
                   : "unknown date"}
+                {fetchedAt ? ` · cached ${new Date(fetchedAt).toLocaleDateString("en-GB")}` : ""}
               </p>
             )}
 
@@ -934,6 +937,10 @@ function EpcCredentialsForm() {
   if (configured && !editing) {
     return (
       <div className="space-y-3 text-sm">
+        <p className="text-xs text-muted-foreground">
+          "Refresh EPC" pulls the lodged certificate, full element-by-element breakdown and the
+          assessor's costed improvement recommendations straight from the register.
+        </p>
         <span className="flex items-center gap-2 text-muted-foreground">
           <KeyRound className="h-4 w-4 text-emerald-600" />
           EPC register connected — your bearer token is saved to your account and used only for your

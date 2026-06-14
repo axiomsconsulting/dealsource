@@ -25,6 +25,34 @@ export function assertSupportedListingUrl(url: string) {
   }
 }
 
+export interface ListingSearchResult {
+  title: string | null;
+  url: string;
+  description: string | null;
+}
+
+/** Firecrawl web search, filtered to supported property-listing hosts — used to discover real
+ *  nearby listing URLs (for sale / under offer / sold) for the market comparables panel. Never
+ *  returns invented URLs: every result comes straight from Firecrawl's search index. */
+export async function searchListings(query: string, limit = 5): Promise<ListingSearchResult[]> {
+  const key = process.env.FIRECRAWL_API_KEY;
+  if (!key) throw new Error("Firecrawl is not connected — link it in Connectors to enable URL enrichment.");
+
+  const res = await fetch("https://api.firecrawl.dev/v2/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ query, limit }),
+  });
+  if (!res.ok) throw new Error(`Firecrawl search ${res.status}: ${await res.text()}`);
+  const body = await res.json();
+  const root = body?.data ?? body;
+  const web: any[] = Array.isArray(root) ? root : (root?.web ?? []);
+  return web
+    .filter((r) => typeof r?.url === "string" && LISTING_HOSTS.test(r.url))
+    .slice(0, limit)
+    .map((r) => ({ title: r.title ?? null, url: r.url, description: r.description ?? null }));
+}
+
 const EXTRACT_PROMPT =
   "Extract: address (use whatever address text the page displays — many listings show only a street/area name and postcode district with no house number, e.g. 'Newcombe Road, Northampton, NN5'; return that partial address rather than null — only return null if there is truly no location text at all), postcode (a postcode district/outcode like 'NN5' is fine if the full postcode is not shown), asking price (GBP), property type (terraced/semi/detached/flat/bungalow), number of bedrooms, number of bathrooms, tenure (Freehold/Leasehold), lease years remaining if shown, EPC rating, floor area in m², agent name, image URLs (jpg/png). Return null for unknowns.";
 

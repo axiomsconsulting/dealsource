@@ -841,40 +841,46 @@ function PropertyDetail() {
             {analysis.negotiation
               .filter((n) => n.gbp_impact > 250)
               .map((n, i) => (
-                <div key={i} className="rounded-md border p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] capitalize">
-                          {n.category.replace("_", " ")}
-                        </Badge>
-                        <p className="font-medium">{n.title}</p>
-                        {n.title.startsWith("Survey:") && (
-                          <JumpLink to="survey" setOpenSections={setOpenSections}>
-                            Survey
-                          </JumpLink>
-                        )}
-                        {n.title.includes("EPC") && (
-                          <JumpLink to="refurb-epc" setOpenSections={setOpenSections}>
-                            EPC
-                          </JumpLink>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
-                      {n.specOptions && n.specOptions.length > 0 && (
-                        <div className="mt-2">
-                          <SpecOptionsRow options={n.specOptions} />
-                        </div>
-                      )}
+                <CollapsibleCard
+                  key={i}
+                  variant="plain"
+                  defaultOpen={false}
+                  title={n.title}
+                  summary={n.description}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="hidden text-[10px] capitalize sm:inline-flex">
+                        {n.category.replace("_", " ")}
+                      </Badge>
+                      <span className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-2 sm:block sm:text-right">
-                      <div className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</div>
-                      <div className="text-[10px] uppercase text-muted-foreground">
-                        {n.confidence}
-                      </div>
-                    </div>
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] capitalize">
+                      {n.category.replace("_", " ")}
+                    </Badge>
+                    <span className="text-[10px] uppercase text-muted-foreground">
+                      {n.confidence} confidence
+                    </span>
+                    {n.title.startsWith("Survey:") && (
+                      <JumpLink to="survey" setOpenSections={setOpenSections}>
+                        Survey
+                      </JumpLink>
+                    )}
+                    {n.title.includes("EPC") && (
+                      <JumpLink to="refurb-epc" setOpenSections={setOpenSections}>
+                        EPC
+                      </JumpLink>
+                    )}
                   </div>
-                </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
+                  {n.specOptions && n.specOptions.length > 0 && (
+                    <div className="mt-2">
+                      <SpecOptionsRow options={n.specOptions} />
+                    </div>
+                  )}
+                </CollapsibleCard>
               ))}
             {analysis.negotiation.some((n) => n.gbp_impact <= 250) && (
               <TooltipProvider delayDuration={120}>
@@ -1052,27 +1058,21 @@ function PropertyDetail() {
           </CollapsibleCard>
         )}
 
-        {p.pf_json &&
-          (() => {
-            const marketData = extractMarketDataFromPfJson(
-              p.pf_json?.propertyLight ?? {},
-              p.pf_json?.propertyDetail ?? {},
-            );
-            if (!marketData) return null;
-            const { soldComparables, areaStats, subjectLastSold } = marketData;
-            if (
-              soldComparables.length === 0 &&
-              !areaStats?.medianSoldPrice &&
-              !areaStats?.averageSoldPrice &&
-              !subjectLastSold
-            )
-              return null;
+        {(() => {
+            const marketData = p.pf_json
+              ? extractMarketDataFromPfJson(p.pf_json?.propertyLight ?? {}, p.pf_json?.propertyDetail ?? {})
+              : null;
+            const soldComparables = marketData?.soldComparables ?? [];
             return (
               <CollapsibleCard
                 {...sectionProps("market-comparables")}
                 icon={<TrendingUp className="h-4 w-4 text-accent" />}
                 title="Market comparables"
-                summary={`${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`}
+                summary={
+                  soldComparables.length > 0
+                    ? `${soldComparables.length} comparable${soldComparables.length === 1 ? "" : "s"}`
+                    : undefined
+                }
                 actions={
                   <FeedbackWidget
                     propertyId={id}
@@ -1081,7 +1081,7 @@ function PropertyDetail() {
                   />
                 }
               >
-                <MarketComparablesPanel pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
+                <MarketComparablesPanel propertyId={p.id} pf_json={p.pf_json} askingPrice={p.asking_price_gbp} />
               </CollapsibleCard>
             );
           })()}

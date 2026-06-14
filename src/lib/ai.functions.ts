@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 import { isFloorPlan, partitionImageUrls } from "@/lib/images";
 import { estimateMaxHmoRoomsByArea, HMO_MIN_SINGLE_ROOM_SQM, HMO_MIN_DOUBLE_ROOM_SQM } from "@/lib/analysis/hmo-layout";
+import { searchListings } from "@/lib/firecrawl.server";
 
 const PayloadSchema = z.object({
   condition: z.object({
@@ -538,6 +539,70 @@ EPC: ${prop.epc_rate ?? "?"}, Tenure: ${prop.tenure ?? "?"}`;
       throw new Error("Seller flex AI failed: " + e.message);
     }
     return parsed;
+  });
+
+/* ------------------------------------------------------------------ */
+/* Nearby listings (for sale / STC / sold, with links)                */
+/* ------------------------------------------------------------------ */
+
+const NearbyListingsSchema = z.object({
+  listings: z.array(z.object({
+    index: z.number().int(),
+    address: z.string().nullable().optional(),
+    status: z.enum(["for_sale", "stc", "sold"]),
+    price: z.number().nullable().optional(),
+    date: z.string().nullable().optional(),
+  })),
+});
+
+export const findNearbyListings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("address, postcode").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const street = (prop.address ?? "").split(",")[0]?.trim() || null;
+    const area = [street, prop.postcode].filter(Boolean).join(" ");
+    if (!area) throw new Error("Property has no address/postcode to search from");
+
+    const queries = [
+      `${area} for sale site:rightmove.co.uk`,
+      `${area} for sale site:zoopla.co.uk`,
+      `${area} sold house prices`,
+    ];
+    const results = (await Promise.all(queries.map((q) => searchListings(q, 5).catch(() => []))))
+      .flat()
+      .filter((r, i, arr) => arr.findIndex((x) => x.url === r.url) === i)
+      .slice(0, 10);
+
+    if (!results.length) return { street, listings: [] };
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+    const system = `You classify UK property listing search results for properties near "${area}". For each numbered result, read its title/description and decide: status — "for_sale" (currently advertised), "stc" (sold/under offer/STC — sale agreed but not completed), or "sold" (a completed sale with a recorded price/date); the property address as shown; the price in GBP if shown; a date if shown (sold date or "reduced on" date). Output STRICT JSON ONLY: {"listings":[{"index":0,"address":"...","status":"for_sale","price":250000,"date":null}]}. Omit a result if you can't tell what it is. Never invent a price, address or date that isn't in the text — use null instead.`;
+    const user = results.map((r, i) => `${i}: ${r.title ?? ""}\n${r.description ?? ""}\n${r.url}`).join("\n\n");
+
+    let parsed: any;
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }] });
+      parsed = NearbyListingsSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Nearby listings AI failed: " + e.message);
+    }
+
+    const listings = (parsed.listings as Array<{ index: number; address?: string | null; status: string; price?: number | null; date?: string | null }>)
+      .filter((l) => results[l.index])
+      .map((l) => ({
+        address: l.address ?? null,
+        status: l.status,
+        price: l.price ?? null,
+        date: l.date ?? null,
+        url: results[l.index].url,
+      }));
+
+    return { street, listings };
   });
 
 export const getAIAnalysis = createServerFn({ method: "GET" })
