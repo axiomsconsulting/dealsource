@@ -32,6 +32,7 @@ export const addPhotoRecords = createServerFn({ method: "POST" })
         storage_path: z.string().max(500),
         caption: z.string().max(200).optional().nullable(),
         is_exterior: z.boolean().optional(),
+        issue_key: z.string().max(50).optional().nullable(),
       })).min(1).max(50),
     }).parse(i),
   )
@@ -42,6 +43,7 @@ export const addPhotoRecords = createServerFn({ method: "POST" })
       storage_path: p.storage_path,
       caption: p.caption ?? null,
       is_exterior: p.is_exterior ?? false,
+      issue_key: p.issue_key ?? null,
     }));
     const { data: inserted, error } = await context.supabase
       .from("photos").insert(rows).select("id, storage_path");

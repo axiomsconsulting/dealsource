@@ -185,6 +185,62 @@ Use UK 2026 trade prices. Be conservative.`;
   });
 
 /* ------------------------------------------------------------------ */
+/* Per-issue viewing photo analysis                                    */
+/* ------------------------------------------------------------------ */
+
+const ViewingIssueSchema = z.object({
+  severity: z.enum(["low", "medium", "high"]),
+  note: z.string().max(500),
+  estimateGbp: z.number().min(0).max(80000),
+});
+
+/** Vision pass over the photos a user captured on-site for a single survey issue (e.g. "damp",
+ *  "structural", "external_grounds") during a property viewing — suggests a severity, a short
+ *  note describing what's visible, and a remediation cost estimate. The user reviews and can
+ *  edit before it's saved into `property.survey_findings[issueKey]`. */
+export const analyseViewingIssuePhotos = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) =>
+    z.object({ propertyId: z.string().uuid(), issueKey: z.string().max(50) }).parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("address, property_type").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const { data: photos } = await context.supabase
+      .from("photos").select("storage_path")
+      .eq("property_id", data.propertyId).eq("issue_key", data.issueKey).limit(8);
+    if (!photos?.length) throw new Error("No photos for this issue yet — take or add a photo first.");
+
+    const urls: string[] = [];
+    for (const ph of photos) {
+      const { data: signed } = await context.supabase.storage.from("property-photos").createSignedUrl(ph.storage_path, 600);
+      if (signed?.signedUrl) urls.push(signed.signedUrl);
+    }
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+
+    const issueLabel = data.issueKey.replace(/_/g, " ");
+    const system = `You are a UK property surveyor assessing "${issueLabel}" from photos taken during a viewing of ${prop.address} (${prop.property_type ?? "residential"}). Output STRICT JSON only, matching:
+{"severity":"low|medium|high","note":"short description of what's visible and why it matters","estimateGbp":0}
+Use UK 2026 trade prices for remediation. Be conservative.`;
+
+    const content: any[] = [
+      { type: "text", text: `${urls.length} photo(s) attached, all showing "${issueLabel}".` },
+      ...urls.map((u) => ({ type: "image", image: u })),
+    ];
+
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content }] });
+      return ViewingIssueSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Photo AI failed: " + e.message);
+    }
+  });
+
+/* ------------------------------------------------------------------ */
 /* HMO/SA floor-plan layout assessment                                 */
 /* ------------------------------------------------------------------ */
 

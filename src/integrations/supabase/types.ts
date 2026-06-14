@@ -315,6 +315,7 @@ export type Database = {
           created_at: string
           id: string
           is_exterior: boolean
+          issue_key: string | null
           property_id: string
           storage_path: string
           user_id: string
@@ -325,6 +326,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_exterior?: boolean
+          issue_key?: string | null
           property_id: string
           storage_path: string
           user_id: string
@@ -335,6 +337,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_exterior?: boolean
+          issue_key?: string | null
           property_id?: string
           storage_path?: string
           user_id?: string
