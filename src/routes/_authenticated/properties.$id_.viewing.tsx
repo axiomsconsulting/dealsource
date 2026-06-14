@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { z } from "zod";
 import { AppShell } from "@/components/AppShell";
 import { useServerFn } from "@tanstack/react-start";
 import { getProperty } from "@/lib/ingest.functions";
@@ -18,12 +19,16 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/properties/$id_/viewing")({
+  validateSearch: z.object({
+    tab: z.enum(["before", "capture"]).catch("before"),
+  }),
   head: () => ({ meta: [{ title: "Property viewing — Deal Negotiator" }] }),
   component: PropertyViewing,
 });
 
 function PropertyViewing() {
   const { id } = Route.useParams();
+  const { tab } = Route.useSearch();
   const getProp = useServerFn(getProperty);
   const listP = useServerFn(listPersonas);
   const getAI = useServerFn(getAIAnalysis);
@@ -72,7 +77,7 @@ function PropertyViewing() {
           Property viewing — quick pre-check before you go, and on-site capture while you're there.
         </p>
 
-        <Tabs defaultValue="before">
+        <Tabs defaultValue={tab}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="before">Before you go</TabsTrigger>
             <TabsTrigger value="capture">On-site capture</TabsTrigger>

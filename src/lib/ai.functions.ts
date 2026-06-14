@@ -241,6 +241,67 @@ Use UK 2026 trade prices for remediation. Be conservative.`;
   });
 
 /* ------------------------------------------------------------------ */
+/* Free-form viewing notes -> survey findings                          */
+/* ------------------------------------------------------------------ */
+
+const SURVEY_ISSUE_KEYS = [
+  "structural", "roof", "asbestos", "non_standard_construction",
+  "damp", "timber_decay", "windows_joinery", "drainage_rainwater",
+  "electrics_plumbing", "insulation_energy", "japanese_knotweed", "external_grounds",
+] as const;
+
+const ViewingNotesAnalysisSchema = z.object({
+  findings: z.array(z.object({
+    issueKey: z.enum(SURVEY_ISSUE_KEYS),
+    severity: z.enum(["low", "medium", "high"]),
+    note: z.string().max(300),
+  })).max(SURVEY_ISSUE_KEYS.length),
+});
+
+/** Reads the free-form notes captured during a property viewing (a general box plus one box
+ *  per area — kitchen, bedrooms, garden, roof, etc.) and maps anything described onto the
+ *  fixed `SurveyIssueKey` taxonomy with a severity, regardless of which box it was written in.
+ *  The result is merged into `property.survey_findings`, so it immediately becomes negotiation
+ *  leverage (see `buildSurveyNegotiationPoints`) and totals up in the refurb estimator. */
+export const analyseViewingNotes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) =>
+    z.object({
+      propertyId: z.string().uuid(),
+      notes: z.record(z.string(), z.string().max(4000)),
+    }).parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: prop } = await context.supabase
+      .from("properties").select("address, property_type").eq("id", data.propertyId).eq("user_id", context.userId).maybeSingle();
+    if (!prop) throw new Error("Property not found");
+
+    const sections = Object.entries(data.notes)
+      .map(([area, text]) => [area, text.trim()] as const)
+      .filter(([, text]) => text.length > 0);
+    if (!sections.length) throw new Error("Add some notes before analysing.");
+
+    const provider = createLovableAiGatewayProvider(getKey());
+    const model = provider("google/gemini-2.5-flash");
+
+    const system = `You are a UK property surveyor reviewing a buyer's freeform notes from a viewing of ${prop.address} (${prop.property_type ?? "residential"}). The notes are organised by area but an issue may be described in any box (including "general") — read all of them together.
+
+Map anything described onto this fixed issue list (use these exact keys): ${SURVEY_ISSUE_KEYS.join(", ")}.
+
+For each issue you find clear evidence of, return a severity ("low"|"medium"|"high" — based on how serious the described problem sounds) and a short note summarising what was observed and where. Do not invent issues that aren't mentioned. Output STRICT JSON only:
+{"findings":[{"issueKey":"damp","severity":"medium","note":"Damp patch noted on kitchen wall"}]}`;
+
+    const user = sections.map(([area, text]) => `[${area}]\n${text}`).join("\n\n");
+
+    try {
+      const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }] });
+      return ViewingNotesAnalysisSchema.parse(parseJsonBlock(text));
+    } catch (e: any) {
+      throw new Error("Notes AI failed: " + e.message);
+    }
+  });
+
+/* ------------------------------------------------------------------ */
 /* HMO/SA floor-plan layout assessment                                 */
 /* ------------------------------------------------------------------ */
 

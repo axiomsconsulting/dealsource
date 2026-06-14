@@ -153,7 +153,7 @@ export function SurveyStrategyPanel({
                     <ToggleGroupItem
                       key={s}
                       value={s}
-                      className="h-6 px-2 text-[10px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      className="h-9 px-2.5 text-xs sm:h-6 sm:px-2 sm:text-[10px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                     >
                       {s[0].toUpperCase()}
                     </ToggleGroupItem>

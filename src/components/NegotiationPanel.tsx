@@ -21,12 +21,10 @@ import type { NegotiationGuidance } from "@/lib/analysis/types";
 export function NegotiationPanel({
   property,
   guidance,
-  onApplyOffer,
   onLiveChange,
 }: {
   property: any;
   guidance: NegotiationGuidance;
-  onApplyOffer: (gbp: number) => void;
   onLiveChange?: (ctx: SellerContext) => void;
 }) {
   const qc = useQueryClient();
@@ -226,19 +224,17 @@ export function NegotiationPanel({
             v={`${combinedFlexPct >= 0 ? "+" : ""}${(combinedFlexPct * 100).toFixed(1)}%`}
           />
         </div>
-        <div className="mt-2 flex items-end justify-between gap-3 border-t pt-2">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Target deal price
-            </p>
-            <p className="text-2xl font-bold text-primary">{fmtGBP(targetOffer)}</p>
-            <p className="text-xs text-muted-foreground">
-              Open at <span className="font-medium text-foreground">{fmtGBP(openingOffer)}</span>;
-              walk away above{" "}
-              <span className="font-medium text-foreground">{fmtGBP(walkAway)}</span>.
-            </p>
-          </div>
-          <Button onClick={() => onApplyOffer(targetOffer)}>Apply target to deal</Button>
+        <div className="mt-2 border-t pt-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Target deal price
+          </p>
+          <p className="text-2xl font-bold text-primary">{fmtGBP(targetOffer)}</p>
+          <p className="text-xs text-muted-foreground">
+            Open at <span className="font-medium text-foreground">{fmtGBP(openingOffer)}</span>;
+            walk away above <span className="font-medium text-foreground">{fmtGBP(walkAway)}</span>.
+            This already includes the refurb &amp; EPC cost and seller-context flex above — feeds
+            straight into the Offer plan.
+          </p>
         </div>
       </div>
 

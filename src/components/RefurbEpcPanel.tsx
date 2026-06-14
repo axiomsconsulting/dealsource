@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
@@ -202,6 +202,13 @@ export function RefurbEpcPanel({
     | Record<string, LineChoice>
     | undefined;
   const [choices, setChoices] = useState<Record<string, LineChoice>>(() => stored ?? {});
+  // Severity hints from a property-viewing AI analysis (e.g. "damp" noted as severe) — applied
+  // once to set a sensible default tier for the matching line, without overriding anything the
+  // user has already chosen.
+  const severityHints = property?.refurb_estimate?.severityHints as
+    | Record<string, "low" | "mid" | "high">
+    | undefined;
+
   // when est changes (tier switch), ensure every line has a choice entry
   useEffect(() => {
     setChoices((prev) => {
@@ -210,12 +217,14 @@ export function RefurbEpcPanel({
       est.lines.forEach((l, i) => {
         const k = `${l.category}:${i}`;
         if (!next[k]) {
-          next[k] = { include: true, tier: "mid" };
+          const hint = severityHints?.[l.category];
+          next[k] = { include: true, tier: hint ?? "mid" };
           added = true;
         }
       });
       return added ? next : prev;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [est]);
 
   const live = useMemo(() => {
@@ -335,7 +344,7 @@ export function RefurbEpcPanel({
           )}
           <span className="text-xs text-muted-foreground">{est.notes.join(" · ")}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -348,7 +357,7 @@ export function RefurbEpcPanel({
             ) : (
               <Sparkles className="mr-2 h-4 w-4" />
             )}
-            Analyse photos → refurb
+            Photos → Refurb
           </Button>
           <Select value={tier} onValueChange={(v) => setTier(v as RefurbTier)}>
             <SelectTrigger className="h-8 w-[140px]">
@@ -402,88 +411,61 @@ export function RefurbEpcPanel({
         />
       </div>
 
-      <div className="overflow-hidden rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="w-8 px-3 py-2"></th>
-              <th className="px-3 py-2 text-left">Item</th>
-              <th className="hidden px-3 py-2 text-right sm:table-cell">Low</th>
-              <th className="px-3 py-2 text-right">Mid</th>
-              <th className="hidden px-3 py-2 text-right sm:table-cell">High</th>
-              <th className="px-3 py-2 text-center">Pick</th>
-              <th className="px-3 py-2 text-right">Selected</th>
-            </tr>
-          </thead>
-          <tbody>
-            {live.rows.map(({ l, k, c, value }, i) => (
-              <Fragment key={i}>
-                <tr className={`border-t ${!c.include ? "opacity-40" : ""}`}>
-                <td className="px-3 py-2">
-                  <Checkbox
-                    checked={c.include}
-                    onCheckedChange={(b) => setChoices({ ...choices, [k]: { ...c, include: !!b } })}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <div className="font-medium">{l.label}</div>
-                  {l.note && <div className="hidden text-xs text-muted-foreground sm:block">{l.note}</div>}
-                  <div className="text-[10px] text-muted-foreground">
-                    {l.qty} {l.unit} · @ {fmtGBP(l.rate)}
-                  </div>
-                  {l.source === "ai" && (
-                    <Badge variant="outline" className="mt-1 h-4 text-[9px]">
-                      AI
-                    </Badge>
-                  )}
-                  {l.source === "epc" && (
-                    <Badge
-                      variant="outline"
-                      className="mt-1 h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700"
-                    >
-                      EPC
-                    </Badge>
-                  )}
-                </td>
-                <td className="hidden px-3 py-2 text-right text-muted-foreground sm:table-cell">{fmtGBP(l.low)}</td>
-                <td className="px-3 py-2 text-right font-medium">{fmtGBP(l.mid)}</td>
-                <td className="hidden px-3 py-2 text-right text-muted-foreground sm:table-cell">{fmtGBP(l.high)}</td>
-                <td className="px-3 py-2">
-                  <ToggleGroup
-                    type="single"
-                    size="sm"
-                    value={c.tier}
-                    onValueChange={(v) =>
-                      v && setChoices({ ...choices, [k]: { ...c, tier: v as any } })
-                    }
-                    className="justify-center"
-                  >
-                    <ToggleGroupItem value="low" className="h-6 px-2 text-[10px]">
-                      L
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="mid" className="h-6 px-2 text-[10px]">
-                      M
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="high" className="h-6 px-2 text-[10px]">
-                      H
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                </td>
-                <td className="px-3 py-2 text-right font-semibold">
-                  {c.include ? fmtGBP(value) : "—"}
-                </td>
-                </tr>
-                {l.note && (
-                  <tr className={`border-t sm:hidden ${!c.include ? "opacity-40" : ""}`}>
-                    <td colSpan={6} className="px-3 pb-2 text-xs text-muted-foreground">
-                      {l.note}
-                    </td>
-                  </tr>
+      <div className="space-y-2">
+        {live.rows.map(({ l, k, c, value }, i) => (
+          <div
+            key={i}
+            className={`rounded-md border p-2.5 ${!c.include ? "opacity-40" : ""}`}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Checkbox
+                checked={c.include}
+                onCheckedChange={(b) => setChoices({ ...choices, [k]: { ...c, include: !!b } })}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{l.label}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {l.qty} {l.unit} · @ {fmtGBP(l.rate)} · L {fmtGBP(l.low)} · M {fmtGBP(l.mid)} · H {fmtGBP(l.high)}
+                </div>
+                {l.note && <div className="text-xs text-muted-foreground">{l.note}</div>}
+                {l.source === "ai" && (
+                  <Badge variant="outline" className="mt-1 h-4 text-[9px]">
+                    AI
+                  </Badge>
                 )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                {l.source === "epc" && (
+                  <Badge
+                    variant="outline"
+                    className="mt-1 h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700"
+                  >
+                    EPC
+                  </Badge>
+                )}
+              </div>
+              <ToggleGroup
+                type="single"
+                size="sm"
+                value={c.tier}
+                onValueChange={(v) =>
+                  v && setChoices({ ...choices, [k]: { ...c, tier: v as any } })
+                }
+              >
+                <ToggleGroupItem value="low" className="h-10 px-3 text-xs sm:h-8">
+                  L
+                </ToggleGroupItem>
+                <ToggleGroupItem value="mid" className="h-10 px-3 text-xs sm:h-8">
+                  M
+                </ToggleGroupItem>
+                <ToggleGroupItem value="high" className="h-10 px-3 text-xs sm:h-8">
+                  H
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <span className="w-20 shrink-0 text-right font-semibold">
+                {c.include ? fmtGBP(value) : "—"}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ---- EPC section ---- */}

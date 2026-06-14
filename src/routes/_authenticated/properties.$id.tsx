@@ -90,7 +90,6 @@ import {
   ShieldCheck,
   MapPin,
   Camera,
-  MessageSquareText,
   Copy,
   Check,
   ClipboardCheck,
@@ -100,6 +99,7 @@ import {
   FileText,
   FileStack,
   RefreshCcw,
+  GraduationCap,
   Hotel,
   Repeat,
   Scissors,
@@ -291,18 +291,30 @@ function PropertyDetail() {
             >
               <Star className={`h-4 w-4 ${p.favourite ? "fill-amber-400 text-amber-400" : ""}`} />
             </Button>
+          </div>
+          <div className="mt-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto">
             <Link to="/properties/$id/guide" params={{ id }}>
-              <Button size="sm" variant="outline">
-                <Sparkles className="mr-2 h-4 w-4" />
-                Guided walkthrough
+              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Guide">
+                <GraduationCap className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Guide</span>
               </Button>
             </Link>
-            <Link to="/properties/$id/viewing" params={{ id }}>
-              <Button size="sm" variant="outline">
-                <ClipboardCheck className="mr-2 h-4 w-4" />
-                Property viewing
+            <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "before" }}>
+              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Prepare">
+                <ShieldCheck className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Prepare</span>
               </Button>
             </Link>
+            <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "capture" }}>
+              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Capture">
+                <Camera className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Capture</span>
+              </Button>
+            </Link>
+            <TalkingPointsButton
+              guidance={analysis.negotiationGuidance}
+              negotiation={analysis.negotiation}
+            />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
@@ -443,32 +455,21 @@ function PropertyDetail() {
             </div>
           )}
         </div>
-        <div className="text-right">
-          <div className="text-5xl font-bold text-primary">{analysis.overallScore}</div>
-          <div className="flex items-center justify-end gap-1 text-xs uppercase tracking-wide text-muted-foreground">
-            Deal score
-            <DealScoreInfo
-              overallScore={analysis.overallScore}
-              breakdown={analysis.overallScoreBreakdown}
-              best={best}
-            />
-          </div>
-          <div className="mt-2">
-            <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
-              <SelectTrigger className="h-8 w-[220px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {personas.map((pp) => (
-                  <SelectItem key={pp.id} value={pp.id}>
-                    {pp.name} {pp.is_default ? "★" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Label htmlFor="hide" className="text-xs">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
+            <SelectTrigger className="h-9 w-auto min-w-0 max-w-[33%] sm:max-w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {personas.map((pp) => (
+                <SelectItem key={pp.id} value={pp.id}>
+                  {pp.name} {pp.is_default ? "★" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="hide" className="text-xs whitespace-nowrap">
               <EyeOff className="inline h-3 w-3" /> Redact
             </Label>
             <Switch
@@ -479,6 +480,17 @@ function PropertyDetail() {
                 toast.success(v ? "Address hidden" : "Address visible");
               }}
             />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="text-2xl font-bold leading-none text-primary">{analysis.overallScore}</div>
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Deal score
+              <DealScoreInfo
+                overallScore={analysis.overallScore}
+                breakdown={analysis.overallScoreBreakdown}
+                best={best}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -498,7 +510,6 @@ function PropertyDetail() {
         analysis={analysis}
         best={best}
         guidance={analysis.negotiationGuidance}
-        negotiation={analysis.negotiation}
         personaPass={analysis.personaMatch.pass}
         sourcingBufferEnabled={!!over.sourcingBufferEnabled}
         onToggleSourcingBuffer={toggleSourcingBuffer}
@@ -932,10 +943,6 @@ function PropertyDetail() {
             property={p}
             guidance={analysis.negotiationGuidance}
             onLiveChange={setDraftSellerContext}
-            onApplyOffer={(gbp) => {
-              tune("offer_price", gbp);
-              toast.success(`Target offer set to ${fmtGBP(gbp)}`);
-            }}
           />
         </CollapsibleCard>
 
@@ -1126,8 +1133,9 @@ function TalkingPointsButton({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
-          <MessageSquareText className="h-3.5 w-3.5" /> Talking points
+        <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Negotiate">
+          <Handshake className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Negotiate</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-96 p-0" align="end">
@@ -1154,7 +1162,6 @@ function OfferPlanCard({
   analysis,
   best,
   guidance,
-  negotiation,
   personaPass,
   sourcingBufferEnabled,
   onToggleSourcingBuffer,
@@ -1172,7 +1179,6 @@ function OfferPlanCard({
   analysis: AnalysisOutput;
   best: StrategyResult;
   guidance: NegotiationGuidance;
-  negotiation: NegotiationPoint[];
   personaPass: boolean;
   sourcingBufferEnabled: boolean;
   onToggleSourcingBuffer: (enabled: boolean) => void;
@@ -1196,7 +1202,7 @@ function OfferPlanCard({
       icon={<Target className="h-4 w-4 text-primary" />}
       title={
         <span className="flex items-center gap-2">
-          Offer plan <Badge className="bg-primary">{analysis.overallScore}/100</Badge>
+          Offer plan
           <FormulaInfo
             title="How the offer plan is calculated"
             rows={[
@@ -1230,7 +1236,19 @@ function OfferPlanCard({
       summary={`Target ${fmtGBP(guidance.targetOffer)} · ${guidance.stance.replace("-", " ")} stance${eq ? ` · ${fmtPct(eq.equityPctAtTarget)} equity` : ""}`}
       actions={
         <div className="flex items-center gap-1">
-          <TalkingPointsButton guidance={guidance} negotiation={negotiation} />
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Recalculate offer price from current refurb, EPC and seller-context selections"
+            onClick={(e) => {
+              e.stopPropagation();
+              onResetOne("offer_price");
+              onResetOne("refurb_cost");
+              toast.success("Offer price recalculated from current selections");
+            }}
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+          </Button>
           <FeedbackWidget
             propertyId={propertyId}
             sectionKey="offer-plan"
@@ -1244,11 +1262,14 @@ function OfferPlanCard({
           {best.name}: {best.summary}
         </p>
         <DealIndicators indicators={analysis.dealIndicators} />
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
           <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
           <Stat label="Walk-away ceiling" v={fmtGBP(guidance.walkAwayOffer)} />
           <Stat label="Discount at target" v={fmtPct(discount)} />
+          <button type="button" onClick={onOpenRefurb} className="text-left">
+            <Stat label="Refurb + improvement cost" v={fmtGBP(analysis.effectiveInputs.refurb_cost)} />
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-md bg-muted/50 p-2.5">
