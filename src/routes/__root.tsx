@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { GlobalLoadingIndicator } from "@/components/GlobalLoadingIndicator";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 function NotFoundComponent() {
   return (
@@ -124,10 +125,12 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <GlobalLoadingIndicator />
-      <Toaster richColors position="top-right" />
+      <ThemeProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <GlobalLoadingIndicator />
+        <Toaster richColors position="top-right" />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

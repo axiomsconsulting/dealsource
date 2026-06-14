@@ -14,7 +14,7 @@ import { fmtGBP } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, ArrowDownWideNarrow, ArrowUpNarrowWide, SlidersHorizontal } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -240,26 +240,36 @@ function PropertiesPage() {
 
   return (
     <AppShell title={`All properties (${props.data?.length ?? 0})`}>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+          <SelectTrigger className="h-11 w-full sm:h-9 sm:w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="score">Deal score (high→low)</SelectItem>
-            <SelectItem value="yield">Gross yield (high→low)</SelectItem>
-            <SelectItem value="price_asc">Price (low→high)</SelectItem>
-            <SelectItem value="price_desc">Price (high→low)</SelectItem>
-            <SelectItem value="risk">Risk (clean first)</SelectItem>
+            <SelectItem value="score">
+              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Deal score (high→low)</span>
+            </SelectItem>
+            <SelectItem value="yield">
+              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Gross yield (high→low)</span>
+            </SelectItem>
+            <SelectItem value="price_asc">
+              <span className="flex items-center gap-1.5"><ArrowUpNarrowWide className="h-3.5 w-3.5" /> Price (low→high)</span>
+            </SelectItem>
+            <SelectItem value="price_desc">
+              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Price (high→low)</span>
+            </SelectItem>
+            <SelectItem value="risk">
+              <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-3.5 w-3.5" /> Risk (clean first)</span>
+            </SelectItem>
           </SelectContent>
         </Select>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search address or postcode…"
-          className="h-9 w-[220px]"
+          className="h-11 w-full sm:h-9 sm:w-[220px]"
         />
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
+            <Button variant="outline" size="sm" className="h-11 w-full sm:h-9 sm:w-auto">
               <FilterIcon className="mr-2 h-4 w-4" /> Filters {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
             </Button>
           </SheetTrigger>
@@ -353,7 +363,7 @@ function PropertiesPage() {
         <Button
           variant="outline"
           size="sm"
-          className="h-9"
+          className="h-11 w-full sm:h-9 sm:w-auto"
           disabled={!rows.length}
           onClick={() => setCollapsed((s) => s.size === rows.length ? new Set() : new Set(rows.map((r) => r.p.id)))}
         >
@@ -363,15 +373,15 @@ function PropertiesPage() {
             <><ChevronsDownUp className="mr-2 h-4 w-4" /> Collapse all</>
           )}
         </Button>
-        <div className="flex-1" />
+        <div className="hidden flex-1 sm:block" />
         {selected.size > 0 && (
-          <span className="text-sm text-muted-foreground">{selected.size} selected · <button className="underline" onClick={clearSel}>clear</button></span>
+          <span className="text-center text-sm text-muted-foreground sm:text-left">{selected.size} selected · <button className="underline" onClick={clearSel}>clear</button></span>
         )}
-        <Button variant="outline" size="sm" onClick={exportCSV} disabled={!rows.length}>
+        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={exportCSV} disabled={!rows.length}>
           <Download className="mr-2 h-4 w-4" />
           Export CSV {selected.size > 0 ? `(${selected.size})` : `(${rows.length})`}
         </Button>
-        <AddPropertyDialog trigger={<Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
+        <AddPropertyDialog trigger={<Button size="sm" className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
         <BatchAIDialog
           totalProperties={allRows.length}
           alreadyAnalysed={analysedCount}

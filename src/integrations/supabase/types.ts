@@ -224,6 +224,42 @@ export type Database = {
           },
         ]
       }
+      design_themes: {
+        Row: {
+          id: string
+          name: string
+          is_active: boolean
+          radius: string
+          font_scale: number
+          light: Json
+          dark: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          is_active?: boolean
+          radius?: string
+          font_scale?: number
+          light?: Json
+          dark?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          is_active?: boolean
+          radius?: string
+          font_scale?: number
+          light?: Json
+          dark?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       personas: {
         Row: {
           ai_default_enabled: boolean

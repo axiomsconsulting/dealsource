@@ -6,6 +6,7 @@ import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 import { isFloorPlan, partitionImageUrls } from "@/lib/images";
 import { estimateMaxHmoRoomsByArea, HMO_MIN_SINGLE_ROOM_SQM, HMO_MIN_DOUBLE_ROOM_SQM } from "@/lib/analysis/hmo-layout";
 import { searchListings } from "@/lib/firecrawl.server";
+import { computeRiskFlags, type RiskFlag } from "@/lib/analysis/risk";
 
 const PayloadSchema = z.object({
   condition: z.object({
@@ -728,6 +729,22 @@ Given listing data and (optionally) images, produce ONE structured JSON object c
   if (payload.article4?.status && payload.article4.status !== "unknown") {
     updates.article4_status = payload.article4.status;
     updates.article4_source = "ai";
+  }
+  if (payload.riskFlags?.sharedOwnership === true) {
+    const flags: RiskFlag[] = Array.isArray(prop.risk_flags?.flags)
+      ? [...prop.risk_flags.flags]
+      : computeRiskFlags(prop);
+    if (!flags.some((f) => f.key === "shared_ownership")) {
+      flags.push({
+        key: "shared_ownership",
+        severity: "red",
+        label: "Shared ownership",
+        reason: payload.riskFlags.notes
+          ? `AI review of listing/photos: ${payload.riskFlags.notes}`
+          : "AI review of listing description and photos detected shared-ownership terms — not a standard investment purchase.",
+      });
+      updates.risk_flags = { flags, computed_at: new Date().toISOString() };
+    }
   }
   if (Object.keys(updates).length) {
     await context.supabase.from("properties").update(updates).eq("id", propertyId);

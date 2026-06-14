@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtGBP } from "@/lib/format";
-import { Loader2, LogOut, Star } from "lucide-react";
+import { Bell, Loader2, LogOut, Star, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { SavedSearchesManager } from "@/components/SavedSearchesManager";
 
@@ -28,9 +28,15 @@ function ProfilePage() {
     <AppShell title="Profile">
       <Tabs defaultValue="account">
         <TabsList>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="favourites">Favourites</TabsTrigger>
-          <TabsTrigger value="reminders">Reminders</TabsTrigger>
+          <TabsTrigger value="account" className="gap-1.5">
+            <UserRound className="h-4 w-4" /> Account
+          </TabsTrigger>
+          <TabsTrigger value="favourites" className="gap-1.5">
+            <Star className="h-4 w-4" /> Favourites
+          </TabsTrigger>
+          <TabsTrigger value="reminders" className="gap-1.5">
+            <Bell className="h-4 w-4" /> Reminders
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="account">
           <AccountTab />
@@ -177,7 +183,7 @@ function AccountTab() {
               onChange={(e) => setDisplayName(e.target.value)}
             />
           </div>
-          <Button onClick={() => saveNameMut.mutate()} disabled={saveNameMut.isPending}>
+          <Button className="w-full sm:w-auto" onClick={() => saveNameMut.mutate()} disabled={saveNameMut.isPending}>
             {saveNameMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save name
           </Button>
         </CardContent>
@@ -197,7 +203,7 @@ function AccountTab() {
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
-          <Button onClick={() => saveEmailMut.mutate()} disabled={saveEmailMut.isPending || !email}>
+          <Button className="w-full sm:w-auto" onClick={() => saveEmailMut.mutate()} disabled={saveEmailMut.isPending || !email}>
             {saveEmailMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Update
             email
           </Button>
@@ -230,6 +236,7 @@ function AccountTab() {
             />
           </div>
           <Button
+            className="w-full sm:w-auto"
             onClick={() => savePasswordMut.mutate()}
             disabled={savePasswordMut.isPending || !password}
           >
@@ -244,7 +251,7 @@ function AccountTab() {
           <CardTitle className="text-base">Sign out</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" onClick={signOut}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={signOut}>
             <LogOut className="mr-2 h-4 w-4" /> Sign out
           </Button>
         </CardContent>

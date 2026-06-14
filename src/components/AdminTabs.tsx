@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
-export function AdminTabs({ active }: { active: "feedback" | "users" }) {
+export function AdminTabs({ active }: { active: "feedback" | "users" | "theming" }) {
   const tabs = [
     { key: "feedback", to: "/admin/feedback", label: "Feedback" },
     { key: "users", to: "/admin/users", label: "Users" },
+    { key: "theming", to: "/admin/theming", label: "Theming" },
   ] as const;
 
   return (

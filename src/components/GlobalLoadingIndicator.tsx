@@ -28,9 +28,12 @@ export function GlobalLoadingIndicator() {
     <div
       role="status"
       aria-label="Loading"
-      className="fixed right-4 top-4 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-foreground/80 text-background shadow-lg backdrop-blur"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 backdrop-blur-sm"
     >
-      <Loader2 className="h-5 w-5 animate-spin" />
+      <div className="flex flex-col items-center gap-3 rounded-2xl bg-foreground/90 px-8 py-7 text-background shadow-2xl">
+        <Loader2 className="h-10 w-10 animate-spin" />
+        <span className="text-sm font-medium">Loading…</span>
+      </div>
     </div>
   );
 }

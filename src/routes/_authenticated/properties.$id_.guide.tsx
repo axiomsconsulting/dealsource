@@ -307,8 +307,8 @@ function GuidedWalkthrough() {
     <TooltipProvider delayDuration={150}>
       <AppShell>
         <div className="mb-6">
-          <Link to="/properties/$id" params={{ id }} className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back to advanced view
+          <Link to="/properties/$id" params={{ id }} className="-ml-1 mb-2 inline-flex items-center gap-1 rounded-md px-1 py-2 text-base text-muted-foreground hover:text-foreground sm:text-sm">
+            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> Back to advanced view
           </Link>
           <h1 className="text-2xl font-bold">Guided walkthrough</h1>
           <p className="text-sm text-muted-foreground">{address}</p>

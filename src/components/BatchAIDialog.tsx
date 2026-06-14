@@ -43,7 +43,7 @@ export function BatchAIDialog({ totalProperties, alreadyAnalysed, onDone }: { to
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" size="sm" disabled={!totalProperties}>
+        <Button variant="default" size="sm" className="w-full sm:w-auto" disabled={!totalProperties}>
           <Sparkles className="mr-2 h-4 w-4" />
           Batch AI analyse
         </Button>

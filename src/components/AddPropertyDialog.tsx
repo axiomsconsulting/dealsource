@@ -203,7 +203,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
             </div>
             <div className="text-center text-xs text-muted-foreground">— or paste CSV —</div>
             <Textarea rows={6} placeholder="Paste CSV content here…" value={csvText} onChange={(e) => setCsvText(e.target.value)} />
-            <Button disabled={!csvText || csvMut.isPending} onClick={() => csvMut.mutate(csvText)}>
+            <Button className="w-full" disabled={!csvText || csvMut.isPending} onClick={() => csvMut.mutate(csvText)}>
               {csvMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Ingest CSV
             </Button>
           </TabsContent>
@@ -242,7 +242,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
               </div>
             )}
             {jsonPreview && <JsonPreviewTree items={jsonPreview} />}
-            <Button disabled={!jsonText || jsonMut.isPending} onClick={() => jsonMut.mutate(jsonText)}>
+            <Button className="w-full" disabled={!jsonText || jsonMut.isPending} onClick={() => jsonMut.mutate(jsonText)}>
               {jsonMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Ingest JSON
             </Button>
           </TabsContent>
@@ -259,7 +259,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
                 value={listingUrl}
                 onChange={(e) => setListingUrl(e.target.value)}
               />
-              <Button disabled={!listingUrl || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
+              <Button className="w-full sm:w-auto" disabled={!listingUrl || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
                 {urlMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
                 Ingest from URL
               </Button>
@@ -316,7 +316,7 @@ function ManualForm({ onDone }: { onDone: () => void }) {
       <div><Label>Asking price £</Label><Input type="number" value={form.asking_price_gbp} onChange={(e) => setForm({ ...form, asking_price_gbp: e.target.value })} /></div>
       <div className="sm:col-span-2"><Label>Listing URL</Label><Input value={form.source_link} onChange={(e) => setForm({ ...form, source_link: e.target.value })} /></div>
       <div className="sm:col-span-2">
-        <Button disabled={!form.address || mut.isPending} onClick={() => mut.mutate()}>
+        <Button className="w-full" disabled={!form.address || mut.isPending} onClick={() => mut.mutate()}>
           {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add property
         </Button>
       </div>

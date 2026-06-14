@@ -90,10 +90,10 @@ function VotePopover({
         <Button
           size="icon"
           variant="ghost"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
+          className="h-11 w-11 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
           aria-label={vote === "up" ? "Good feedback" : "Bad feedback"}
         >
-          {sent ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
+          {sent ? <Check className="h-5 w-5 sm:h-3.5 sm:w-3.5" /> : <Icon className="h-5 w-5 sm:h-3.5 sm:w-3.5" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-3" align="end">

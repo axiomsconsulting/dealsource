@@ -13,7 +13,11 @@ export interface RiskFlag {
 }
 
 const RE = {
-  shared: /shared\s*ownership|staircas(?:ing|e)|%\s*share|part\s*buy/i,
+  // Genuine shared-ownership signals only — deliberately does NOT match bare "staircase"/"stairs"
+  // (common in normal property descriptions, e.g. "staircase to first floor"), which previously
+  // caused false positives. "Staircasing" only counts when paired with "to/towards <share/100%>",
+  // and "% share" only counts when paired with buy/own/part-rent language about the property itself.
+  shared: /shared\s*ownership|help\s+to\s+buy\s*:?\s*shared\s+ownership|part\s*buy[\s,-]*part\s*rent|part\s*rent[\s,-]*part\s*buy|staircas(?:e|ing)\s+(?:up\s+)?(?:to|towards)\s+(?:\d{1,3}%|full\s+ownership|100%)|(?:buy|purchase|own)\w*\s+(?:an?\s+)?\d{1,2}%\s*share|\d{1,2}%\s*share\s+(?:of|in)\s+(?:this|the)\s+(?:property|home|house|flat|apartment)|minimum\s+\d{1,2}%\s*share|registered\s+(?:social\s+)?(?:landlord|provider)\b.*\bshared\s+ownership/i,
   listed: /grade\s*(i{1,3}|1|2|3)\b|listed\s+building/i,
   auction: /\bauction\b|guide\s*price|modern\s+method|mmoa|reservation\s+fee|unconditional/i,
   developer: /off[\s-]?plan|coming\s+soon|reservations?\s+open|new[\s-]?build|show\s*home|prices?\s+from\s+£|from\s+£?\d|starting\s+price|offers?\s+invited\s+from|developer/i,

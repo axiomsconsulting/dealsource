@@ -275,9 +275,9 @@ function PropertyDetail() {
         <div>
           <Link
             to="/properties"
-            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            className="-ml-1 mb-2 inline-flex items-center gap-1 rounded-md px-1 py-2 text-base text-muted-foreground hover:text-foreground sm:text-sm"
           >
-            <ArrowLeft className="h-4 w-4" /> All properties
+            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> All properties
           </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold">
@@ -292,28 +292,29 @@ function PropertyDetail() {
               <Star className={`h-4 w-4 ${p.favourite ? "fill-amber-400 text-amber-400" : ""}`} />
             </Button>
           </div>
-          <div className="mt-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-nowrap sm:items-center sm:overflow-x-auto">
             <Link to="/properties/$id/guide" params={{ id }}>
-              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Guide">
+              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Guide">
                 <GraduationCap className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Guide</span>
+                <span className="sm:inline">Guide</span>
               </Button>
             </Link>
             <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "before" }}>
-              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Prepare">
+              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Prepare">
                 <ShieldCheck className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Prepare</span>
+                <span className="sm:inline">Prepare</span>
               </Button>
             </Link>
             <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "capture" }}>
-              <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Capture">
+              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Capture">
                 <Camera className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Capture</span>
+                <span className="sm:inline">Capture</span>
               </Button>
             </Link>
             <TalkingPointsButton
               guidance={analysis.negotiationGuidance}
               negotiation={analysis.negotiation}
+              className="w-full sm:w-auto"
             />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1110,9 +1111,11 @@ function PropertyDetail() {
 function TalkingPointsButton({
   guidance,
   negotiation,
+  className,
 }: {
   guidance: NegotiationGuidance;
   negotiation: NegotiationPoint[];
+  className?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const script = useMemo(
@@ -1133,9 +1136,9 @@ function TalkingPointsButton({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="px-2 sm:px-3" title="Negotiate">
+        <Button size="sm" variant="outline" className={cn("px-2 sm:px-3", className)} title="Negotiate">
           <Handshake className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Negotiate</span>
+          <span className="sm:inline">Negotiate</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-96 p-0" align="end">

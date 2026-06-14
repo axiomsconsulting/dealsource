@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { Sliders, Filter, Home, ListChecks, Menu, ShieldCheck, UserRound } from "lucide-react";
+import { Sliders, Filter, Home, ListChecks, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useColorMode } from "@/components/ThemeProvider";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getMyProfile } from "@/lib/profile.functions";
@@ -27,6 +28,7 @@ const navLinkActiveProps = {
 };
 
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
+  const { mode, toggle: toggleColorMode } = useColorMode();
   const { selected, toggle, setAll } = useStrategyFilter();
   const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
 
@@ -188,9 +190,26 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
                   >
                     <UserRound className="h-4 w-4" /> Profile
                   </Link>
+                  <button
+                    onClick={toggleColorMode}
+                    className="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm hover:bg-muted"
+                  >
+                    {mode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                    {mode === "dark" ? "Light mode" : "Dark mode"}
+                  </button>
                 </div>
               </SheetContent>
             </Sheet>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden rounded-full sm:flex"
+              aria-label="Toggle dark mode"
+              onClick={toggleColorMode}
+            >
+              {mode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
 
             <Link
               to="/profile"

@@ -68,9 +68,9 @@ function PropertyViewing() {
         <Link
           to="/properties/$id"
           params={{ id }}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="-ml-1 mb-4 inline-flex items-center gap-1 rounded-md px-1 py-2 text-base text-muted-foreground hover:text-foreground sm:text-sm"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to property
+          <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> Back to property
         </Link>
         <h1 className="mb-1 text-2xl font-bold">{address}</h1>
         <p className="mb-4 text-sm text-muted-foreground">

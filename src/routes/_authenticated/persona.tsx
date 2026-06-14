@@ -213,10 +213,10 @@ function PersonaPage() {
               <p className="text-xs text-muted-foreground">When on, the AI surveyor runs automatically each time a property is ingested (uses credits). Off by default — you can always run it manually per property.</p>
             </div>
           </div>
-          <div className="mt-6 flex items-center gap-3">
-            <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save profile"}</Button>
+          <div className="mt-6 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <Button className="w-full sm:w-auto" onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save profile"}</Button>
             {!selected.is_default && (
-              <Button variant="outline" onClick={() => activeMut.mutate(selected.id)}>Make active</Button>
+              <Button className="w-full sm:w-auto" variant="outline" onClick={() => activeMut.mutate(selected.id)}>Make active</Button>
             )}
           </div>
         </CardContent>

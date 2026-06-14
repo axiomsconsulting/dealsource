@@ -34,6 +34,31 @@ const SEVERITY_TO_TIER: Record<SurveySeverity, "low" | "mid" | "high"> = {
   high: "high",
 };
 
+/** Tidies a raw speech-to-text chunk into a polished sentence: collapses whitespace,
+ *  capitalises the first letter, and ensures terminal punctuation. */
+function polishTranscript(text: string): string {
+  let t = text.trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  if (!/[.!?]$/.test(t)) t += ".";
+  return `${t} `;
+}
+
+/** Small animated "equaliser" shown while dictation is actively listening. */
+function SpeechWaveform() {
+  return (
+    <span className="inline-flex h-4 items-end gap-0.5" aria-hidden="true">
+      {[6, 10, 14, 10, 6].map((h, i) => (
+        <span
+          key={i}
+          className="inline-block w-1 rounded-full bg-current animate-bounce"
+          style={{ height: `${h}px`, animationDelay: `${i * 0.12}s`, animationDuration: "0.9s" }}
+        />
+      ))}
+    </span>
+  );
+}
+
 type Area = { key: string; label: string };
 
 function buildAreas(property: any): Area[] {
@@ -81,7 +106,9 @@ export function PropertyViewingCapture({
   const [analysing, setAnalysing] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
   const recogRef = useRef<any>(null);
+  const lastFinalIndexRef = useRef(0);
   const cameraRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const libraryRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -122,7 +149,6 @@ export function PropertyViewingCapture({
   const toggleListening = () => {
     if (listening) {
       recogRef.current?.stop();
-      setListening(false);
       return;
     }
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -133,19 +159,42 @@ export function PropertyViewingCapture({
     const recog = new SR();
     recog.lang = "en-GB";
     recog.continuous = true;
-    recog.interimResults = false;
+    recog.interimResults = true;
+    lastFinalIndexRef.current = 0;
+    setInterimText("");
     recog.onresult = (e: any) => {
-      let transcript = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) transcript += e.results[i][0].transcript;
-      if (!transcript.trim()) return;
-      setNotes((prev) => {
-        const existing = prev.general ?? "";
-        const sep = existing && !existing.endsWith(" ") ? " " : "";
-        return { ...prev, general: `${existing}${sep}${transcript.trim()} ` };
-      });
+      let finalChunk = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          if (i >= lastFinalIndexRef.current) {
+            finalChunk += result[0].transcript;
+            lastFinalIndexRef.current = i + 1;
+          }
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (finalChunk.trim()) {
+        const polished = polishTranscript(finalChunk);
+        setNotes((prev) => {
+          const existing = prev.general ?? "";
+          const sep = existing && !/[\s\n]$/.test(existing) ? " " : "";
+          return { ...prev, general: `${existing}${sep}${polished}` };
+        });
+      }
+      setInterimText(interim);
     };
-    recog.onerror = () => setListening(false);
-    recog.onend = () => setListening(false);
+    recog.onerror = (e: any) => {
+      if (e?.error !== "no-speech" && e?.error !== "aborted") {
+        toast.error("Dictation error — please try again");
+      }
+    };
+    recog.onend = () => {
+      setListening(false);
+      setInterimText("");
+    };
     recog.start();
     recogRef.current = recog;
     setListening(true);
@@ -248,12 +297,18 @@ export function PropertyViewingCapture({
             onClick={toggleListening}
           >
             {listening ? <MicOff className="mr-1.5 h-4 w-4" /> : <Mic className="mr-1.5 h-4 w-4" />}
-            {listening ? "Stop dictation" : "Dictate"}
+            {listening ? (
+              <span className="flex items-center gap-1.5">
+                Listening… <SpeechWaveform />
+              </span>
+            ) : (
+              "Dictate"
+            )}
           </Button>
         </div>
         <Textarea
           placeholder="Anything overall — first impressions, smells, noise, neighbours, anything that doesn't fit a specific room…"
-          value={notes.general ?? ""}
+          value={listening && interimText ? `${notes.general ?? ""}${/[\s\n]$|^$/.test(notes.general ?? "") ? "" : " "}${interimText}` : notes.general ?? ""}
           onChange={(e) => setAreaNote("general", e.target.value)}
           className="min-h-[80px] text-sm"
         />

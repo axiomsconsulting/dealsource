@@ -422,12 +422,12 @@ export function RefurbEpcPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-2 text-center">
+      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <Stat label="Selected" v={fmtGBP(live.subtotal)} />
-        <Stat label="Contingency 10%" v={fmtGBP(live.contingency)} />
+        <Stat label="Contingency" v={fmtGBP(live.contingency)} />
         <Stat label="TOTAL" v={fmtGBP(live.total)} highlight />
         <Stat
-          label="Lines selected"
+          label="Lines"
           v={`${live.rows.filter((r) => r.c.include).length}/${live.rows.length}`}
         />
       </div>
@@ -788,9 +788,9 @@ export function RefurbEpcPanel({
 
 function Stat({ label, v, highlight }: { label: string; v: string; highlight?: boolean }) {
   return (
-    <div className={`rounded-md border p-2 ${highlight ? "border-primary bg-primary/5" : ""}`}>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`font-semibold ${highlight ? "text-primary" : ""}`}>{v}</p>
+    <div className={`overflow-hidden rounded-md border p-2 ${highlight ? "border-primary bg-primary/5" : ""}`}>
+      <p className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`truncate text-sm font-semibold sm:text-base ${highlight ? "text-primary" : ""}`}>{v}</p>
     </div>
   );
 }
