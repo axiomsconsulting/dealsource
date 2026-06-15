@@ -46,7 +46,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 bg-background/80 px-3 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur sm:px-6">
+      <header className="sticky top-0 z-30 bg-background/80 px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] backdrop-blur sm:px-6">
         <div className="container mx-auto flex items-center justify-between gap-3">
           <Link to="/welcome" className="flex items-center">
             <img
