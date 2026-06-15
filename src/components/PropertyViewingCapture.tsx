@@ -4,7 +4,21 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Camera, Check, ImagePlus, Loader2, Mic, MicOff, Plus, Sparkles, Trash2, X } from "lucide-react";
+import {
+  Camera,
+  Check,
+  History,
+  ImagePlus,
+  Loader2,
+  Mic,
+  MicOff,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { SurveyFindings, SurveySeverity } from "@/lib/analysis/types";
 import type { SurveyIssueKey } from "@/lib/analysis/survey-strategy";
@@ -92,6 +106,8 @@ function SpeechWaveform() {
 
 type ChecklistItem = { id: string; text: string; done: boolean };
 
+type NoteHistoryEntry = { id: string; createdAt: string; text: string };
+
 type Area = { key: string; label: string };
 
 function buildAreas(property: any): Area[] {
@@ -112,6 +128,20 @@ function buildAreas(property: any): Area[] {
     { key: "outbuilding", label: "Outbuilding / garage" },
     { key: "roof", label: "Roof / loft" },
   ];
+}
+
+/** Formats an ISO timestamp as a short, local date/time for the notes history list. */
+function formatHistoryDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function newChecklistId(): string {
@@ -243,6 +273,12 @@ export function PropertyViewingCapture({
     }
     return result;
   });
+  const [noteHistory, setNoteHistory] = useState<NoteHistoryEntry[]>(() => {
+    const raw = property.viewing_note_history;
+    return Array.isArray(raw) ? raw : [];
+  });
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null);
+  const [editingHistoryText, setEditingHistoryText] = useState("");
   const [analysing, setAnalysing] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -260,10 +296,36 @@ export function PropertyViewingCapture({
   const saveNotesMut = useMutation({
     mutationFn: (next: Record<string, any>) =>
       update({ data: { id: property.id, patch: { viewing_notes: next as any } } }),
+    onError: (e: any) => toast.error(`Couldn't save notes: ${e.message}`),
   });
+
+  const saveHistoryMut = useMutation({
+    mutationFn: (next: NoteHistoryEntry[]) =>
+      update({ data: { id: property.id, patch: { viewing_note_history: next as any } } }),
+    onError: (e: any) => toast.error(`Couldn't save notes history: ${e.message}`),
+  });
+
+  const persistHistory = (next: NoteHistoryEntry[]) => {
+    setNoteHistory(next);
+    saveHistoryMut.mutate(next);
+  };
 
   const setChecklistForArea = (key: string, items: ChecklistItem[]) => {
     setChecklists((prev) => ({ ...prev, [key]: items }));
+  };
+
+  /** Builds a single text snapshot of everything currently written, for the "Analyse with AI"
+   *  history and as the payload sent to the AI. */
+  const buildNotesSnapshot = (): string => {
+    const parts: string[] = [];
+    if (generalNote.trim()) parts.push(`General:\n${generalNote.trim()}`);
+    for (const area of areas) {
+      const items = checklists[area.key] ?? [];
+      if (items.length) {
+        parts.push(`${area.label}:\n${items.map((it) => `${it.done ? "[done] " : ""}${it.text}`).join("\n")}`);
+      }
+    }
+    return parts.join("\n\n");
   };
 
   // Debounced autosave of notes
@@ -380,6 +442,26 @@ export function PropertyViewingCapture({
     }
   };
 
+  const restoreHistoryEntry = (entry: NoteHistoryEntry) => {
+    setGeneralNote(entry.text);
+    toast.success("Restored into General notes");
+  };
+
+  const deleteHistoryEntry = (id: string) => {
+    persistHistory(noteHistory.filter((e) => e.id !== id));
+  };
+
+  const startEditHistoryEntry = (entry: NoteHistoryEntry) => {
+    setEditingHistoryId(entry.id);
+    setEditingHistoryText(entry.text);
+  };
+
+  const saveEditedHistoryEntry = () => {
+    persistHistory(noteHistory.map((e) => (e.id === editingHistoryId ? { ...e, text: editingHistoryText } : e)));
+    setEditingHistoryId(null);
+    setEditingHistoryText("");
+  };
+
   const removePhoto = async (id: string) => {
     await deletePhotoFn({ data: { id } });
     qc.invalidateQueries({ queryKey: ["photos", property.id] });
@@ -395,6 +477,11 @@ export function PropertyViewingCapture({
         if (items.length) {
           notes[area.key] = items.map((it) => `${it.done ? "[done] " : ""}${it.text}`).join("\n");
         }
+      }
+      const snapshot = buildNotesSnapshot();
+      if (snapshot) {
+        const entry: NoteHistoryEntry = { id: newChecklistId(), createdAt: new Date().toISOString(), text: snapshot };
+        persistHistory([entry, ...noteHistory].slice(0, 50));
       }
       const result = await analyseNotesFn({ data: { propertyId: property.id, notes } });
       if (!result.findings.length) {
@@ -556,6 +643,80 @@ export function PropertyViewingCapture({
           </div>
         );
       })}
+
+      {noteHistory.length > 0 && (
+        <div className="rounded-md border p-3">
+          <p className="mb-1.5 flex items-center gap-1.5 font-medium">
+            <History className="h-4 w-4" /> Notes history
+          </p>
+          <p className="mb-2 text-xs text-muted-foreground">
+            A snapshot is saved each time you run "Analyse with AI". Restore brings it back into
+            General notes so you can edit and re-analyse.
+          </p>
+          <div className="space-y-2">
+            {noteHistory.map((entry) => (
+              <div key={entry.id} className="rounded-md border bg-muted/30 p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{formatHistoryDate(entry.createdAt)}</span>
+                  {editingHistoryId !== entry.id && (
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => restoreHistoryEntry(entry)}
+                        aria-label="Restore into General notes"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => startEditHistoryEntry(entry)}
+                        aria-label="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => deleteHistoryEntry(entry.id)}
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {editingHistoryId === entry.id ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={editingHistoryText}
+                      onChange={(e) => setEditingHistoryText(e.target.value)}
+                      className="min-h-[80px] text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={saveEditedHistoryEntry}>
+                        Save
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setEditingHistoryId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{entry.text}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -193,6 +193,7 @@ export const updateProperty = createServerFn({ method: "POST" })
           seller_context: z.any().optional(),
           survey_findings: z.any().optional(),
           viewing_notes: z.any().optional(),
+          viewing_note_history: z.any().optional(),
           refurb_estimate: z.any().optional(),
           epc_rate: z.string().max(3).nullable().optional(),
           epc_data: z.any().optional(),

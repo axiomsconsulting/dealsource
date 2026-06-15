@@ -25,6 +25,27 @@ export const listUsers = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+export const deleteUser = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .inputValidator((input: unknown) => z.object({ userId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    if (context.role !== "super_admin")
+      throw new Error("Forbidden: only super admins can delete users");
+    if (data.userId === context.userId) throw new Error("You cannot delete your own account");
+
+    const { data: target, error: targetError } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", data.userId)
+      .single();
+    if (targetError || !target) throw new Error("User not found");
+    if (target.role === "super_admin") throw new Error("Cannot delete a super admin");
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const updateUserRole = createServerFn({ method: "POST" })
   .middleware([requireAdminAuth])
   .inputValidator((input: unknown) =>

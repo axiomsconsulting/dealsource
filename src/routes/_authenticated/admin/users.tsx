@@ -4,9 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { AdminTabs } from "@/components/AdminTabs";
-import { listUsers, updateUserRole } from "@/lib/admin.functions";
+import { listUsers, updateUserRole, deleteUser } from "@/lib/admin.functions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -34,6 +36,7 @@ function AdminUsersPage() {
 
   const getUsers = useServerFn(listUsers);
   const setRole = useServerFn(updateUserRole);
+  const removeUser = useServerFn(deleteUser);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["admin", "users"], queryFn: () => getUsers() });
@@ -49,6 +52,15 @@ function AdminUsersPage() {
     onError: (e: Error) => toast.error(e.message || "Couldn't update role"),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (userId: string) => removeUser({ data: { userId } }),
+    onSuccess: () => {
+      toast.success("User deleted");
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Couldn't delete user"),
+  });
+
   return (
     <AppShell title="Admin — Users">
       <AdminTabs active="users" />
@@ -61,6 +73,7 @@ function AdminUsersPage() {
               <TableHead>Display name</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead>Role</TableHead>
+              {isSuperAdmin && <TableHead className="w-10" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -97,6 +110,25 @@ function AdminUsersPage() {
                     </Badge>
                   )}
                 </TableCell>
+                {isSuperAdmin && (
+                  <TableCell>
+                    {u.role !== "super_admin" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Delete user"
+                        disabled={deleteMut.isPending}
+                        onClick={() => {
+                          if (confirm(`Delete ${u.email}? This permanently removes their account and data.`)) {
+                            deleteMut.mutate(u.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

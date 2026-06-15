@@ -518,6 +518,8 @@ export type Database = {
           tenure: string | null
           updated_at: string
           user_id: string
+          viewing_notes: Json | null
+          viewing_note_history: Json | null
         }
         Insert: {
           address: string
@@ -555,6 +557,8 @@ export type Database = {
           tenure?: string | null
           updated_at?: string
           user_id: string
+          viewing_notes?: Json | null
+          viewing_note_history?: Json | null
         }
         Update: {
           address?: string
@@ -592,6 +596,8 @@ export type Database = {
           tenure?: string | null
           updated_at?: string
           user_id?: string
+          viewing_notes?: Json | null
+          viewing_note_history?: Json | null
         }
         Relationships: []
       }
