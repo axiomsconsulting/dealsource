@@ -14,9 +14,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fmtGBP } from "@/lib/format";
-import { Bell, Loader2, LogOut, Star, UserRound } from "lucide-react";
+import { Bell, Info, Loader2, LogOut, Star, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { SavedSearchesManager } from "@/components/SavedSearchesManager";
+import { CHANGELOG, type ChangelogEntryType } from "@/lib/changelog";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Profile — Deal Negotiator" }] }),
@@ -37,6 +38,9 @@ function ProfilePage() {
           <TabsTrigger value="reminders" className="gap-1.5">
             <Bell className="h-4 w-4" /> Reminders
           </TabsTrigger>
+          <TabsTrigger value="about" className="gap-1.5">
+            <Info className="h-4 w-4" /> About
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="account">
           <AccountTab />
@@ -46,6 +50,9 @@ function ProfilePage() {
         </TabsContent>
         <TabsContent value="reminders">
           <SavedSearchesManager />
+        </TabsContent>
+        <TabsContent value="about">
+          <AboutTab />
         </TabsContent>
       </Tabs>
     </AppShell>
@@ -256,6 +263,54 @@ function AccountTab() {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const CHANGELOG_BADGE_VARIANT: Record<ChangelogEntryType, string> = {
+  major: "bg-primary text-primary-foreground",
+  minor: "bg-blue-500 text-white",
+  patch: "bg-muted text-muted-foreground",
+};
+
+function AboutTab() {
+  const current = CHANGELOG[0];
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Deal Negotiator</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Current version <span className="font-semibold text-foreground">{current.version}</span>, released{" "}
+            {new Date(current.date).toLocaleDateString()}.
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-3">
+        {CHANGELOG.map((entry) => (
+          <Card key={entry.version}>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">{entry.title}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge className={CHANGELOG_BADGE_VARIANT[entry.type]}>{entry.version}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(entry.date).toLocaleDateString()}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {entry.items.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

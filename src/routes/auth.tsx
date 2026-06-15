@@ -1,10 +1,12 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { recordLogin } from "@/lib/activity.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Sign in — Deal Negotiator" }] }),
@@ -13,6 +15,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const router = useRouter();
+  const recordLoginFn = useServerFn(recordLogin);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,6 +35,7 @@ function AuthPage() {
             });
       const { error } = await fn;
       if (error) throw error;
+      recordLoginFn().catch(() => {});
       toast.success(mode === "signin" ? "Signed in" : "Account created");
       router.navigate({ to: "/welcome" });
     } catch (err: any) {

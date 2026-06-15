@@ -481,6 +481,205 @@ export type Database = {
           },
         ]
       }
+      login_events: {
+        Row: {
+          id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "login_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_log: {
+        Row: {
+          id: string
+          user_id: string
+          property_id: string | null
+          feature_key: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          property_id?: string | null
+          feature_key: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          property_id?: string | null
+          feature_key?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_audit_log: {
+        Row: {
+          id: string
+          admin_user_id: string
+          target_user_id: string | null
+          action: string
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          admin_user_id: string
+          target_user_id?: string | null
+          action: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          admin_user_id?: string
+          target_user_id?: string | null
+          action?: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_log_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          id: string
+          title: string
+          body: string
+          audience_type: string
+          inactive_hours: number | null
+          user_ids: string[] | null
+          channels: string[]
+          status: string
+          created_by: string
+          created_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          body: string
+          audience_type: string
+          inactive_hours?: number | null
+          user_ids?: string[] | null
+          channels: string[]
+          status?: string
+          created_by: string
+          created_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          body?: string
+          audience_type?: string
+          inactive_hours?: number | null
+          user_ids?: string[] | null
+          channels?: string[]
+          status?: string
+          created_by?: string
+          created_at?: string
+          sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_recipients: {
+        Row: {
+          id: string
+          campaign_id: string
+          user_id: string
+          channels_sent: string[]
+          dismissed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          campaign_id: string
+          user_id: string
+          channels_sent?: string[]
+          dismissed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          campaign_id?: string
+          user_id?: string
+          channels_sent?: string[]
+          dismissed_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       properties: {
         Row: {
           address: string

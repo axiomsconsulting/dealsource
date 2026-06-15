@@ -26,8 +26,10 @@ import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 import { Route as AuthenticatedAdminThemingRouteImport } from './routes/_authenticated/admin/theming'
 import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
+import { Route as AuthenticatedAdminCampaignsRouteImport } from './routes/_authenticated/admin/campaigns'
 import { Route as AuthenticatedPropertiesIdViewingRouteImport } from './routes/_authenticated/properties.$id_.viewing'
 import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
+import { Route as AuthenticatedAdminUsersIdRouteImport } from './routes/_authenticated/admin/users.$id'
 
 const DealSheetRoute = DealSheetRouteImport.update({
   id: '/deal-sheet',
@@ -118,6 +120,12 @@ const AuthenticatedAdminFeedbackRoute =
     path: '/feedback',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminCampaignsRoute =
+  AuthenticatedAdminCampaignsRouteImport.update({
+    id: '/campaigns',
+    path: '/campaigns',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedPropertiesIdViewingRoute =
   AuthenticatedPropertiesIdViewingRouteImport.update({
     id: '/properties/$id_/viewing',
@@ -130,6 +138,12 @@ const AuthenticatedPropertiesIdGuideRoute =
     path: '/properties/$id/guide',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminUsersIdRoute =
+  AuthenticatedAdminUsersIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedAdminUsersRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -141,13 +155,15 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
-  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/properties/': typeof AuthenticatedPropertiesIndexRoute
+  '/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/properties/$id/guide': typeof AuthenticatedPropertiesIdGuideRoute
   '/properties/$id/viewing': typeof AuthenticatedPropertiesIdViewingRoute
 }
@@ -161,13 +177,15 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
-  '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/properties': typeof AuthenticatedPropertiesIndexRoute
+  '/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/properties/$id/guide': typeof AuthenticatedPropertiesIdGuideRoute
   '/properties/$id/viewing': typeof AuthenticatedPropertiesIdViewingRoute
 }
@@ -183,13 +201,15 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/_authenticated/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/_authenticated/admin/theming': typeof AuthenticatedAdminThemingRoute
-  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
   '/_authenticated/properties/': typeof AuthenticatedPropertiesIndexRoute
+  '/_authenticated/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/_authenticated/properties/$id_/guide': typeof AuthenticatedPropertiesIdGuideRoute
   '/_authenticated/properties/$id_/viewing': typeof AuthenticatedPropertiesIdViewingRoute
 }
@@ -205,6 +225,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/welcome'
     | '/deal/$token'
+    | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/theming'
     | '/admin/users'
@@ -212,6 +233,7 @@ export interface FileRouteTypes {
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
     | '/properties/'
+    | '/admin/users/$id'
     | '/properties/$id/guide'
     | '/properties/$id/viewing'
   fileRoutesByTo: FileRoutesByTo
@@ -225,6 +247,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/welcome'
     | '/deal/$token'
+    | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/theming'
     | '/admin/users'
@@ -232,6 +255,7 @@ export interface FileRouteTypes {
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
     | '/properties'
+    | '/admin/users/$id'
     | '/properties/$id/guide'
     | '/properties/$id/viewing'
   id:
@@ -246,6 +270,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/welcome'
     | '/deal/$token'
+    | '/_authenticated/admin/campaigns'
     | '/_authenticated/admin/feedback'
     | '/_authenticated/admin/theming'
     | '/_authenticated/admin/users'
@@ -253,6 +278,7 @@ export interface FileRouteTypes {
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
     | '/_authenticated/properties/'
+    | '/_authenticated/admin/users/$id'
     | '/_authenticated/properties/$id_/guide'
     | '/_authenticated/properties/$id_/viewing'
   fileRoutesById: FileRoutesById
@@ -388,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminFeedbackRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/campaigns': {
+      id: '/_authenticated/admin/campaigns'
+      path: '/campaigns'
+      fullPath: '/admin/campaigns'
+      preLoaderRoute: typeof AuthenticatedAdminCampaignsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/properties/$id_/viewing': {
       id: '/_authenticated/properties/$id_/viewing'
       path: '/properties/$id/viewing'
@@ -402,20 +435,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPropertiesIdGuideRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/users/$id': {
+      id: '/_authenticated/admin/users/$id'
+      path: '/$id'
+      fullPath: '/admin/users/$id'
+      preLoaderRoute: typeof AuthenticatedAdminUsersIdRouteImport
+      parentRoute: typeof AuthenticatedAdminUsersRoute
+    }
   }
 }
 
+interface AuthenticatedAdminUsersRouteChildren {
+  AuthenticatedAdminUsersIdRoute: typeof AuthenticatedAdminUsersIdRoute
+}
+
+const AuthenticatedAdminUsersRouteChildren: AuthenticatedAdminUsersRouteChildren =
+  {
+    AuthenticatedAdminUsersIdRoute: AuthenticatedAdminUsersIdRoute,
+  }
+
+const AuthenticatedAdminUsersRouteWithChildren =
+  AuthenticatedAdminUsersRoute._addFileChildren(
+    AuthenticatedAdminUsersRouteChildren,
+  )
+
 interface AuthenticatedAdminRouteRouteChildren {
+  AuthenticatedAdminCampaignsRoute: typeof AuthenticatedAdminCampaignsRoute
   AuthenticatedAdminFeedbackRoute: typeof AuthenticatedAdminFeedbackRoute
   AuthenticatedAdminThemingRoute: typeof AuthenticatedAdminThemingRoute
-  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRouteWithChildren
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
+    AuthenticatedAdminCampaignsRoute: AuthenticatedAdminCampaignsRoute,
     AuthenticatedAdminFeedbackRoute: AuthenticatedAdminFeedbackRoute,
     AuthenticatedAdminThemingRoute: AuthenticatedAdminThemingRoute,
-    AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+    AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRouteWithChildren,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =

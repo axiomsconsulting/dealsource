@@ -1,10 +1,14 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Sliders, Filter, Home, ListChecks, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useColorMode } from "@/components/ThemeProvider";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getMyProfile } from "@/lib/profile.functions";
+import { getReturnSession, switchBack } from "@/lib/impersonation";
+import { CampaignNotifications } from "@/components/CampaignNotifications";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { AppFooter } from "@/components/AppFooter";
 import { Button } from "@/components/ui/button";
@@ -28,9 +32,16 @@ const navLinkActiveProps = {
 };
 
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
+  const router = useRouter();
   const { mode, toggle: toggleColorMode } = useColorMode();
   const { selected, toggle, setAll } = useStrategyFilter();
   const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
+  const [returnSession] = useState(() => getReturnSession());
+
+  const handleSwitchBack = async () => {
+    await switchBack();
+    router.navigate({ to: "/admin/users" });
+  };
 
   const getMyProfileFn = useServerFn(getMyProfile);
   const { data: myProfile } = useQuery({
@@ -46,7 +57,21 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-30 bg-background/80 px-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur sm:px-6">
+      {returnSession && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] text-xs font-medium text-amber-950 sm:px-6">
+          <span>Viewing as {myProfile?.email ?? "another user"} — Super Admin mode</span>
+          <div className="flex items-center gap-2">
+            <Link to="/admin/users" className="underline">Switch user</Link>
+            <button onClick={handleSwitchBack} className="rounded bg-amber-950/10 px-2 py-0.5 underline-offset-2 hover:underline">
+              Switch back
+            </button>
+          </div>
+        </div>
+      )}
+      <header className={cn(
+        "sticky top-0 z-30 bg-background/80 px-3 backdrop-blur sm:px-6",
+        returnSession ? "pt-1" : "pt-[max(1rem,env(safe-area-inset-top))]",
+      )}>
         <div className="container mx-auto flex items-center justify-between gap-3">
           <Link to="/welcome" className="flex items-center">
             <img
@@ -230,6 +255,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         {children}
       </main>
       <AppFooter />
+      <CampaignNotifications />
     </div>
   );
 }

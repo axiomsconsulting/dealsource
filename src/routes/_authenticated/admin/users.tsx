@@ -1,10 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { AdminTabs } from "@/components/AdminTabs";
-import { listUsers, updateUserRole, deleteUser } from "@/lib/admin.functions";
+import { listUsersWithStats, updateUserRole, deleteUser } from "@/lib/admin.functions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ function AdminUsersPage() {
   const { role } = Route.useRouteContext();
   const isSuperAdmin = role === "super_admin";
 
-  const getUsers = useServerFn(listUsers);
+  const getUsers = useServerFn(listUsersWithStats);
   const setRole = useServerFn(updateUserRole);
   const removeUser = useServerFn(deleteUser);
   const qc = useQueryClient();
@@ -72,6 +72,8 @@ function AdminUsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead>Joined</TableHead>
+              <TableHead>Properties</TableHead>
+              <TableHead>Last login</TableHead>
               <TableHead>Role</TableHead>
               {isSuperAdmin && <TableHead className="w-10" />}
             </TableRow>
@@ -79,10 +81,18 @@ function AdminUsersPage() {
           <TableBody>
             {users.map((u) => (
               <TableRow key={u.id}>
-                <TableCell className="whitespace-nowrap">{u.email}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <Link to="/admin/users/$id" params={{ id: u.id }} className="hover:underline">
+                    {u.email}
+                  </Link>
+                </TableCell>
                 <TableCell className="whitespace-nowrap">{u.display_name ?? "—"}</TableCell>
                 <TableCell className="whitespace-nowrap text-xs">
                   {new Date(u.created_at).toLocaleDateString()}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">{u.properties_count}</TableCell>
+                <TableCell className="whitespace-nowrap text-xs">
+                  {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "Never"}
                 </TableCell>
                 <TableCell>
                   {isSuperAdmin && u.role !== "super_admin" ? (

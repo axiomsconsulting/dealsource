@@ -72,6 +72,14 @@ function getKey() {
   return k;
 }
 
+async function logAiUsage(supabase: any, userId: string, propertyId: string | null, featureKey: string) {
+  try {
+    await supabase.from("ai_usage_log").insert({ user_id: userId, property_id: propertyId, feature_key: featureKey });
+  } catch {
+    // never fail the AI call over usage logging
+  }
+}
+
 function parseJsonBlock(text: string): any {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const raw = fenced ? fenced[1] : text;
@@ -85,7 +93,9 @@ export const analyseWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ propertyId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
-    return await runFullAnalysis(context, data.propertyId);
+    const result = await runFullAnalysis(context, data.propertyId);
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "full_analysis");
+    return result;
   });
 
 // Exported helper so background job runner (ai-jobs.functions) can invoke without going through RPC
@@ -183,6 +193,7 @@ Use UK 2026 trade prices. Be conservative.`;
     const row = { ai_payload: merged, ai_version: AI_VERSION, ai_used_at: new Date().toISOString() };
     if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
     else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "refurb_photos");
     return { items, summary: parsed.summary, conditionScore: parsed.conditionScore };
   });
 
@@ -234,12 +245,15 @@ Use UK 2026 trade prices for remediation. Be conservative.`;
       ...urls.map((u) => ({ type: "image", image: u })),
     ];
 
+    let parsed: z.infer<typeof ViewingIssueSchema>;
     try {
       const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content }] });
-      return ViewingIssueSchema.parse(parseJsonBlock(text));
+      parsed = ViewingIssueSchema.parse(parseJsonBlock(text));
     } catch (e: any) {
       throw new Error("Photo AI failed: " + e.message);
     }
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "viewing_issue_photos");
+    return parsed;
   });
 
 /* ------------------------------------------------------------------ */
@@ -295,12 +309,15 @@ For each issue you find clear evidence of, return a severity ("low"|"medium"|"hi
 
     const user = sections.map(([area, text]) => `[${area}]\n${text}`).join("\n\n");
 
+    let parsed: z.infer<typeof ViewingNotesAnalysisSchema>;
     try {
       const { text } = await generateText({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }] });
-      return ViewingNotesAnalysisSchema.parse(parseJsonBlock(text));
+      parsed = ViewingNotesAnalysisSchema.parse(parseJsonBlock(text));
     } catch (e: any) {
       throw new Error("Notes AI failed: " + e.message);
     }
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "viewing_notes");
+    return parsed;
   });
 
 /* ------------------------------------------------------------------ */
@@ -410,6 +427,7 @@ For each proposed bedroom, judge from the actual layout (door/window positions, 
     if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
     else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
 
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "hmo_layout");
     return hmoLayout;
   });
 
@@ -491,6 +509,7 @@ One entry per photo, in index order. Use "other" only when truly ambiguous (hall
     if (existing) await context.supabase.from("analyses").update(row).eq("id", existing.id);
     else await context.supabase.from("analyses").insert({ user_id: context.userId, property_id: data.propertyId, ...row });
 
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "listing_images");
     return imageTags;
   });
 
@@ -539,6 +558,7 @@ EPC: ${prop.epc_rate ?? "?"}, Tenure: ${prop.tenure ?? "?"}`;
     } catch (e: any) {
       throw new Error("Seller flex AI failed: " + e.message);
     }
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "seller_flex");
     return parsed;
   });
 
@@ -637,6 +657,7 @@ export const findNearbyListings = createServerFn({ method: "POST" })
         url: results[l.index].url,
       }));
 
+    await logAiUsage(context.supabase, context.userId, data.propertyId, "nearby_listings");
     return { street, listings };
   });
 
@@ -662,7 +683,11 @@ export const analyseLibraryWithAI = createServerFn({ method: "POST" })
     let ok = 0, fail = 0;
     // run sequentially (token + rate-limit hygiene; small library expected)
     for (const p of todo) {
-      try { await runFullAnalysis(context, p.id); ok++; }
+      try {
+        await runFullAnalysis(context, p.id);
+        await logAiUsage(context.supabase, context.userId, p.id, "full_analysis");
+        ok++;
+      }
       catch { fail++; }
     }
     return { processed: ok, failed: fail, total: todo.length };
