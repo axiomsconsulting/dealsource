@@ -285,6 +285,7 @@ export function PropertyViewingCapture({
   const [interimText, setInterimText] = useState("");
   const recogRef = useRef<any>(null);
   const lastFinalIndexRef = useRef(0);
+  const pendingNotesRef = useRef<Record<string, any> | null>(null);
   const cameraRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const libraryRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -328,16 +329,26 @@ export function PropertyViewingCapture({
     return parts.join("\n\n");
   };
 
-  // Debounced autosave of notes
+  // Debounced autosave of notes — flushes any pending save on unmount so navigating away
+  // (e.g. tapping "Back to property") right after typing doesn't lose the edit.
   useEffect(() => {
+    const payload: Record<string, any> = { general: generalNote };
+    for (const area of areas) payload[area.key] = checklists[area.key] ?? [];
+    pendingNotesRef.current = payload;
     const t = setTimeout(() => {
-      const payload: Record<string, any> = { general: generalNote };
-      for (const area of areas) payload[area.key] = checklists[area.key] ?? [];
       saveNotesMut.mutate(payload);
+      pendingNotesRef.current = null;
     }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generalNote, checklists]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingNotesRef.current) saveNotesMut.mutate(pendingNotesRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
