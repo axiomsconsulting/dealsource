@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, ImagePlus, Loader2, Mic, MicOff, Sparkles, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Camera, Check, ImagePlus, Loader2, Mic, MicOff, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { SurveyFindings, SurveySeverity } from "@/lib/analysis/types";
 import type { SurveyIssueKey } from "@/lib/analysis/survey-strategy";
@@ -13,6 +14,7 @@ import { listPhotos, addPhotoRecords, deletePhoto } from "@/lib/photos.functions
 import { analyseViewingNotes } from "@/lib/ai.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtGBP } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 /** Maps an AI-identified survey issue onto the refurb estimator's line-item category and a
  *  tier, so a viewing note like "damp patch in the kitchen" both becomes negotiation leverage
@@ -44,6 +46,35 @@ function polishTranscript(text: string): string {
   return `${t} `;
 }
 
+/** Turns a camelCase / snake_case key into "Title Case" for display. */
+function labelizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Renders whatever shape `userInputs` happens to be (the freeform notes/answers a user
+ *  entered against this property in the Property Filter app) as plain lines of text, so
+ *  they don't silently get dropped on import — they land in General notes instead. */
+function formatUserInputs(raw: unknown): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw.trim();
+  const lines: string[] = [];
+  const walk = (node: any, prefix: string) => {
+    if (node == null || node === "") return;
+    if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
+      lines.push(prefix ? `${prefix}: ${node}` : String(node));
+    } else if (Array.isArray(node)) {
+      node.forEach((v) => walk(v, prefix));
+    } else if (typeof node === "object") {
+      for (const [k, v] of Object.entries(node)) {
+        walk(v, prefix ? `${prefix} — ${labelizeKey(k)}` : labelizeKey(k));
+      }
+    }
+  };
+  walk(raw, "");
+  return lines.join("\n");
+}
+
 /** Small animated "equaliser" shown while dictation is actively listening. */
 function SpeechWaveform() {
   return (
@@ -58,6 +89,8 @@ function SpeechWaveform() {
     </span>
   );
 }
+
+type ChecklistItem = { id: string; text: string; done: boolean };
 
 type Area = { key: string; label: string };
 
@@ -81,12 +114,99 @@ function buildAreas(property: any): Area[] {
   ];
 }
 
-/** On-site capture for a property viewing: free-form notes — a general box plus one box per
- *  area (kitchen, bedrooms, garden, roof, etc.) — with an optional photo per area, and a single
- *  "Analyse with AI" pass that reads everything written (wherever it was written) and maps it
- *  onto the fixed survey-issue taxonomy with a severity. The result feeds straight into
- *  `survey_findings` (negotiation leverage / talking points) and into the refurb estimator's
- *  matching line items. */
+function newChecklistId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
+/** A single area's notes as a tappable checklist, iOS Reminders-style: existing items can be
+ *  ticked off (struck through) or removed, and a trailing input + "+" button appends new ones. */
+function ChecklistEditor({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: ChecklistItem[];
+  onChange: (items: ChecklistItem[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const addItem = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onChange([...items, { id: newChecklistId(), text, done: false }]);
+    setDraft("");
+  };
+
+  const toggle = (id: string) => {
+    onChange(items.map((it) => (it.id === id ? { ...it, done: !it.done } : it)));
+  };
+
+  const remove = (id: string) => {
+    onChange(items.filter((it) => it.id !== id));
+  };
+
+  return (
+    <div className="space-y-1">
+      {items.map((item) => (
+        <div key={item.id} className="group flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggle(item.id)}
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+              item.done ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+            )}
+            aria-label={item.done ? "Mark as not done" : "Mark as done"}
+          >
+            {item.done && <Check className="h-3 w-3" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle(item.id)}
+            className={cn(
+              "flex-1 break-words text-left text-sm",
+              item.done && "text-muted-foreground line-through",
+            )}
+          >
+            {item.text}
+          </button>
+          <button
+            type="button"
+            onClick={() => remove(item.id)}
+            className="hidden shrink-0 rounded-sm p-0.5 text-muted-foreground group-hover:block"
+            aria-label="Remove item"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addItem();
+            }
+          }}
+          placeholder={placeholder}
+          className="h-8 text-sm"
+        />
+        <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={addItem} aria-label="Add item">
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** On-site capture for a property viewing: a free-form general notes box plus a tappable
+ *  checklist per area (kitchen, bedrooms, garden, roof, etc.) with an optional photo per area,
+ *  and a single "Analyse with AI" pass that reads everything written and maps it onto the fixed
+ *  survey-issue taxonomy with a severity. The result feeds straight into `survey_findings`
+ *  (negotiation leverage / talking points) and into the refurb estimator's matching line items. */
 export function PropertyViewingCapture({
   property,
   onLiveChange,
@@ -102,7 +222,27 @@ export function PropertyViewingCapture({
   const analyseNotesFn = useServerFn(analyseViewingNotes);
 
   const areas = buildAreas(property);
-  const [notes, setNotes] = useState<Record<string, string>>(() => (property.viewing_notes as any) ?? {});
+
+  const [generalNote, setGeneralNote] = useState<string>(() => {
+    const existing = (property.viewing_notes as any)?.general;
+    if (typeof existing === "string" && existing) return existing;
+    return formatUserInputs(property.pf_json?.userInputs);
+  });
+  const [checklists, setChecklists] = useState<Record<string, ChecklistItem[]>>(() => {
+    const raw = (property.viewing_notes as any) ?? {};
+    const result: Record<string, ChecklistItem[]> = {};
+    for (const area of areas) {
+      const v = raw[area.key];
+      if (Array.isArray(v)) {
+        result[area.key] = v;
+      } else if (typeof v === "string" && v.trim()) {
+        result[area.key] = [{ id: newChecklistId(), text: v.trim(), done: false }];
+      } else {
+        result[area.key] = [];
+      }
+    }
+    return result;
+  });
   const [analysing, setAnalysing] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -118,23 +258,24 @@ export function PropertyViewingCapture({
   });
 
   const saveNotesMut = useMutation({
-    mutationFn: (next: Record<string, string>) =>
+    mutationFn: (next: Record<string, any>) =>
       update({ data: { id: property.id, patch: { viewing_notes: next as any } } }),
   });
 
-  const setAreaNote = (key: string, text: string) => {
-    setNotes((prev) => {
-      const next = { ...prev, [key]: text };
-      return next;
-    });
+  const setChecklistForArea = (key: string, items: ChecklistItem[]) => {
+    setChecklists((prev) => ({ ...prev, [key]: items }));
   };
 
   // Debounced autosave of notes
   useEffect(() => {
-    const t = setTimeout(() => saveNotesMut.mutate(notes), 600);
+    const t = setTimeout(() => {
+      const payload: Record<string, any> = { general: generalNote };
+      for (const area of areas) payload[area.key] = checklists[area.key] ?? [];
+      saveNotesMut.mutate(payload);
+    }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes]);
+  }, [generalNote, checklists]);
 
   useEffect(() => {
     return () => {
@@ -146,9 +287,19 @@ export function PropertyViewingCapture({
     };
   }, []);
 
+  const stopListening = () => {
+    try {
+      recogRef.current?.stop();
+    } catch {
+      // ignore
+    }
+    setListening(false);
+    setInterimText("");
+  };
+
   const toggleListening = () => {
     if (listening) {
-      recogRef.current?.stop();
+      stopListening();
       return;
     }
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -178,10 +329,9 @@ export function PropertyViewingCapture({
       }
       if (finalChunk.trim()) {
         const polished = polishTranscript(finalChunk);
-        setNotes((prev) => {
-          const existing = prev.general ?? "";
-          const sep = existing && !/[\s\n]$/.test(existing) ? " " : "";
-          return { ...prev, general: `${existing}${sep}${polished}` };
+        setGeneralNote((prev) => {
+          const sep = prev && !/[\s\n]$/.test(prev) ? " " : "";
+          return `${prev}${sep}${polished}`;
         });
       }
       setInterimText(interim);
@@ -236,8 +386,16 @@ export function PropertyViewingCapture({
   };
 
   const runAnalysis = async () => {
+    if (listening) stopListening();
     setAnalysing(true);
     try {
+      const notes: Record<string, string> = { general: generalNote };
+      for (const area of areas) {
+        const items = checklists[area.key] ?? [];
+        if (items.length) {
+          notes[area.key] = items.map((it) => `${it.done ? "[done] " : ""}${it.text}`).join("\n");
+        }
+      }
       const result = await analyseNotesFn({ data: { propertyId: property.id, notes } });
       if (!result.findings.length) {
         toast.info("No issues found in the notes — try adding more detail.");
@@ -288,13 +446,20 @@ export function PropertyViewingCapture({
       </p>
 
       <div className="rounded-md border p-3">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">General notes</p>
+        <p className="mb-1.5 text-sm font-medium">General notes</p>
+        <Textarea
+          placeholder="Anything overall — first impressions, smells, noise, neighbours, anything that doesn't fit a specific room…"
+          value={listening && interimText ? `${generalNote}${/[\s\n]$|^$/.test(generalNote) ? "" : " "}${interimText}` : generalNote}
+          onChange={(e) => setGeneralNote(e.target.value)}
+          className="min-h-[80px] text-sm"
+        />
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Button
             type="button"
             size="sm"
             variant={listening ? "default" : "outline"}
             onClick={toggleListening}
+            className="w-full sm:w-auto"
           >
             {listening ? <MicOff className="mr-1.5 h-4 w-4" /> : <Mic className="mr-1.5 h-4 w-4" />}
             {listening ? (
@@ -305,30 +470,22 @@ export function PropertyViewingCapture({
               "Dictate"
             )}
           </Button>
+          <Button type="button" size="sm" disabled={analysing} onClick={runAnalysis} className="w-full sm:w-auto">
+            {analysing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            Analyse with AI
+          </Button>
         </div>
-        <Textarea
-          placeholder="Anything overall — first impressions, smells, noise, neighbours, anything that doesn't fit a specific room…"
-          value={listening && interimText ? `${notes.general ?? ""}${/[\s\n]$|^$/.test(notes.general ?? "") ? "" : " "}${interimText}` : notes.general ?? ""}
-          onChange={(e) => setAreaNote("general", e.target.value)}
-          className="min-h-[80px] text-sm"
-        />
       </div>
-
-      <Button type="button" disabled={analysing} onClick={runAnalysis} className="w-full sm:w-auto">
-        {analysing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-        Analyse with AI
-      </Button>
 
       {areas.map((area) => {
         const areaPhotos = (photos.data ?? []).filter((ph: any) => ph.issue_key === area.key);
         return (
           <div key={area.key} className="rounded-md border p-3">
             <p className="mb-1.5 font-medium">{area.label}</p>
-            <Textarea
-              placeholder={`Notes for ${area.label.toLowerCase()}…`}
-              value={notes[area.key] ?? ""}
-              onChange={(e) => setAreaNote(area.key, e.target.value)}
-              className="min-h-[60px] text-sm"
+            <ChecklistEditor
+              items={checklists[area.key] ?? []}
+              onChange={(items) => setChecklistForArea(area.key, items)}
+              placeholder={`Add a note for ${area.label.toLowerCase()}…`}
             />
 
             {areaPhotos.length > 0 && (
@@ -348,7 +505,7 @@ export function PropertyViewingCapture({
               </div>
             )}
 
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <input
                 ref={(el) => { cameraRefs.current[area.key] = el; }}
                 type="file"
@@ -373,7 +530,8 @@ export function PropertyViewingCapture({
               />
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
+                className="w-full"
                 disabled={uploading === area.key}
                 onClick={() => cameraRefs.current[area.key]?.click()}
               >
@@ -386,7 +544,8 @@ export function PropertyViewingCapture({
               </Button>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
+                className="w-full"
                 disabled={uploading === area.key}
                 onClick={() => libraryRefs.current[area.key]?.click()}
               >

@@ -162,7 +162,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
-        className="sm:max-w-2xl"
+        className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-2xl"
         onOpenAutoFocus={(e) => {
           if (defaultTab === "json") {
             e.preventDefault();
@@ -229,7 +229,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
             <Textarea
               ref={jsonTextareaRef}
               autoFocus={defaultTab === "json"}
-              rows={10}
+              rows={jsonPreview || jsonPreviewError ? 4 : 10}
               placeholder='Paste {"propertyLight":...} or [{...},{...}]'
               value={jsonText}
               onChange={(e) => { setJsonText(e.target.value); runJsonPreview(e.target.value); }}
@@ -339,7 +339,7 @@ function JsonPreviewTree({ items }: { items: { item: ParsedJsonProperty; extraKe
       <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {items.length === 1 ? "1 property detected" : `${items.length} properties detected`}
       </p>
-      {items.map(({ item, extraKeys }, i) => {
+      {items.map(({ item }, i) => {
         const open = openIdx.has(i);
         return (
           <div key={i} className="rounded-md border bg-background">
@@ -370,11 +370,6 @@ function JsonPreviewTree({ items }: { items: { item: ParsedJsonProperty; extraKe
                   {item.market_data?.soldComparables.length ? ` · ${item.market_data.soldComparables.length} sold comparable(s)` : ""}
                   {item.epc_from_json ? " · EPC data in JSON" : ""}
                 </div>
-                {extraKeys.length > 0 && (
-                  <div className="pt-1 text-muted-foreground">
-                    Also present in this JSON (not used by the importer): {extraKeys.join(", ")}
-                  </div>
-                )}
               </div>
             )}
           </div>

@@ -48,6 +48,7 @@ import { MarketComparablesPanel } from "@/components/MarketComparablesPanel";
 import { computeSurveyLeverage } from "@/lib/analysis/survey-strategy";
 import { extractMarketDataFromPfJson } from "@/lib/parsers/json";
 import { FormulaInfo } from "@/components/FormulaInfo";
+import { OfferFloorInfo } from "@/components/OfferFloorInfo";
 import {
   Dialog,
   DialogContent,
@@ -1265,16 +1266,22 @@ function OfferPlanCard({
           {best.name}: {best.summary}
         </p>
         <DealIndicators indicators={analysis.dealIndicators} />
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
           <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
-          <Stat label="Walk-away ceiling" v={fmtGBP(guidance.walkAwayOffer)} />
+          <div className="rounded-md bg-muted/50 p-2.5">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Walk-away ceiling
+              </p>
+              <OfferFloorInfo guidance={guidance} />
+            </div>
+            <p className="font-medium">{fmtGBP(guidance.walkAwayOffer)}</p>
+          </div>
           <Stat label="Discount at target" v={fmtPct(discount)} />
           <button type="button" onClick={onOpenRefurb} className="text-left">
             <Stat label="Refurb + improvement cost" v={fmtGBP(analysis.effectiveInputs.refurb_cost)} />
           </button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-md bg-muted/50 p-2.5">
             <div className="flex items-center justify-between gap-1">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -1284,22 +1291,22 @@ function OfferPlanCard({
             </div>
             <p className="font-medium">{fmtGBP(analysis.insurance.annualPremiumGbp)}/yr</p>
           </div>
-          {eq && (
-            <div className="col-span-2 rounded-md bg-muted/50 p-2.5 md:col-span-3">
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Built-in equity at target offer
-                </p>
-                <Badge className={eq.meetsTarget ? "bg-emerald-600" : "bg-amber-600"}>
-                  {eq.meetsTarget ? "Meets 25% target" : "Below 25% target"}
-                </Badge>
-              </div>
-              <p className="font-medium">
-                {fmtGBP(eq.equityAtTarget)} ({fmtPct(eq.equityPctAtTarget)} of GDV)
-              </p>
-            </div>
-          )}
         </div>
+        {eq && (
+          <div className="rounded-md bg-muted/50 p-2.5">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Built-in equity at target offer
+              </p>
+              <Badge className={eq.meetsTarget ? "bg-emerald-600" : "bg-amber-600"}>
+                {eq.meetsTarget ? "Meets 25% target" : "Below 25% target"}
+              </Badge>
+            </div>
+            <p className="font-medium">
+              {fmtGBP(eq.equityAtTarget)} ({fmtPct(eq.equityPctAtTarget)} of GDV)
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline" className="capitalize">
             {guidance.stance.replace("-", " ")}

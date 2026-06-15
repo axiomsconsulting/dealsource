@@ -17,6 +17,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   Flame,
   KeyRound,
   Loader2,
@@ -202,6 +204,14 @@ export function RefurbEpcPanel({
     | Record<string, LineChoice>
     | undefined;
   const [choices, setChoices] = useState<Record<string, LineChoice>>(() => stored ?? {});
+  // Which refurb line cards are collapsed to just title + cost.
+  const [collapsedRows, setCollapsedRows] = useState<Set<number>>(new Set());
+  const toggleRowCollapsed = (i: number) =>
+    setCollapsedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
   // Severity hints from a property-viewing AI analysis (e.g. "damp" noted as severe) — applied
   // once to set a sensible default tier for the matching line, without overriding anything the
   // user has already chosen.
@@ -373,14 +383,6 @@ export function RefurbEpcPanel({
               Refresh EPC
             </Button>
           )}
-          <Button
-            size="icon"
-            variant="outline"
-            title={epc ? "Edit EPC manually" : "Enter EPC manually"}
-            onClick={() => setManualOpen(true)}
-          >
-            <PencilLine className="h-4 w-4" />
-          </Button>
           <Select value={tier} onValueChange={(v) => setTier(v as RefurbTier)}>
             <SelectTrigger className="h-10 w-[140px] sm:h-8">
               <SelectValue />
@@ -433,60 +435,84 @@ export function RefurbEpcPanel({
       </div>
 
       <div className="space-y-2">
-        {live.rows.map(({ l, k, c, value }, i) => (
-          <div
-            key={i}
-            className={`rounded-md border p-2.5 ${!c.include ? "opacity-40" : ""}`}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <Checkbox
-                checked={c.include}
-                onCheckedChange={(b) => setChoices({ ...choices, [k]: { ...c, include: !!b } })}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{l.label}</div>
-                <div className="text-[10px] text-muted-foreground">
-                  {l.qty} {l.unit} · @ {fmtGBP(l.rate)} · L {fmtGBP(l.low)} · M {fmtGBP(l.mid)} · H {fmtGBP(l.high)}
-                </div>
-                {l.note && <div className="text-xs text-muted-foreground">{l.note}</div>}
-                {l.source === "ai" && (
-                  <Badge variant="outline" className="mt-1 h-4 text-[9px]">
-                    AI
-                  </Badge>
-                )}
-                {l.source === "epc" && (
-                  <Badge
-                    variant="outline"
-                    className="mt-1 h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700"
+        {live.rows.map(({ l, k, c, value }, i) => {
+          const collapsed = collapsedRows.has(i);
+          return (
+            <div
+              key={i}
+              className={`rounded-md border p-2.5 ${!c.include ? "opacity-40" : ""}`}
+            >
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={c.include}
+                  onCheckedChange={(b) => setChoices({ ...choices, [k]: { ...c, include: !!b } })}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleRowCollapsed(i)}
+                  className="min-w-0 flex-1 truncate text-left font-medium"
+                  title={l.label}
+                >
+                  {l.label}
+                </button>
+                {!collapsed && (
+                  <ToggleGroup
+                    type="single"
+                    size="sm"
+                    value={c.tier}
+                    onValueChange={(v) =>
+                      v && setChoices({ ...choices, [k]: { ...c, tier: v as any } })
+                    }
                   >
-                    EPC
-                  </Badge>
+                    <ToggleGroupItem value="low" className="h-8 px-2 text-xs">
+                      L
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="mid" className="h-8 px-2 text-xs">
+                      M
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="high" className="h-8 px-2 text-xs">
+                      H
+                    </ToggleGroupItem>
+                  </ToggleGroup>
                 )}
+                <span className="w-20 shrink-0 text-right font-semibold">
+                  {c.include ? fmtGBP(value) : "—"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleRowCollapsed(i)}
+                  className="shrink-0 text-muted-foreground"
+                  aria-label={collapsed ? "Expand" : "Collapse"}
+                >
+                  {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                </button>
               </div>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={c.tier}
-                onValueChange={(v) =>
-                  v && setChoices({ ...choices, [k]: { ...c, tier: v as any } })
-                }
-              >
-                <ToggleGroupItem value="low" className="h-10 px-3 text-xs sm:h-8">
-                  L
-                </ToggleGroupItem>
-                <ToggleGroupItem value="mid" className="h-10 px-3 text-xs sm:h-8">
-                  M
-                </ToggleGroupItem>
-                <ToggleGroupItem value="high" className="h-10 px-3 text-xs sm:h-8">
-                  H
-                </ToggleGroupItem>
-              </ToggleGroup>
-              <span className="w-20 shrink-0 text-right font-semibold">
-                {c.include ? fmtGBP(value) : "—"}
-              </span>
+              {!collapsed && (
+                <div className="mt-1.5 space-y-1">
+                  <div className="text-[10px] text-muted-foreground">
+                    {l.qty} {l.unit} · @ {fmtGBP(l.rate)} · L {fmtGBP(l.low)} · M {fmtGBP(l.mid)} · H {fmtGBP(l.high)}
+                  </div>
+                  {l.note && <div className="w-full text-xs text-muted-foreground">{l.note}</div>}
+                  <div className="flex gap-1">
+                    {l.source === "ai" && (
+                      <Badge variant="outline" className="h-4 text-[9px]">
+                        AI
+                      </Badge>
+                    )}
+                    {l.source === "epc" && (
+                      <Badge
+                        variant="outline"
+                        className="h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700"
+                      >
+                        EPC
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ---- EPC section ---- */}

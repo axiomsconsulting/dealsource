@@ -79,7 +79,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "Deal Negotiator by Omnispace Estates" },
       { name: "description", content: "Deal Genius analyzes properties for investment strategies, providing deep assessments and deal sheets." },
       { name: "author", content: "Lovable" },
@@ -92,12 +92,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "Deal Genius analyzes properties for investment strategies, providing deep assessments and deal sheets." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e9b36d6a-93e2-4ef4-bedf-5217e1dd6673/id-preview-5edfc909--6692d8d8-4a01-4f1d-8da1-a6b2b05d8dd9.lovable.app-1780860936135.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e9b36d6a-93e2-4ef4-bedf-5217e1dd6673/id-preview-5edfc909--6692d8d8-4a01-4f1d-8da1-a6b2b05d8dd9.lovable.app-1780860936135.png" },
+      // PWA install support
+      { name: "theme-color", content: "#0a0a0a" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Deal Negotiator" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
+      { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -122,6 +132,14 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // Installability degrades gracefully without a service worker — not fatal.
+      });
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
