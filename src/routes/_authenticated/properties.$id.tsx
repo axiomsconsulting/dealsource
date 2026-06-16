@@ -280,20 +280,32 @@ function PropertyDetail() {
   return (
     <AppShell>
       <div className="mb-6">
-        {/* Row 1: Address + deal score inline */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="text-2xl font-bold">
+        {/* Row 1: Address (left, flex-1) + Deal score (right-aligned) */}
+        <div className="flex items-start gap-3">
+          <h1 className="flex-1 text-2xl font-bold">
             {p.hide_address ? "Property (address hidden)" : p.address}
           </h1>
-          <div className="flex items-center gap-1.5">
-            <div className="text-2xl font-bold leading-none text-primary">{analysis.overallScore}</div>
-            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-              Deal score
-              <DealScoreInfo
-                overallScore={analysis.overallScore}
-                breakdown={analysis.overallScoreBreakdown}
-                best={best}
-              />
+          <div className="shrink-0 flex flex-col items-end gap-0.5">
+            {/* Score number */}
+            <div className={`text-2xl font-bold leading-none ${analysis.overallScore >= 60 ? "text-emerald-600" : analysis.overallScore >= 40 ? "text-amber-500" : "text-muted-foreground"}`}>
+              {analysis.overallScore}
+            </div>
+            {/* Meter bar + label */}
+            <div className="flex items-center gap-1.5">
+              <div className="h-[10px] w-16 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${analysis.overallScore >= 60 ? "bg-emerald-500" : analysis.overallScore >= 40 ? "bg-amber-500" : "bg-muted-foreground/60"}`}
+                  style={{ width: `${Math.min(analysis.overallScore, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                Deal score
+                <DealScoreInfo
+                  overallScore={analysis.overallScore}
+                  breakdown={analysis.overallScoreBreakdown}
+                  best={best}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1213,7 +1225,7 @@ function PropertyDetail() {
         <CollapsibleCard
           {...sectionProps("deal-sheet")}
           icon={<FileText className="h-4 w-4 text-accent" />}
-          title="Deal sheet for investors"
+          title="Deal sheet"
           summary="Shareable PDF / link"
           actions={
             <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />

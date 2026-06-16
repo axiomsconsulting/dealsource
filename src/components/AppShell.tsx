@@ -282,18 +282,30 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       </header>
 
       {/* ── Mobile floating overlay (hidden on sm+) ────────────────────────
-          Three-section row: back · logo (centre) · profile + burger.
-          Fades to near-invisible while the page is being scrolled. */}
+          Three-section row: home/back · logo (truly centred) · profile + burger.
+          Logo is absolutely positioned so it's always screen-centred regardless
+          of differing left/right widths. */}
       <div
         className={cn(
-          "fixed left-0 right-0 top-0 z-40 flex items-center gap-2 px-3 pb-2 sm:hidden",
+          "fixed left-0 right-0 top-0 z-40 flex items-center px-3 pb-2 sm:hidden",
           "pt-[max(0.75rem,env(safe-area-inset-top))]",
           "transition-opacity duration-500",
           scrolling ? "opacity-[0.12]" : "opacity-100",
         )}
       >
-        {/* Left — back button (hidden on home screen) */}
-        {!isHome ? (
+        {/* Left — home icon on home screen, back button elsewhere */}
+        {isHome ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90 hover:text-background"
+            asChild
+          >
+            <Link to="/welcome" aria-label="Home">
+              <Home className="h-5 w-5" />
+            </Link>
+          </Button>
+        ) : (
           <Button
             variant="ghost"
             size="icon"
@@ -303,13 +315,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-        ) : (
-          <div className="h-9 w-9 shrink-0" />
         )}
 
-        {/* Centre — logo */}
-        <div className="flex flex-1 justify-center">
-          <Link to="/welcome">
+        {/* Centre — absolutely positioned for true screen-centre alignment */}
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+          <Link to="/welcome" className="pointer-events-auto">
             <img
               src="/omnispace-logo.png"
               alt="Deal Negotiator — Omnispace Estates"
@@ -319,7 +329,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         </div>
 
         {/* Right — profile avatar + burger menu */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Link
             to="/profile"
             aria-label="Profile"
@@ -343,7 +353,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px]">
+            <SheetContent side="right" className="w-[300px] pt-[max(0.75rem,env(safe-area-inset-top))]">
               <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
               {sheetNav}
             </SheetContent>
