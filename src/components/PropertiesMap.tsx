@@ -19,10 +19,11 @@ L.Icon.Default.mergeOptions({
 type LatLng = { lat: number; lng: number };
 type CacheEntry = { ll: LatLng | null; at: number };
 
-const CACHE_KEY = "nominatim_cache_v1";
+// New key so stale null results from the old Nominatim-only approach don't persist.
+const CACHE_KEY = "geo_cache_v2";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function loadGeoCache(): Map<string, CacheEntry> {
+function loadCache(): Map<string, CacheEntry> {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return new Map();
@@ -34,21 +35,73 @@ function loadGeoCache(): Map<string, CacheEntry> {
   }
 }
 
-function saveGeoCache(cache: Map<string, CacheEntry>) {
+function saveCache(cache: Map<string, CacheEntry>) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(cache)));
   } catch {}
 }
 
-// Build the best possible Nominatim query from available property fields.
-// Includes city and country so ambiguous street names resolve correctly.
-function buildQuery(p: any): string | null {
+// Batch UK postcode lookup via postcodes.io — no API key, no rate limit, very reliable.
+// Returns Map<propertyId, LatLng | null>.
+async function batchPostcodeIo(
+  entries: Array<{ id: string; postcode: string }>,
+): Promise<Map<string, LatLng | null>> {
+  const result = new Map<string, LatLng | null>();
+  if (!entries.length) return result;
+
+  // Normalise postcodes and map them back to property IDs
+  const normToIds = new Map<string, string[]>();
+  for (const { id, postcode } of entries) {
+    const norm = postcode.trim().toUpperCase();
+    if (!normToIds.has(norm)) normToIds.set(norm, []);
+    normToIds.get(norm)!.push(id);
+  }
+
+  try {
+    const res = await fetch("https://api.postcodes.io/postcodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postcodes: Array.from(normToIds.keys()) }),
+    });
+    const data = await res.json();
+    for (const item of (data.result ?? []) as Array<{ query: string; result: any }>) {
+      const norm = item.query.trim().toUpperCase();
+      const ids = normToIds.get(norm) ?? [];
+      const ll: LatLng | null = item.result
+        ? { lat: item.result.latitude, lng: item.result.longitude }
+        : null;
+      for (const id of ids) result.set(id, ll);
+    }
+  } catch {
+    // On network error mark all as null; they'll retry on next load since null is cached
+    for (const ids of normToIds.values()) for (const id of ids) result.set(id, null);
+  }
+
+  return result;
+}
+
+// Nominatim fallback — used only for properties without a postcode.
+// Caller must enforce 1 100 ms between calls (Nominatim policy: max 1 req/s).
+function buildNominatimQuery(p: any): string | null {
   const parts: string[] = [];
   if (p.address) parts.push(p.address);
   if (p.city) parts.push(p.city);
-  if (p.postcode) parts.push(p.postcode);
   parts.push("UK");
-  return parts.length > 1 ? parts.join(", ") : null;
+  return p.address ? parts.join(", ") : null;
+}
+
+async function nominatimLookup(query: string): Promise<LatLng | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { "Accept-Language": "en" } },
+    );
+    const data = await res.json();
+    if (!data[0]) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
 }
 
 function scoreColor(score: number): string {
@@ -87,40 +140,25 @@ function FitBounds({ coords }: { coords: LatLng[] }) {
   return null;
 }
 
-async function geocodeQuery(query: string): Promise<LatLng | null> {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-      { headers: { "Accept-Language": "en" } },
-    );
-    const data = await res.json();
-    if (!data[0]) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-  } catch {
-    return null;
-  }
-}
-
 export function PropertiesMap({ rows }: { rows: PropertyCardData[] }) {
   const [coordMap, setCoordMap] = useState<Map<string, LatLng | null>>(new Map());
+  // keyed by propertyId
   const cacheRef = useRef<Map<string, LatLng | null>>(new Map());
   const geocodingRef = useRef(false);
 
   useEffect(() => {
     if (geocodingRef.current) return;
 
-    // Load cached geocode results from localStorage so returning users skip the wait
-    const lsCache = loadGeoCache();
-    const hydrated: Map<string, LatLng | null> = new Map();
+    // ── 1. Hydrate from localStorage ──────────────────────────────────────
+    const lsCache = loadCache(); // Map<propertyId, CacheEntry>
+    const hydrated = new Map<string, LatLng | null>();
+    const needsGeo: typeof rows = [];
 
-    const todo: typeof rows = [];
     for (const row of rows) {
-      const q = buildQuery(row.p);
-      if (!q) continue;
-      if (lsCache.has(q)) {
-        hydrated.set(row.p.id, lsCache.get(q)!.ll);
+      if (lsCache.has(row.p.id)) {
+        hydrated.set(row.p.id, lsCache.get(row.p.id)!.ll);
       } else if (!cacheRef.current.has(row.p.id)) {
-        todo.push(row);
+        needsGeo.push(row);
       }
     }
 
@@ -129,25 +167,45 @@ export function PropertiesMap({ rows }: { rows: PropertyCardData[] }) {
       setCoordMap(new Map(cacheRef.current));
     }
 
-    if (!todo.length) return;
+    if (!needsGeo.length) return;
 
     geocodingRef.current = true;
     let cancelled = false;
+
     (async () => {
-      for (const { p } of todo) {
-        if (cancelled) break;
-        const query = buildQuery(p)!;
-        const result = await geocodeQuery(query);
-        cacheRef.current.set(p.id, result);
-        // Persist to localStorage so the next map visit is instant
-        lsCache.set(query, { ll: result, at: Date.now() });
-        saveGeoCache(lsCache);
+      // ── 2. Batch postcodes.io for properties that have a UK postcode ─────
+      const withPostcode = needsGeo.filter((r) => !!r.p.postcode);
+      const withoutPostcode = needsGeo.filter((r) => !r.p.postcode);
+
+      if (withPostcode.length && !cancelled) {
+        const pcResults = await batchPostcodeIo(
+          withPostcode.map((r) => ({ id: r.p.id, postcode: r.p.postcode })),
+        );
+        for (const [id, ll] of pcResults) {
+          cacheRef.current.set(id, ll);
+          lsCache.set(id, { ll, at: Date.now() });
+        }
+        saveCache(lsCache);
         setCoordMap(new Map(cacheRef.current));
-        // Nominatim policy: max 1 request/second — 1100 ms gives a safe margin
-        await new Promise<void>((res) => setTimeout(res, 1100));
       }
+
+      // ── 3. Nominatim fallback for properties without a postcode ──────────
+      for (const { p } of withoutPostcode) {
+        if (cancelled) break;
+        const query = buildNominatimQuery(p);
+        if (!query) { cacheRef.current.set(p.id, null); continue; }
+        const ll = await nominatimLookup(query);
+        cacheRef.current.set(p.id, ll);
+        lsCache.set(p.id, { ll, at: Date.now() });
+        saveCache(lsCache);
+        setCoordMap(new Map(cacheRef.current));
+        // Nominatim policy: max 1 request/second
+        await new Promise<void>((r) => setTimeout(r, 1100));
+      }
+
       geocodingRef.current = false;
     })();
+
     return () => { cancelled = true; geocodingRef.current = false; };
   }, [rows]);
 
@@ -157,20 +215,21 @@ export function PropertiesMap({ rows }: { rows: PropertyCardData[] }) {
   });
   const coords = placed.map((e) => e.ll);
 
-  // Count only properties that have a geocodable query but no coordinate yet
-  const unanswered = rows.filter((r) => buildQuery(r.p) && !coordMap.has(r.p.id)).length;
+  const unanswered = rows.filter((r) => !coordMap.has(r.p.id)).length;
   const failed = rows.filter((r) => coordMap.get(r.p.id) === null).length;
 
-  const defaultCenter: [number, number] = [51.505, -0.09]; // London
+  const defaultCenter: [number, number] = [51.505, -0.09];
 
   return (
-    <div className="relative flex-1" style={{ minHeight: "60vh" }}>
+    // `isolate` creates a stacking context that contains Leaflet's internal z-indexes
+    // (which go up to 1000), preventing them from leaking above the app's fixed overlay.
+    <div className="relative isolate flex-1" style={{ minHeight: "60vh" }}>
       {unanswered > 0 && (
         <p className="absolute left-3 top-3 z-[1000] rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow">
           Locating {unanswered} {unanswered === 1 ? "property" : "properties"}…
         </p>
       )}
-      {failed > 0 && coordMap.size > 0 && unanswered === 0 && (
+      {failed > 0 && unanswered === 0 && (
         <p className="absolute right-3 top-3 z-[1000] rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow">
           {failed} {failed === 1 ? "property" : "properties"} could not be located
         </p>
