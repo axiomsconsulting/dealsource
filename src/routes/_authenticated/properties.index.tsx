@@ -9,24 +9,34 @@ import { maxRiskSeverity } from "@/lib/analysis/risk";
 import { RiskChips } from "@/components/RiskChips";
 import { RiskExplainer } from "@/components/RiskExplainer";
 import { DealComparisonTable, type ComparisonRow } from "@/components/DealComparisonTable";
+import { PropertyGridCard, type PropertyCardData } from "@/components/PropertyCard";
 import { circumstanceFlexPct } from "@/lib/seller-context";
 import { fmtGBP } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, ArrowDownWideNarrow, ArrowUpNarrowWide, SlidersHorizontal } from "lucide-react";
+import {
+  Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle,
+  ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown,
+  ArrowDownWideNarrow, ArrowUpNarrowWide, SlidersHorizontal,
+  LayoutList, LayoutGrid, Map,
+} from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { BatchAIDialog } from "@/components/BatchAIDialog";
 import { AddPropertyDialog } from "@/components/AddPropertyDialog";
 import { rowsToCSV, downloadCSV, type ExportRow } from "@/lib/export";
 import { bestOfSelected, useStrategyFilter } from "@/lib/strategy-filter";
 import { toast } from "sonner";
+
+const PropertiesMap = lazy(() =>
+  import("@/components/PropertiesMap").then((m) => ({ default: m.PropertiesMap })),
+);
 
 export const Route = createFileRoute("/_authenticated/properties/")({
   head: () => ({ meta: [{ title: "Properties — Deal Negotiator" }] }),
@@ -43,7 +53,14 @@ const STRATEGY_FILTERS = [
 ] as const;
 type StrategyFilterKey = typeof STRATEGY_FILTERS[number]["key"];
 
-/** Buckets the many raw article4_status spellings down to what the filter actually offers. */
+type ViewMode = "list" | "cards" | "map";
+
+function getInitialView(): ViewMode {
+  if (typeof window === "undefined") return "cards";
+  const saved = localStorage.getItem("pipeline_view") as ViewMode | null;
+  return saved ?? "cards";
+}
+
 function article4Bucket(status: string | null | undefined): "inside" | "outside" | "partial" | "unknown" {
   const s = (status || "").toLowerCase();
   if (!s) return "unknown";
@@ -63,17 +80,25 @@ function PropertiesPage() {
   const personasQ = useQuery({ queryKey: ["personas"], queryFn: () => personasFn({ data: {} } as any) });
   const personas = useMemo(() => (personasQ.data ?? []) as any[], [personasQ.data]);
   const activePersona = personas.find((p) => p.is_default) ?? personas[0];
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialView);
+
+  const switchView = (v: ViewMode) => {
+    setViewMode(v);
+    localStorage.setItem("pipeline_view", v);
+  };
+
   const toggleCollapsed = (id: string) =>
     setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
   const [sortBy, setSortBy] = useState<"score" | "yield" | "price_asc" | "price_desc" | "risk">("score");
   const [minScore, setMinScore] = useState(0);
   const ALL_FLAGS = ["shared_ownership","auction","developer_invitation","land_only","planning_only","fake_or_underpriced","listed_building","retirement_only","leasehold_short"] as const;
   type FlagKey = typeof ALL_FLAGS[number];
   const [hiddenFlags, setHiddenFlags] = useState<Set<FlagKey>>(new Set());
 
-  // Refinement filters — narrow the list down to the properties worth a closer look
   const [search, setSearch] = useState("");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
@@ -85,15 +110,10 @@ function PropertiesPage() {
   const [personaFitOnly, setPersonaFitOnly] = useState(false);
 
   const activeFilterCount =
-    (search.trim() ? 1 : 0) +
-    (priceMin || priceMax ? 1 : 0) +
-    (bedsMin || bedsMax ? 1 : 0) +
-    propertyTypes.size +
-    (article4Filter !== "any" ? 1 : 0) +
-    strategyFilter.size +
-    (personaFitOnly ? 1 : 0) +
-    (minScore > 0 ? 1 : 0) +
-    hiddenFlags.size;
+    (search.trim() ? 1 : 0) + (priceMin || priceMax ? 1 : 0) +
+    (bedsMin || bedsMax ? 1 : 0) + propertyTypes.size +
+    (article4Filter !== "any" ? 1 : 0) + strategyFilter.size +
+    (personaFitOnly ? 1 : 0) + (minScore > 0 ? 1 : 0) + hiddenFlags.size;
 
   const resetFilters = () => {
     setSearch(""); setPriceMin(""); setPriceMax(""); setBedsMin(""); setBedsMax("");
@@ -111,7 +131,6 @@ function PropertiesPage() {
     return data.map((p) => {
       const a = activePersona ? analyseProperty(p, activePersona as any) : null;
       const sev = maxRiskSeverity(a?.riskFlags as any);
-      // Best-fit criteria = highest-scoring criteria profile this property actually passes.
       let bestFit: { name: string; score: number; strategy: string } | null = null;
       for (const per of personas) {
         const an = analyseProperty(p, per as any);
@@ -120,11 +139,15 @@ function PropertiesPage() {
           bestFit = { name: per.name, score: an.overallScore, strategy: per.strategy };
         }
       }
-      return { p, a, sev, bestFit };
+      const best = a ? bestOfSelected(a.strategies, lensSelected) : null;
+      return { p, a, sev, bestFit, best };
     });
-  }, [props.data, activePersona, personas]);
+  }, [props.data, activePersona, personas, lensSelected]);
 
-  const analysedCount = useMemo(() => allRows.filter((r) => (r.p as any).ai_payload || (r.p as any).analyses?.ai_payload).length, [allRows]);
+  const analysedCount = useMemo(
+    () => allRows.filter((r) => (r.p as any).ai_payload || (r.p as any).analyses?.ai_payload).length,
+    [allRows],
+  );
 
   const availablePropertyTypes = useMemo(() => {
     const set = new Set<string>();
@@ -167,10 +190,14 @@ function PropertiesPage() {
       }
       if (sortBy === "price_asc") return ((x.p as any).asking_price_gbp ?? 0) - ((y.p as any).asking_price_gbp ?? 0);
       if (sortBy === "price_desc") return ((y.p as any).asking_price_gbp ?? 0) - ((x.p as any).asking_price_gbp ?? 0);
-      // default: deal score
       return (y.a?.overallScore ?? 0) - (x.a?.overallScore ?? 0);
     });
   }, [allRows, hiddenFlags, minScore, sortBy, search, priceMin, priceMax, bedsMin, bedsMax, propertyTypes, article4Filter, strategyFilter, personaFitOnly]);
+
+  const cardRows = useMemo(
+    (): PropertyCardData[] => rows.map(({ p, a, bestFit, best }) => ({ p, a, bestFit, best: best ?? null })),
+    [rows],
+  );
 
   const toggleSel = (id: string) => {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -187,7 +214,7 @@ function PropertiesPage() {
       const gy = rent && p.asking_price_gbp ? (rent * 12) / p.asking_price_gbp : null;
       const cashIn = eff ? (eff.offer_price * (1 - eff.ltv) + (eff.refurb_cost ?? 0) + 6000) : 0;
       const yci = rent && cashIn ? (rent * 12) / cashIn : null;
-      const best = a?.strategies.find((s) => s.key === a.bestStrategy);
+      const bestS = a?.strategies.find((s: any) => s.key === a.bestStrategy);
       const flexPct = circumstanceFlexPct((p as any).seller_context);
       return {
         address: p.address,
@@ -201,7 +228,7 @@ function PropertiesPage() {
         refurb_total: eff ? Math.round(eff.refurb_cost ?? 0) : null,
         article4_status: (p as any).article4_status ?? "unknown",
         seller_flex_pct: flexPct ? Math.round(flexPct * 10000) / 100 : 0,
-        best_strategy: best?.name ?? "",
+        best_strategy: bestS?.name ?? "",
         deal_score: a?.overallScore ?? null,
         risk_severity: sev,
         risk_flags: (a?.riskFlags ?? []).map((f: any) => f.label).join("; "),
@@ -213,11 +240,10 @@ function PropertiesPage() {
 
   const comparisonRows: ComparisonRow[] = useMemo(() => {
     const source = selected.size ? rows.filter((r) => selected.has(r.p.id)) : [];
-    return source.map(({ p, a, sev }) => {
+    return source.map(({ p, a, sev, best }) => {
       const eff = a?.effectiveInputs;
       const rent = (p as any).estimated_rent_pcm ?? eff?.monthly_rent ?? null;
       const gy = rent && p.asking_price_gbp ? (rent * 12) / p.asking_price_gbp * 100 : null;
-      const best = a?.strategies.find((s) => s.key === a.bestStrategy);
       const flex = circumstanceFlexPct((p as any).seller_context);
       return {
         id: p.id,
@@ -240,7 +266,27 @@ function PropertiesPage() {
 
   return (
     <AppShell title={`All properties (${props.data?.length ?? 0})`}>
+      {/* ── Toolbar ── */}
       <div className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* View mode toggle */}
+        <div className="flex items-center rounded-md border p-0.5">
+          {(["list", "cards", "map"] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => switchView(v)}
+              title={v.charAt(0).toUpperCase() + v.slice(1)}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {v === "list" && <LayoutList className="h-3.5 w-3.5" />}
+              {v === "cards" && <LayoutGrid className="h-3.5 w-3.5" />}
+              {v === "map" && <Map className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline capitalize">{v}</span>
+            </button>
+          ))}
+        </div>
+
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
           <SelectTrigger className="h-11 w-full sm:h-9 sm:w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
           <SelectContent>
@@ -261,12 +307,14 @@ function PropertiesPage() {
             </SelectItem>
           </SelectContent>
         </Select>
+
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search address or postcode…"
           className="h-11 w-full sm:h-9 sm:w-[220px]"
         />
+
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline" size="sm" className="h-11 w-full sm:h-9 sm:w-auto">
@@ -274,15 +322,12 @@ function PropertiesPage() {
             </Button>
           </SheetTrigger>
           <SheetContent className="w-[380px] overflow-y-auto sm:w-[420px]">
-            <SheetHeader>
-              <SheetTitle>Refine properties</SheetTitle>
-            </SheetHeader>
+            <SheetHeader><SheetTitle>Refine properties</SheetTitle></SheetHeader>
             <div className="mt-4 space-y-5 pb-8">
               <div>
                 <Label className="text-xs">Minimum deal score: {minScore}</Label>
                 <Slider value={[minScore]} onValueChange={(v) => setMinScore(v[0])} min={0} max={100} step={5} className="mt-2" />
               </div>
-
               <div>
                 <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Asking price</p>
                 <div className="flex items-center gap-2">
@@ -291,7 +336,6 @@ function PropertiesPage() {
                   <Input type="number" inputMode="numeric" placeholder="Max £" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className="h-8" />
                 </div>
               </div>
-
               <div>
                 <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bedrooms</p>
                 <div className="flex items-center gap-2">
@@ -300,7 +344,6 @@ function PropertiesPage() {
                   <Input type="number" inputMode="numeric" placeholder="Max" value={bedsMax} onChange={(e) => setBedsMax(e.target.value)} className="h-8" />
                 </div>
               </div>
-
               {availablePropertyTypes.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Property type</p>
@@ -312,7 +355,6 @@ function PropertiesPage() {
                   ))}
                 </div>
               )}
-
               <div>
                 <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Article 4 status</p>
                 <Select value={article4Filter} onValueChange={(v) => setArticle4Filter(v as any)}>
@@ -326,7 +368,6 @@ function PropertiesPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Best strategy</p>
                 {STRATEGY_FILTERS.map((s) => (
@@ -336,14 +377,12 @@ function PropertiesPage() {
                   </label>
                 ))}
               </div>
-
               {personas.length > 0 && (
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <Checkbox checked={personaFitOnly} onCheckedChange={(b) => setPersonaFitOnly(!!b)} />
                   Only properties that fit at least one criteria profile
                 </label>
               )}
-
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hide listings flagged as</p>
                 {ALL_FLAGS.map((f) => (
@@ -353,30 +392,37 @@ function PropertiesPage() {
                   </label>
                 ))}
               </div>
-
               <Button variant="ghost" size="sm" className="w-full" onClick={resetFilters} disabled={activeFilterCount === 0}>
                 Reset all filters
               </Button>
             </div>
           </SheetContent>
         </Sheet>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-11 w-full sm:h-9 sm:w-auto"
-          disabled={!rows.length}
-          onClick={() => setCollapsed((s) => s.size === rows.length ? new Set() : new Set(rows.map((r) => r.p.id)))}
-        >
-          {collapsed.size === rows.length && rows.length > 0 ? (
-            <><ChevronsUpDown className="mr-2 h-4 w-4" /> Expand all</>
-          ) : (
-            <><ChevronsDownUp className="mr-2 h-4 w-4" /> Collapse all</>
-          )}
-        </Button>
-        <div className="hidden flex-1 sm:block" />
-        {selected.size > 0 && (
-          <span className="text-center text-sm text-muted-foreground sm:text-left">{selected.size} selected · <button className="underline" onClick={clearSel}>clear</button></span>
+
+        {viewMode === "list" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 w-full sm:h-9 sm:w-auto"
+            disabled={!rows.length}
+            onClick={() => setCollapsed((s) => s.size === rows.length ? new Set() : new Set(rows.map((r) => r.p.id)))}
+          >
+            {collapsed.size === rows.length && rows.length > 0 ? (
+              <><ChevronsUpDown className="mr-2 h-4 w-4" /> Expand all</>
+            ) : (
+              <><ChevronsDownUp className="mr-2 h-4 w-4" /> Collapse all</>
+            )}
+          </Button>
         )}
+
+        <div className="hidden flex-1 sm:block" />
+
+        {viewMode !== "map" && selected.size > 0 && (
+          <span className="text-center text-sm text-muted-foreground sm:text-left">
+            {selected.size} selected · <button className="underline" onClick={clearSel}>clear</button>
+          </span>
+        )}
+
         <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={exportCSV} disabled={!rows.length}>
           <Download className="mr-2 h-4 w-4" />
           Export CSV {selected.size > 0 ? `(${selected.size})` : `(${rows.length})`}
@@ -388,25 +434,53 @@ function PropertiesPage() {
           onDone={() => qc.invalidateQueries({ queryKey: ["properties"] })}
         />
       </div>
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Checkbox checked={selected.size === rows.length && rows.length > 0} onCheckedChange={(b) => b ? selectAll() : clearSel()} />
-        Select all ({rows.length})
-      </div>
-      {comparisonRows.length > 0 && (
+
+      {/* ── Select all (list / cards) ── */}
+      {viewMode !== "map" && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <Checkbox
+            checked={selected.size === rows.length && rows.length > 0}
+            onCheckedChange={(b) => b ? selectAll() : clearSel()}
+          />
+          Select all ({rows.length})
+        </div>
+      )}
+
+      {/* ── Comparison table ── */}
+      {viewMode !== "map" && comparisonRows.length > 0 && (
         <div className="mb-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deal comparison · {comparisonRows.length} selected</p>
           <DealComparisonTable rows={comparisonRows} />
         </div>
       )}
+
+      {/* ── Empty state ── */}
       {!props.data?.length ? (
         <Card className="flex flex-col items-center gap-3 p-12 text-center text-muted-foreground">
           <p>No properties yet.</p>
           <AddPropertyDialog trigger={<Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
         </Card>
+      ) : viewMode === "map" ? (
+        /* ── Map view ── */
+        <Suspense fallback={<div className="flex items-center justify-center rounded-xl border py-24 text-sm text-muted-foreground">Loading map…</div>}>
+          <PropertiesMap rows={cardRows} />
+        </Suspense>
+      ) : viewMode === "cards" ? (
+        /* ── Cards grid ── */
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {rows.map(({ p, a, bestFit, best }) => (
+            <PropertyGridCard
+              key={p.id}
+              data={{ p, a, bestFit, best: best ?? null }}
+              selected={selected.has(p.id)}
+              onSelect={() => toggleSel(p.id)}
+            />
+          ))}
+        </div>
       ) : (
+        /* ── List view ── */
         <div className="grid gap-4">
-          {rows.map(({ p, a, bestFit }) => {
-            const best = a ? bestOfSelected(a.strategies, lensSelected) : undefined;
+          {rows.map(({ p, a, bestFit, best }) => {
             const hero = (p.image_urls?.[0]) ?? null;
             const isCollapsed = collapsed.has(p.id);
             return (
@@ -416,66 +490,66 @@ function PropertiesPage() {
                     <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggleSel(p.id)} />
                   </div>
                   {!isCollapsed && (
-                    <div className="hidden h-32 w-44 shrink-0 bg-muted sm:block">
+                    <div className="hidden h-24 w-28 shrink-0 bg-muted sm:block">
                       {hero ? (
                         <img src={hero} alt="" className="h-full w-full object-cover" loading="lazy" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-muted-foreground"><Home className="h-8 w-8" /></div>
+                        <div className="flex h-full items-center justify-center text-muted-foreground"><Home className="h-6 w-6" /></div>
                       )}
                     </div>
                   )}
                   <div className="flex flex-1 flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link to="/properties/$id" params={{ id: p.id }} className="font-semibold hover:underline">
-                        {p.address}
-                      </Link>
-                      {p.epc_rate && <Badge variant="outline">EPC {p.epc_rate}</Badge>}
-                      {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
-                      {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
-                      {bestFit ? (
-                        <Badge className="bg-accent text-accent-foreground" title={`Best fit: ${bestFit.name} (${bestFit.score}/100)`}>
-                          ◆ {bestFit.name}
-                        </Badge>
-                      ) : personas.length > 0 ? (
-                        <Badge variant="outline" className="text-amber-700">No criteria fit</Badge>
-                      ) : null}
-                      {p.source_link && (
-                        <a href={p.source_link} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground">
-                          <ExternalLink className="inline h-3 w-3" />
-                        </a>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link to="/properties/$id" params={{ id: p.id }} className="font-semibold hover:underline">
+                          {p.address}
+                        </Link>
+                        {p.epc_rate && <Badge variant="outline">EPC {p.epc_rate}</Badge>}
+                        {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
+                        {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
+                        {bestFit ? (
+                          <Badge className="bg-accent text-accent-foreground" title={`Best fit: ${bestFit.name} (${bestFit.score}/100)`}>
+                            ◆ {bestFit.name}
+                          </Badge>
+                        ) : personas.length > 0 ? (
+                          <Badge variant="outline" className="text-amber-700">No criteria fit</Badge>
+                        ) : null}
+                        {p.source_link && (
+                          <a href={p.source_link} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground">
+                            <ExternalLink className="inline h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                      {!isCollapsed && a?.riskFlags?.length ? <div className="mt-2"><RiskChips flags={a.riskFlags as any} /></div> : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                        <span>Asking {fmtGBP(p.asking_price_gbp)}</span>
+                        {a && (best
+                          ? <span>Best: <span className="font-medium text-foreground">{best.name}</span> · {best.dealScore}/100</span>
+                          : <span className="text-amber-700">No selected strategy fits</span>)}
+                        {a && !a.personaMatch.pass && <span className="text-amber-700">Criteria mismatch</span>}
+                        {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
+                      </div>
+                      {!isCollapsed && a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
+                      {!isCollapsed && a && (
+                        <div className="mt-3">
+                          <RiskExplainer flags={a.riskFlags as any} score={a.overallScore} />
+                        </div>
                       )}
                     </div>
-                    {!isCollapsed && a?.riskFlags?.length ? <div className="mt-2"><RiskChips flags={a.riskFlags as any} /></div> : null}
-                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                      <span>Asking {fmtGBP(p.asking_price_gbp)}</span>
-                      {a && (best
-                        ? <span>Best: <span className="font-medium text-foreground">{best.name}</span> · {best.dealScore}/100</span>
-                        : <span className="text-amber-700">No selected strategy fits</span>)}
-                      {a && !a.personaMatch.pass && <span className="text-amber-700">Criteria mismatch</span>}
-                      {p.article4_status === "inside" && <Badge variant="outline" className="border-amber-400 text-amber-800">Article 4</Badge>}
-                    </div>
-                    {!isCollapsed && a && best && <p className="mt-1 text-xs text-muted-foreground">{best.summary}</p>}
-                    {!isCollapsed && a && (
-                      <div className="mt-3">
-                        <RiskExplainer flags={a.riskFlags as any} score={a.overallScore} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 sm:justify-end">
-                    {a && (
-                      <div className="text-right">
-                        <div className={`text-2xl font-bold ${a.overallScore >= 60 ? "text-primary" : a.overallScore >= 40 ? "text-amber-600" : "text-muted-foreground"}`}>
-                          {a.overallScore}
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      {a && (
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${a.overallScore >= 60 ? "text-primary" : a.overallScore >= 40 ? "text-amber-600" : "text-muted-foreground"}`}>
+                            {a.overallScore}
+                          </div>
+                          <div className="text-xs text-muted-foreground">deal score</div>
                         </div>
-                        <div className="text-xs text-muted-foreground">deal score</div>
-                      </div>
-                    )}
-                    <Button variant="ghost" size="icon" onClick={() => toggleCollapsed(p.id)} title={isCollapsed ? "Expand" : "Collapse"}>
-                      {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => delMut.mutate(p.id)}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => toggleCollapsed(p.id)} title={isCollapsed ? "Expand" : "Collapse"}>
+                        {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => delMut.mutate(p.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </div>
                 </div>
               </Card>
