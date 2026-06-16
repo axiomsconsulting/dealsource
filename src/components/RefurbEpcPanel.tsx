@@ -433,6 +433,10 @@ export function RefurbEpcPanel({
           v={`${live.rows.filter((r) => r.c.include).length}/${live.rows.length}`}
         />
       </div>
+      <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
+        <p className="text-sm font-medium">Total refurb cost (items + 10% contingency)</p>
+        <p className="text-lg font-bold text-primary">{fmtGBP(live.total)}</p>
+      </div>
 
       <div className="space-y-2">
         {live.rows.map(({ l, k, c, value }, i) => {

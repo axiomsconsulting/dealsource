@@ -19,11 +19,12 @@ import {
   Trash2, ExternalLink, Home, Download, Filter as FilterIcon, PlusCircle,
   ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown,
   ArrowDownWideNarrow, ArrowUpNarrowWide, SlidersHorizontal,
-  LayoutList, LayoutGrid, Map,
+  LayoutList, LayoutGrid, Map, Check,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,10 @@ const PropertiesMap = lazy(() =>
 
 export const Route = createFileRoute("/_authenticated/properties/")({
   head: () => ({ meta: [{ title: "Properties — Deal Negotiator" }] }),
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery({ queryKey: ["properties"], queryFn: () => (listProperties as any)(), staleTime: 30 * 1000 });
+    void context.queryClient.prefetchQuery({ queryKey: ["personas"], queryFn: () => (listPersonas as any)(), staleTime: 5 * 60 * 1000 });
+  },
   component: PropertiesPage,
 });
 
@@ -268,45 +273,69 @@ function PropertiesPage() {
     <AppShell title={`All properties (${props.data?.length ?? 0})`}>
       {/* ── Toolbar ── */}
       <div className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        {/* View mode toggle */}
+        {/* View · Sort · Export — single compact group */}
         <div className="flex items-center rounded-md border p-0.5">
           {(["list", "cards", "map"] as ViewMode[]).map((v) => (
             <button
               key={v}
               onClick={() => switchView(v)}
-              title={v.charAt(0).toUpperCase() + v.slice(1)}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1 rounded px-2 py-1.5 text-xs font-medium capitalize transition-colors ${
                 viewMode === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {v === "list" && <LayoutList className="h-3.5 w-3.5" />}
               {v === "cards" && <LayoutGrid className="h-3.5 w-3.5" />}
               {v === "map" && <Map className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline capitalize">{v}</span>
+              {v}
             </button>
           ))}
-        </div>
 
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-          <SelectTrigger className="h-11 w-full sm:h-9 sm:w-[180px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="score">
-              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Deal score (high→low)</span>
-            </SelectItem>
-            <SelectItem value="yield">
-              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Gross yield (high→low)</span>
-            </SelectItem>
-            <SelectItem value="price_asc">
-              <span className="flex items-center gap-1.5"><ArrowUpNarrowWide className="h-3.5 w-3.5" /> Price (low→high)</span>
-            </SelectItem>
-            <SelectItem value="price_desc">
-              <span className="flex items-center gap-1.5"><ArrowDownWideNarrow className="h-3.5 w-3.5" /> Price (high→low)</span>
-            </SelectItem>
-            <SelectItem value="risk">
-              <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-3.5 w-3.5" /> Risk (clean first)</span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+
+          {/* Sort picker */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                {sortBy === "price_asc" ? (
+                  <ArrowUpNarrowWide className="h-3.5 w-3.5" />
+                ) : sortBy === "risk" ? (
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                ) : (
+                  <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+                )}
+                Sort
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              {([
+                { value: "score",      label: "Deal score",      Icon: ArrowDownWideNarrow },
+                { value: "yield",      label: "Gross yield",     Icon: ArrowDownWideNarrow },
+                { value: "price_asc",  label: "Price low→high",  Icon: ArrowUpNarrowWide   },
+                { value: "price_desc", label: "Price high→low",  Icon: ArrowDownWideNarrow },
+                { value: "risk",       label: "Risk (clean first)", Icon: SlidersHorizontal },
+              ] as const).map(({ value, label, Icon }) => (
+                <DropdownMenuItem key={value} onClick={() => setSortBy(value as any)} className="gap-2 text-xs">
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                  {sortBy === value && <Check className="ml-auto h-3.5 w-3.5" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+
+          {/* Export */}
+          <button
+            onClick={exportCSV}
+            disabled={!rows.length}
+            title={selected.size > 0 ? `Export ${selected.size} selected` : `Export ${rows.length} properties`}
+            className="flex items-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+        </div>
 
         <Input
           value={search}
@@ -423,10 +452,6 @@ function PropertiesPage() {
           </span>
         )}
 
-        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={exportCSV} disabled={!rows.length}>
-          <Download className="mr-2 h-4 w-4" />
-          Export CSV {selected.size > 0 ? `(${selected.size})` : `(${rows.length})`}
-        </Button>
         <AddPropertyDialog trigger={<Button size="sm" className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Add property</Button>} />
         <BatchAIDialog
           totalProperties={allRows.length}

@@ -37,11 +37,7 @@ function loadSelected(): StrategyKey[] {
 }
 
 export function StrategyFilterProvider({ children }: { children: ReactNode }) {
-  const [selected, setSelected] = useState<StrategyKey[]>(ALL_STRATEGY_KEYS);
-
-  useEffect(() => {
-    setSelected(loadSelected());
-  }, []);
+  const [selected, setSelected] = useState<StrategyKey[]>(() => loadSelected());
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(selected));

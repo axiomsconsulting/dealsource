@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, Sliders, Filter, Home, ListChecks, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
+import { ArrowLeft, Info, Sliders, Filter, Home, ListChecks, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useColorMode } from "@/components/ThemeProvider";
 import { useServerFn } from "@tanstack/react-start";
@@ -135,6 +135,13 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       >
         <UserRound className="h-4 w-4" /> Profile
       </Link>
+      <Link
+        to="/about"
+        className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-muted"
+        activeProps={{ className: "bg-muted text-primary" }}
+      >
+        <Info className="h-4 w-4" /> About
+      </Link>
       <button
         onClick={toggleColorMode}
         className="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm hover:bg-muted"
@@ -170,7 +177,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             <img
               src="/omnispace-logo.png"
               alt="Deal Negotiator — Omnispace Estates"
-              className="h-8 w-auto"
+              className="h-10 w-auto"
             />
           </Link>
 
@@ -294,8 +301,20 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           <ArrowLeft className="h-5 w-5" />
         </Button>
 
-        {/* Burger menu + profile avatar — right */}
+        {/* Profile avatar + burger menu — right */}
         <div className="flex items-center gap-2">
+          <Link
+            to="/profile"
+            aria-label="Profile"
+            className="flex items-center rounded-full border bg-card p-1 shadow-sm"
+            activeProps={{ className: "ring-2 ring-primary/60" }}
+          >
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={myProfile?.avatar_url ?? undefined} alt="" />
+              <AvatarFallback className="bg-muted text-xs">{initials}</AvatarFallback>
+            </Avatar>
+          </Link>
+
           <Sheet>
             <SheetTrigger asChild>
               <Button
@@ -312,18 +331,6 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
               {sheetNav}
             </SheetContent>
           </Sheet>
-
-          <Link
-            to="/profile"
-            aria-label="Profile"
-            className="flex items-center rounded-full border bg-card p-1 shadow-sm"
-            activeProps={{ className: "ring-2 ring-primary/60" }}
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={myProfile?.avatar_url ?? undefined} alt="" />
-              <AvatarFallback className="bg-muted text-xs">{initials}</AvatarFallback>
-            </Avatar>
-          </Link>
         </div>
       </div>
 
@@ -338,7 +345,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             <img
               src="/omnispace-logo.png"
               alt="Deal Negotiator — Omnispace Estates"
-              className="h-8 w-auto"
+              className="h-10 w-auto"
             />
           </Link>
         </div>

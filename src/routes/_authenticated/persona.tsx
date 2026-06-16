@@ -20,6 +20,9 @@ import { fmtPct } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/persona")({
   head: () => ({ meta: [{ title: "Investment criteria — Deal Negotiator" }] }),
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery({ queryKey: ["personas"], queryFn: () => (listPersonas as any)(), staleTime: 5 * 60 * 1000 });
+  },
   component: PersonaPage,
 });
 

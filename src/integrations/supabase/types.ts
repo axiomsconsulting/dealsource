@@ -268,6 +268,7 @@ export type Database = {
           created_at: string
           id: string
           ignore_eras: string[]
+          investor_type: string | null
           is_default: boolean
           ltv: number
           max_beds: number
@@ -295,6 +296,7 @@ export type Database = {
           created_at?: string
           id?: string
           ignore_eras?: string[]
+          investor_type?: string | null
           is_default?: boolean
           ltv?: number
           max_beds?: number
@@ -322,6 +324,7 @@ export type Database = {
           created_at?: string
           id?: string
           ignore_eras?: string[]
+          investor_type?: string | null
           is_default?: boolean
           ltv?: number
           max_beds?: number

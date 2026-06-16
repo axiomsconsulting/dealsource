@@ -6,10 +6,10 @@ export const getRouter = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        // Default (0) makes every remount of a query — e.g. navigating from a property to its
-        // viewing sub-route and back — refetch and show a loading state even though the data
-        // hasn't changed. A short stale window lets cached data render instantly on revisit.
+        // Prevents unnecessary refetches when navigating back to a page within this window.
         staleTime: 30 * 1000,
+        // Keep unused cache for 10 minutes so navigating back is instant.
+        gcTime: 10 * 60 * 1000,
       },
     },
   });
@@ -18,6 +18,10 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
+    // Start loading routes (and their loaders) when a link is hovered/focused,
+    // not just after the click — this hides almost all navigation latency.
+    defaultPreload: "intent",
+    defaultPreloadDelay: 100,
     defaultPreloadStaleTime: 0,
   });
 

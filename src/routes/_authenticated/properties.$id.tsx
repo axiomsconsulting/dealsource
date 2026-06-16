@@ -112,6 +112,10 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/properties/$id")({
   head: () => ({ meta: [{ title: "Property — Deal Negotiator" }] }),
+  loader: ({ context, params }) => {
+    void context.queryClient.prefetchQuery({ queryKey: ["property", params.id], queryFn: () => getProperty({ data: { id: params.id } }), staleTime: 30 * 1000 });
+    void context.queryClient.prefetchQuery({ queryKey: ["personas"], queryFn: () => (listPersonas as any)(), staleTime: 5 * 60 * 1000 });
+  },
   component: PropertyDetail,
 });
 
@@ -576,10 +580,10 @@ function PropertyDetail() {
         </CollapsibleCard>
       )}
 
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={() => setActivePanel("photos")}
-          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+          className="flex min-w-[150px] shrink-0 flex-col rounded-md border p-3 text-left transition hover:bg-muted/40"
         >
           <div className="flex items-center gap-2 text-sm font-medium">
             <Camera className="h-4 w-4 text-muted-foreground" /> Photos
@@ -588,7 +592,7 @@ function PropertyDetail() {
         </button>
         <button
           onClick={() => setActivePanel("library")}
-          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+          className="flex min-w-[150px] shrink-0 flex-col rounded-md border p-3 text-left transition hover:bg-muted/40"
         >
           <div className="flex items-center gap-2 text-sm font-medium">
             <Images className="h-4 w-4 text-muted-foreground" /> Image library
@@ -599,7 +603,7 @@ function PropertyDetail() {
         </button>
         <button
           onClick={() => setActivePanel("enrich")}
-          className="rounded-md border p-3 text-left transition hover:bg-muted/40"
+          className="flex min-w-[150px] shrink-0 flex-col rounded-md border p-3 text-left transition hover:bg-muted/40"
         >
           <div className="flex items-center gap-2 text-sm font-medium">
             <Link2 className="h-4 w-4 text-muted-foreground" /> Enrich listing
@@ -840,54 +844,79 @@ function PropertyDetail() {
               Weighted evidence to take to the agent. Full costs are shown where useful, but only
               the defensible share is counted into the offer.
             </p>
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="flex items-center gap-1.5 rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Fully applied — 100% in the offer
+              </span>
+              <span className="flex items-center gap-1.5 rounded px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Partially applied — defensible share only
+              </span>
+              <span className="flex items-center gap-1.5 rounded px-1.5 py-0.5 bg-orange-50 text-orange-700 border border-orange-200 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" /> Minimally applied — soft signal
+              </span>
+            </div>
             {analysis.negotiation
               .filter((n) => n.gbp_impact > 250)
-              .map((n, i) => (
-                <CollapsibleCard
-                  key={i}
-                  variant="plain"
-                  defaultOpen={false}
-                  title={n.title}
-                  summary={n.description}
-                  actions={
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="hidden text-[10px] capitalize sm:inline-flex">
+              .map((n, i) => {
+                const usageKey = n.confidence;
+                const usage = usageKey === "high"
+                  ? { border: "border-l-4 border-l-emerald-500", badgeCls: "bg-emerald-50 text-emerald-700 border border-emerald-200", label: "Fully applied", note: null }
+                  : usageKey === "medium"
+                  ? { border: "border-l-4 border-l-amber-400", badgeCls: "bg-amber-50 text-amber-700 border border-amber-200", label: "Partially applied", note: "Defensible share only — the full cost is held back as reserve for counter-offer or survey stage." }
+                  : { border: "border-l-4 border-l-orange-400", badgeCls: "bg-orange-50 text-orange-700 border border-orange-200", label: "Minimally applied", note: "Soft signal only — survey or quote evidence is needed before this can be claimed in full." };
+                return (
+                  <CollapsibleCard
+                    key={i}
+                    variant="plain"
+                    defaultOpen={false}
+                    title={n.title}
+                    summary={n.description}
+                    className={usage.border}
+                    actions={
+                      <div className="flex items-center gap-2">
+                        <span className={`hidden rounded px-1.5 py-0.5 text-[10px] font-medium sm:inline ${usage.badgeCls}`}>{usage.label}</span>
+                        <Badge variant="outline" className="hidden text-[10px] capitalize sm:inline-flex">
+                          {n.category.replace("_", " ")}
+                        </Badge>
+                        <span className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</span>
+                      </div>
+                    }
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${usage.badgeCls}`}>{usage.label}</span>
+                      <Badge variant="outline" className="text-[10px] capitalize">
                         {n.category.replace("_", " ")}
                       </Badge>
-                      <span className="font-bold text-primary">−{fmtGBP(n.gbp_impact)}</span>
+                      <span className="text-[10px] uppercase text-muted-foreground">
+                        {n.confidence} confidence
+                      </span>
+                      {n.title.startsWith("Survey:") && (
+                        <JumpLink to="survey" setOpenSections={setOpenSections}>
+                          Survey
+                        </JumpLink>
+                      )}
+                      {n.title.includes("EPC") && (
+                        <JumpLink to="refurb-epc" setOpenSections={setOpenSections}>
+                          EPC
+                        </JumpLink>
+                      )}
                     </div>
-                  }
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] capitalize">
-                      {n.category.replace("_", " ")}
-                    </Badge>
-                    <span className="text-[10px] uppercase text-muted-foreground">
-                      {n.confidence} confidence
-                    </span>
-                    {n.title.startsWith("Survey:") && (
-                      <JumpLink to="survey" setOpenSections={setOpenSections}>
-                        Survey
-                      </JumpLink>
+                    {usage.note && (
+                      <p className="mt-1 text-[11px] italic text-muted-foreground">{usage.note}</p>
                     )}
-                    {n.title.includes("EPC") && (
-                      <JumpLink to="refurb-epc" setOpenSections={setOpenSections}>
-                        EPC
-                      </JumpLink>
+                    <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
+                    {n.specOptions && n.specOptions.length > 0 && (
+                      <div className="mt-2">
+                        <SpecOptionsRow options={n.specOptions} />
+                      </div>
                     )}
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{n.description}</p>
-                  {n.specOptions && n.specOptions.length > 0 && (
-                    <div className="mt-2">
-                      <SpecOptionsRow options={n.specOptions} />
-                    </div>
-                  )}
-                </CollapsibleCard>
-              ))}
+                  </CollapsibleCard>
+                );
+              })}
             {analysis.negotiation.some((n) => n.gbp_impact <= 250) && (
               <TooltipProvider delayDuration={120}>
                 <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed p-2.5">
-                  <span className="mr-1 text-xs text-muted-foreground">Also factored in:</span>
+                  <span className="mr-1 text-xs text-muted-foreground">Also factored in (minimally applied):</span>
                   {analysis.negotiation
                     .filter((n) => n.gbp_impact <= 250)
                     .map((n, i) => (
@@ -895,21 +924,42 @@ function PropertyDetail() {
                         <TooltipTrigger asChild>
                           <Badge
                             variant="outline"
-                            className="cursor-default gap-1 text-xs font-normal"
+                            className="cursor-default gap-1 border-orange-200 bg-orange-50 text-xs font-normal text-orange-700"
                           >
                             {n.title}{" "}
-                            <span className="font-semibold text-primary">
+                            <span className="font-semibold">
                               −{fmtGBP(n.gbp_impact)}
                             </span>
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[300px] text-xs">
-                          {n.description}
+                          <p className="font-medium text-orange-700">Minimally applied</p>
+                          <p>{n.description}</p>
                         </TooltipContent>
                       </Tooltip>
                     ))}
                 </div>
               </TooltipProvider>
+            )}
+            {analysis.negotiationGuidance.retainedLeverage > 0 && (
+              <div className="flex items-start gap-2.5 rounded-md border border-dashed border-muted-foreground/40 p-2.5">
+                <div className="mt-0.5 h-3 w-3 shrink-0 rounded-full border-2 border-muted-foreground/50 bg-muted" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Not in opening offer — held in reserve:{" "}
+                    <span className="font-bold text-foreground">
+                      {fmtGBP(analysis.negotiationGuidance.retainedLeverage)}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    The evidence total exceeds the credible opening range for a{" "}
+                    {analysis.negotiationGuidance.priceBand} property (capped at{" "}
+                    {fmtPct(analysis.negotiationGuidance.credibleDiscountPct)} of asking). This
+                    reserve is deployed at survey stage or counter-offer — not thrown into the
+                    first bid.
+                  </p>
+                </div>
+              </div>
             )}
             {!p.ai_payload?.landlordReadiness && (
               <p className="text-xs text-muted-foreground">
@@ -1208,21 +1258,57 @@ function OfferPlanCard({
         <span className="flex items-center gap-2">
           Offer plan
           <FormulaInfo
-            title="How the offer plan is calculated"
+            title="Full target deal price calculation"
+            intro="How the model gets from asking price to the three offer figures."
             rows={[
               { label: "Asking price", value: fmtGBP(guidance.askingPrice) },
               {
-                label: "Weighted leverage",
-                value: `−${fmtGBP(analysis.negotiationTotal)}`,
+                label: `Total leverage evidence (${analysis.negotiation.length} signals)`,
+                value: `−${fmtGBP(guidance.fullLeverage)}`,
                 hint: (
                   <JumpLink to="negotiation-playbook" setOpenSections={setOpenSections}>
-                    View playbook
+                    View colour-coded breakdown
                   </JumpLink>
                 ),
               },
+              guidance.fullLeverage > guidance.askingPrice * guidance.credibleDiscountPct
+                ? {
+                    label: `Credible cap for ${guidance.priceBand}`,
+                    value: `max −${fmtGBP(Math.round(guidance.askingPrice * guidance.credibleDiscountPct))} (${(guidance.credibleDiscountPct * 100).toFixed(1)}% of asking)`,
+                    hint: `Evidence exceeds credible opening range — ${fmtGBP(guidance.retainedLeverage)} held back as reserve`,
+                  }
+                : {
+                    label: `Credible cap for ${guidance.priceBand}`,
+                    value: `within ${(guidance.maxOpeningDiscountPct * 100).toFixed(1)}% credible range`,
+                  },
               {
-                label: "Price band / stance",
-                value: `${guidance.priceBand} · ${guidance.stance.replace("-", " ")}`,
+                label: "Applied leverage (asking → target)",
+                value: `−${fmtGBP(guidance.appliedLeverage)}`,
+                hint: guidance.retainedLeverage > 0
+                  ? `${fmtGBP(guidance.retainedLeverage)} retained for survey / counter-offer`
+                  : undefined,
+              },
+              {
+                label: "= Target deal price",
+                value: `${fmtGBP(guidance.targetOffer)} (${fmtPct(guidance.askingPrice > 0 ? (guidance.askingPrice - guidance.targetOffer) / guidance.askingPrice : 0)} below asking)`,
+              },
+              {
+                label: "Opening bid",
+                value: fmtGBP(guidance.openingOffer),
+                hint: guidance.targetOffer > guidance.openingOffer
+                  ? `${fmtPct((guidance.targetOffer - guidance.openingOffer) / guidance.targetOffer)} below target — starting anchor, not the deal price`
+                  : undefined,
+              },
+              {
+                label: "Walk-away ceiling",
+                value: fmtGBP(guidance.walkAwayOffer),
+                hint: guidance.walkAwayOffer > guidance.targetOffer
+                  ? `${fmtPct((guidance.walkAwayOffer - guidance.targetOffer) / guidance.targetOffer)} above target — do not pay more than this`
+                  : undefined,
+              },
+              {
+                label: "Stance",
+                value: `${guidance.stance.replace("-", " ")} · ${guidance.priceBand}`,
               },
               {
                 label: "Equity target",
@@ -1267,7 +1353,27 @@ function OfferPlanCard({
         </p>
         <DealIndicators indicators={analysis.dealIndicators} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          <Stat label="Opening bid" v={fmtGBP(guidance.openingOffer)} />
+          <TooltipProvider delayDuration={120}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="rounded-md bg-muted/50 p-2.5 cursor-default">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Opening bid</p>
+                  <p className="font-medium">{fmtGBP(guidance.openingOffer)}</p>
+                  {guidance.targetOffer > guidance.openingOffer && (
+                    <p className="mt-0.5 text-[10px] font-medium text-emerald-700">
+                      {fmtPct((guidance.targetOffer - guidance.openingOffer) / guidance.targetOffer)} below target
+                    </p>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px] text-xs">
+                Starting anchor — open here, framed around the evidenced case. This is{" "}
+                {guidance.targetOffer > guidance.openingOffer
+                  ? `${fmtPct((guidance.targetOffer - guidance.openingOffer) / guidance.targetOffer)} below your target deal price of ${fmtGBP(guidance.targetOffer)}.`
+                  : "at or above the target."}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Stat label="Target deal price" v={fmtGBP(guidance.targetOffer)} />
           <div className="rounded-md bg-muted/50 p-2.5">
             <div className="flex items-center justify-between gap-1">
@@ -1277,6 +1383,11 @@ function OfferPlanCard({
               <OfferFloorInfo guidance={guidance} />
             </div>
             <p className="font-medium">{fmtGBP(guidance.walkAwayOffer)}</p>
+            {guidance.walkAwayOffer > guidance.targetOffer && (
+              <p className="mt-0.5 text-[10px] font-medium text-amber-700">
+                {fmtPct((guidance.walkAwayOffer - guidance.targetOffer) / guidance.targetOffer)} above target
+              </p>
+            )}
           </div>
           <Stat label="Discount at target" v={fmtPct(discount)} />
           <button type="button" onClick={onOpenRefurb} className="text-left">
