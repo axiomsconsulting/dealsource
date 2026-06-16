@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { listUsersWithStats, updateUserRole, deleteUser } from "@/lib/admin.func
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, ChevronRight } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -32,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/admin/users")({
 
 function AdminUsersPage() {
   const { role } = Route.useRouteContext();
+  const navigate = useNavigate();
   const isSuperAdmin = role === "super_admin";
 
   const getUsers = useServerFn(listUsersWithStats);
@@ -76,16 +77,17 @@ function AdminUsersPage() {
               <TableHead>Last login</TableHead>
               <TableHead>Role</TableHead>
               {isSuperAdmin && <TableHead className="w-10" />}
+              <TableHead className="w-8" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="whitespace-nowrap">
-                  <Link to="/admin/users/$id" params={{ id: u.id }} className="hover:underline">
-                    {u.email}
-                  </Link>
-                </TableCell>
+              <TableRow
+                key={u.id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => navigate({ to: "/admin/users/$id", params: { id: u.id } })}
+              >
+                <TableCell className="whitespace-nowrap font-medium">{u.email}</TableCell>
                 <TableCell className="whitespace-nowrap">{u.display_name ?? "—"}</TableCell>
                 <TableCell className="whitespace-nowrap text-xs">
                   {new Date(u.created_at).toLocaleDateString()}
@@ -94,7 +96,7 @@ function AdminUsersPage() {
                 <TableCell className="whitespace-nowrap text-xs">
                   {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "Never"}
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   {isSuperAdmin && u.role !== "super_admin" ? (
                     <Select
                       value={u.role}
@@ -121,7 +123,7 @@ function AdminUsersPage() {
                   )}
                 </TableCell>
                 {isSuperAdmin && (
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     {u.role !== "super_admin" && (
                       <Button
                         size="icon"
@@ -139,6 +141,9 @@ function AdminUsersPage() {
                     )}
                   </TableCell>
                 )}
+                <TableCell className="w-8 text-muted-foreground">
+                  <ChevronRight className="h-4 w-4" />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

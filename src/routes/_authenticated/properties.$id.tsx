@@ -28,7 +28,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
@@ -73,7 +72,10 @@ import { partitionImageUrls } from "@/lib/images";
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
+  Eye,
   EyeOff,
   AlertTriangle,
   Sparkles,
@@ -215,6 +217,7 @@ function PropertyDetail() {
   const [askingDraft, setAskingDraft] = useState("");
   const [pfJsonText, setPfJsonText] = useState("");
   const [heroOpenIndex, setHeroOpenIndex] = useState<number | null>(null);
+  const [mobileCarouselIdx, setMobileCarouselIdx] = useState(0);
   const [activePanel, setActivePanel] = useState<"photos" | "library" | "enrich" | null>(null);
   const enrichJsonMut = useMutation({
     mutationFn: (json: string) => enrichJson({ data: { propertyId: id, json } }),
@@ -276,217 +279,12 @@ function PropertyDetail() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <Link
-            to="/properties"
-            className="-ml-1 mb-2 inline-flex items-center gap-1 rounded-md px-1 py-2 text-base text-muted-foreground hover:text-foreground sm:text-sm"
-          >
-            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> All properties
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold">
-              {p.hide_address ? "Property (address hidden)" : p.address}
-            </h1>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => updateMut.mutate({ favourite: !p.favourite })}
-              title={p.favourite ? "Unfavourite" : "Favourite"}
-            >
-              <Star className={`h-4 w-4 ${p.favourite ? "fill-amber-400 text-amber-400" : ""}`} />
-            </Button>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-nowrap sm:items-center sm:overflow-x-auto">
-            <Link to="/properties/$id/guide" params={{ id }}>
-              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Guide">
-                <GraduationCap className="h-4 w-4 sm:mr-2" />
-                <span className="sm:inline">Guide</span>
-              </Button>
-            </Link>
-            <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "before" }}>
-              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Prepare">
-                <ShieldCheck className="h-4 w-4 sm:mr-2" />
-                <span className="sm:inline">Prepare</span>
-              </Button>
-            </Link>
-            <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "capture" }}>
-              <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Capture">
-                <Camera className="h-4 w-4 sm:mr-2" />
-                <span className="sm:inline">Capture</span>
-              </Button>
-            </Link>
-            <TalkingPointsButton
-              guidance={analysis.negotiationGuidance}
-              negotiation={analysis.negotiation}
-              className="w-full sm:w-auto"
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
-            {p.baths && <Badge variant="outline">{p.baths} bath</Badge>}
-            {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
-            {p.epc_rate &&
-              (p.epc_data?.certificateUrl ? (
-                <a href={p.epc_data.certificateUrl} target="_blank" rel="noreferrer">
-                  <Badge variant="outline" className="cursor-pointer hover:bg-muted">
-                    EPC {p.epc_rate} <ExternalLink className="ml-1 h-3 w-3" />
-                  </Badge>
-                </a>
-              ) : (
-                <Badge variant="outline">EPC {p.epc_rate}</Badge>
-              ))}
-            {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
-            {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
-            {editingAsking ? (
-              <span className="inline-flex items-center gap-1">
-                <Input
-                  autoFocus
-                  type="number"
-                  min={1}
-                  step="1"
-                  value={askingDraft}
-                  onChange={(e) => setAskingDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const n = Number(askingDraft);
-                      if (n > 0) {
-                        updateMut.mutate({ asking_price_gbp: n });
-                        setEditingAsking(false);
-                      }
-                    } else if (e.key === "Escape") {
-                      setEditingAsking(false);
-                    }
-                  }}
-                  placeholder="Asking price (£)"
-                  className="h-7 w-32 text-sm"
-                />
-                <Button
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={!(Number(askingDraft) > 0)}
-                  onClick={() => {
-                    const n = Number(askingDraft);
-                    updateMut.mutate({ asking_price_gbp: n });
-                    setEditingAsking(false);
-                  }}
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setEditingAsking(false)}
-                >
-                  Cancel
-                </Button>
-              </span>
-            ) : p.asking_price_gbp > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setAskingDraft(String(p.asking_price_gbp));
-                  setEditingAsking(true);
-                }}
-                title="Click to edit asking price"
-              >
-                <Badge className="cursor-pointer hover:opacity-80">
-                  Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
-                </Badge>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setAskingDraft("");
-                  setEditingAsking(true);
-                }}
-                title="Asking price is missing — click to enter it"
-              >
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                >
-                  <AlertTriangle className="mr-1 h-3 w-3" /> Set asking price
-                </Badge>
-              </button>
-            )}
-            {p.article4_status === "inside" && (
-              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
-                Article 4 — inside
-              </Badge>
-            )}
-            {p.article4_status === "partial" && (
-              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
-                Article 4 — partial
-              </Badge>
-            )}
-            {!p.article4_status && p.pf_json?.propertyLight?.article4Status && (
-              <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
-                Article 4 — {String(p.pf_json.propertyLight.article4Status)}
-              </Badge>
-            )}
-            {p.postcode && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                disabled={article4Mut.isPending}
-                onClick={() => article4Mut.mutate(p.postcode)}
-                title="Check Article 4 status via UK Planning Data API"
-              >
-                {article4Mut.isPending ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <MapPin className="mr-1 h-3 w-3" />
-                )}
-                {p.article4_status ? "Re-check Article 4" : "Check Article 4"}
-              </Button>
-            )}
-            {p.source_link && (
-              <a
-                href={p.source_link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" /> View listing
-              </a>
-            )}
-          </div>
-          {analysis.riskFlags && analysis.riskFlags.length > 0 && (
-            <div className="mt-2">
-              <RiskChips flags={analysis.riskFlags as any} />
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
-            <SelectTrigger className="h-9 w-auto min-w-0 max-w-[33%] sm:max-w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {personas.map((pp) => (
-                <SelectItem key={pp.id} value={pp.id}>
-                  {pp.name} {pp.is_default ? "★" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="hide" className="text-xs whitespace-nowrap">
-              <EyeOff className="inline h-3 w-3" /> Redact
-            </Label>
-            <Switch
-              id="hide"
-              checked={p.hide_address}
-              onCheckedChange={(v) => {
-                updateMut.mutate({ hide_address: v });
-                toast.success(v ? "Address hidden" : "Address visible");
-              }}
-            />
-          </div>
+      <div className="mb-6">
+        {/* Row 1: Address + deal score inline */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="text-2xl font-bold">
+            {p.hide_address ? "Property (address hidden)" : p.address}
+          </h1>
           <div className="flex items-center gap-1.5">
             <div className="text-2xl font-bold leading-none text-primary">{analysis.overallScore}</div>
             <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -499,6 +297,217 @@ function PropertyDetail() {
             </div>
           </div>
         </div>
+
+        {/* Row 2: Star | Investor (centred) | Eye toggle (right) */}
+        <div className="mt-2 flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => updateMut.mutate({ favourite: !p.favourite })}
+            title={p.favourite ? "Unfavourite" : "Favourite"}
+            className="shrink-0"
+          >
+            <Star className={`h-4 w-4 ${p.favourite ? "fill-amber-400 text-amber-400" : ""}`} />
+          </Button>
+          <div className="flex flex-1 justify-center">
+            <Select value={persona.id} onValueChange={(v) => setPersonaId(v)}>
+              <SelectTrigger className="h-8 w-auto min-w-[120px] max-w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {personas.map((pp) => (
+                  <SelectItem key={pp.id} value={pp.id}>
+                    {pp.name} {pp.is_default ? "★" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            title={p.hide_address ? "Address hidden — click to reveal" : "Click to hide address"}
+            onClick={() => {
+              updateMut.mutate({ hide_address: !p.hide_address });
+              toast.success(!p.hide_address ? "Address hidden" : "Address visible");
+            }}
+          >
+            {p.hide_address
+              ? <EyeOff className="h-5 w-5 text-red-600" strokeWidth={2.5} />
+              : <Eye className="h-5 w-5 text-foreground" strokeWidth={2.5} />
+            }
+          </Button>
+        </div>
+
+        {/* Row 3: Action buttons */}
+        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-nowrap sm:items-center sm:overflow-x-auto">
+          <Link to="/properties/$id/guide" params={{ id }}>
+            <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Guide">
+              <GraduationCap className="h-4 w-4 sm:mr-2" />
+              <span className="sm:inline">Guide</span>
+            </Button>
+          </Link>
+          <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "before" }}>
+            <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Prepare">
+              <ShieldCheck className="h-4 w-4 sm:mr-2" />
+              <span className="sm:inline">Prepare</span>
+            </Button>
+          </Link>
+          <Link to="/properties/$id/viewing" params={{ id }} search={{ tab: "capture" }}>
+            <Button size="sm" variant="outline" className="w-full px-2 sm:w-auto sm:px-3" title="Capture">
+              <Camera className="h-4 w-4 sm:mr-2" />
+              <span className="sm:inline">Capture</span>
+            </Button>
+          </Link>
+          <TalkingPointsButton
+            guidance={analysis.negotiationGuidance}
+            negotiation={analysis.negotiation}
+            className="w-full sm:w-auto"
+          />
+        </div>
+
+        {/* Row 4: Badges */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {p.beds && <Badge variant="outline">{p.beds} bed</Badge>}
+          {p.baths && <Badge variant="outline">{p.baths} bath</Badge>}
+          {p.property_type && <Badge variant="outline">{p.property_type}</Badge>}
+          {p.epc_rate &&
+            (p.epc_data?.certificateUrl ? (
+              <a href={p.epc_data.certificateUrl} target="_blank" rel="noreferrer">
+                <Badge variant="outline" className="cursor-pointer hover:bg-muted">
+                  EPC {p.epc_rate} <ExternalLink className="ml-1 h-3 w-3" />
+                </Badge>
+              </a>
+            ) : (
+              <Badge variant="outline">EPC {p.epc_rate}</Badge>
+            ))}
+          {p.tenure && <Badge variant="outline">{p.tenure}</Badge>}
+          {p.area_sqm && <Badge variant="outline">{Math.round(p.area_sqm)} m²</Badge>}
+          {editingAsking ? (
+            <span className="inline-flex items-center gap-1">
+              <Input
+                autoFocus
+                type="number"
+                min={1}
+                step="1"
+                value={askingDraft}
+                onChange={(e) => setAskingDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const n = Number(askingDraft);
+                    if (n > 0) {
+                      updateMut.mutate({ asking_price_gbp: n });
+                      setEditingAsking(false);
+                    }
+                  } else if (e.key === "Escape") {
+                    setEditingAsking(false);
+                  }
+                }}
+                placeholder="Asking price (£)"
+                className="h-7 w-32 text-sm"
+              />
+              <Button
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={!(Number(askingDraft) > 0)}
+                onClick={() => {
+                  const n = Number(askingDraft);
+                  updateMut.mutate({ asking_price_gbp: n });
+                  setEditingAsking(false);
+                }}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setEditingAsking(false)}
+              >
+                Cancel
+              </Button>
+            </span>
+          ) : p.asking_price_gbp > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAskingDraft(String(p.asking_price_gbp));
+                setEditingAsking(true);
+              }}
+              title="Click to edit asking price"
+            >
+              <Badge className="cursor-pointer hover:opacity-80">
+                Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
+              </Badge>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setAskingDraft("");
+                setEditingAsking(true);
+              }}
+              title="Asking price is missing — click to enter it"
+            >
+              <Badge
+                variant="outline"
+                className="cursor-pointer border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+              >
+                <AlertTriangle className="mr-1 h-3 w-3" /> Set asking price
+              </Badge>
+            </button>
+          )}
+          {p.article4_status === "inside" && (
+            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+              Article 4 — inside
+            </Badge>
+          )}
+          {p.article4_status === "partial" && (
+            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+              Article 4 — partial
+            </Badge>
+          )}
+          {!p.article4_status && p.pf_json?.propertyLight?.article4Status && (
+            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+              Article 4 — {String(p.pf_json.propertyLight.article4Status)}
+            </Badge>
+          )}
+          {p.postcode && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              disabled={article4Mut.isPending}
+              onClick={() => article4Mut.mutate(p.postcode)}
+              title="Check Article 4 status via UK Planning Data API"
+            >
+              {article4Mut.isPending ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <MapPin className="mr-1 h-3 w-3" />
+              )}
+              {p.article4_status ? "Re-check Article 4" : "Check Article 4"}
+            </Button>
+          )}
+          {p.source_link && (
+            <a
+              href={p.source_link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" /> View listing
+            </a>
+          )}
+        </div>
+
+        {/* Row 5: Risk chips */}
+        {analysis.riskFlags && analysis.riskFlags.length > 0 && (
+          <div className="mt-2">
+            <RiskChips flags={analysis.riskFlags as any} />
+          </div>
+        )}
       </div>
 
       <OfferPlanCard
@@ -536,7 +545,64 @@ function PropertyDetail() {
           summary={`${heroImages.length} photo${heroImages.length === 1 ? "" : "s"}`}
           actions={<FeedbackWidget propertyId={id} sectionKey="photos" sectionLabel="Photos" />}
         >
-          <div className="-mx-6 -mt-4 overflow-hidden rounded-md sm:mx-0 sm:mt-0">
+          {/* Mobile carousel */}
+          <div className="-mx-6 -mt-4 sm:hidden">
+            <div className="relative overflow-hidden">
+              <button
+                className="block w-full"
+                onClick={() => setHeroOpenIndex(mobileCarouselIdx)}
+              >
+                <img
+                  src={heroImages[mobileCarouselIdx]}
+                  alt=""
+                  className="h-64 w-full object-cover"
+                />
+              </button>
+              {mobileCarouselIdx > 0 && (
+                <button
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-background/80 p-1.5 shadow animate-pulse"
+                  onClick={() => setMobileCarouselIdx((i) => i - 1)}
+                  aria-label="Previous photo"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              )}
+              {mobileCarouselIdx < heroImages.length - 1 && (
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-background/80 p-1.5 shadow animate-pulse"
+                  onClick={() => setMobileCarouselIdx((i) => i + 1)}
+                  aria-label="Next photo"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              )}
+              <div className="absolute bottom-1 right-2 rounded bg-background/70 px-1.5 py-0.5 text-[11px] text-foreground">
+                {mobileCarouselIdx + 1} / {heroImages.length}
+              </div>
+            </div>
+            {/* Thumbnail strip */}
+            <div className="flex gap-1.5 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
+              {heroImages.map((u, i) => (
+                <button
+                  key={i}
+                  onClick={() => setMobileCarouselIdx(i)}
+                  className={cn(
+                    "h-14 w-14 shrink-0 overflow-hidden rounded",
+                    i === mobileCarouselIdx
+                      ? "ring-2 ring-primary"
+                      : Math.abs(i - mobileCarouselIdx) === 1
+                        ? "ring-2 ring-muted-foreground/50"
+                        : "opacity-60",
+                  )}
+                >
+                  <img src={u} alt="" className="h-full w-full object-cover" loading="lazy" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Desktop grid */}
+          <div className="-mx-6 -mt-4 hidden overflow-hidden rounded-md sm:mx-0 sm:mt-0 sm:block">
             <div className="grid grid-cols-4 gap-1">
               <button
                 className="col-span-4 sm:col-span-2 sm:row-span-2"

@@ -3,6 +3,7 @@ import { Home, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { fmtGBP } from "@/lib/format";
 
 export interface PropertyCardData {
@@ -75,9 +76,36 @@ export function PropertyGridCard({
         </div>
         <div className="mt-auto flex items-center justify-between gap-1">
           <span className="text-sm font-medium">{fmtGBP(p.asking_price_gbp)}</span>
-          {best && (
+          {a?.negotiationGuidance?.targetOffer > 0 ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="rounded px-1.5 py-0.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  Target {fmtGBP(a.negotiationGuidance.targetOffer)}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-3" align="center" side="top">
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Opening bid</span>
+                    <span className="font-medium">{fmtGBP(a.negotiationGuidance.openingOffer)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t pt-1.5">
+                    <span className="font-medium">Target offer</span>
+                    <span className="font-bold text-primary">{fmtGBP(a.negotiationGuidance.targetOffer)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Walk-away ceiling</span>
+                    <span className="font-medium text-amber-600">{fmtGBP(a.negotiationGuidance.walkAwayOffer)}</span>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : best ? (
             <span className="text-xs text-muted-foreground">{best.name}</span>
-          )}
+          ) : null}
           {p.source_link && (
             <a href={p.source_link} target="_blank" rel="noreferrer" className="ml-auto text-muted-foreground hover:text-foreground">
               <ExternalLink className="h-3.5 w-3.5" />

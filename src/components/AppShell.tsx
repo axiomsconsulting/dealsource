@@ -281,28 +281,40 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       </header>
 
       {/* ── Mobile floating overlay (hidden on sm+) ────────────────────────
-          Transparent background row; fades to near-invisible while scrolling. */}
+          Three-section row: back · logo (centre) · profile + burger.
+          Fades to near-invisible while the page is being scrolled. */}
       <div
         className={cn(
-          "fixed left-0 right-0 top-0 z-40 flex items-center justify-between px-3 pb-2 sm:hidden",
+          "fixed left-0 right-0 top-0 z-40 flex items-center gap-2 px-3 pb-2 sm:hidden",
           "pt-[max(0.75rem,env(safe-area-inset-top))]",
           "transition-opacity duration-500",
           scrolling ? "opacity-[0.12]" : "opacity-100",
         )}
       >
-        {/* Round back button — left */}
+        {/* Left — back button */}
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90 hover:text-background"
+          className="shrink-0 rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90 hover:text-background"
           onClick={() => window.history.back()}
           aria-label="Go back"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
 
-        {/* Profile avatar + burger menu — right */}
-        <div className="flex items-center gap-2">
+        {/* Centre — logo */}
+        <div className="flex flex-1 justify-center">
+          <Link to="/welcome">
+            <img
+              src="/omnispace-logo.png"
+              alt="Deal Negotiator — Omnispace Estates"
+              className="h-8 w-auto"
+            />
+          </Link>
+        </div>
+
+        {/* Right — profile avatar + burger menu */}
+        <div className="flex shrink-0 items-center gap-2">
           <Link
             to="/profile"
             aria-label="Profile"
@@ -335,21 +347,12 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       </div>
 
       {/* ── Page content ───────────────────────────────────────────────────── */}
-      <main className="container mx-auto flex-1 px-3 pb-5 sm:px-6 sm:pt-5">
-        {/* Mobile: logo inline at top, pushed below the fixed floating overlay */}
-        <div
-          className="flex justify-center pb-5 sm:hidden"
-          style={{ paddingTop: "max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem))" }}
-        >
-          <Link to="/welcome">
-            <img
-              src="/omnispace-logo.png"
-              alt="Deal Negotiator — Omnispace Estates"
-              className="h-10 w-auto"
-            />
-          </Link>
-        </div>
-
+      <main
+        className={cn(
+          "container mx-auto flex-1 px-3 pb-5 sm:px-6 sm:pt-5",
+          "pt-[max(3.75rem,calc(env(safe-area-inset-top)+3rem))] sm:pt-5",
+        )}
+      >
         {title && <h1 className="mb-6 text-2xl font-bold tracking-tight">{title}</h1>}
         {children}
       </main>

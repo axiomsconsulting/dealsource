@@ -383,36 +383,44 @@ export function RefurbEpcPanel({
               Refresh EPC
             </Button>
           )}
-          <Select value={tier} onValueChange={(v) => setTier(v as RefurbTier)}>
-            <SelectTrigger className="h-10 w-[140px] sm:h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="heavy">Heavy</SelectItem>
-              <SelectItem value="full_gut">Full</SelectItem>
-            </SelectContent>
-          </Select>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                size="icon"
-                variant="outline"
-                title="EPC register settings"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-96" align="end">
-              <EpcCredentialsForm />
-            </PopoverContent>
-          </Popover>
           <span className="text-xs text-muted-foreground">
             {saveMut.isPending ? "Saving…" : "Saved"}
           </span>
         </div>
       </div>
+
+      {/* Refurb tier selector — full width on mobile, matches filter pill style */}
+      <ToggleGroup
+        type="single"
+        value={tier}
+        onValueChange={(v) => v && setTier(v as RefurbTier)}
+        className="w-full rounded-md border sm:w-auto"
+      >
+        <ToggleGroupItem
+          value="light"
+          className="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground sm:flex-none"
+        >
+          Light
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="medium"
+          className="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground sm:flex-none"
+        >
+          Medium
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="heavy"
+          className="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground sm:flex-none"
+        >
+          Heavy
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="full_gut"
+          className="flex-1 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground sm:flex-none"
+        >
+          Full
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       {condition?.summary && (
         <div className="flex items-start gap-2 rounded-md border bg-muted/20 p-2.5 text-sm">
@@ -424,18 +432,9 @@ export function RefurbEpcPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 text-center">
         <Stat label="Selected" v={fmtGBP(live.subtotal)} />
-        <Stat label="Contingency" v={fmtGBP(live.contingency)} />
-        <Stat label="TOTAL" v={fmtGBP(live.total)} highlight />
-        <Stat
-          label="Lines"
-          v={`${live.rows.filter((r) => r.c.include).length}/${live.rows.length}`}
-        />
-      </div>
-      <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
-        <p className="text-sm font-medium">Total refurb cost (items + 10% contingency)</p>
-        <p className="text-lg font-bold text-primary">{fmtGBP(live.total)}</p>
+        <Stat label="Contingency (+10%)" v={fmtGBP(live.contingency)} />
       </div>
 
       <div className="space-y-2">
@@ -519,6 +518,11 @@ export function RefurbEpcPanel({
         })}
       </div>
 
+      <div className="flex items-center justify-between rounded-md border border-primary bg-primary/5 p-3">
+        <p className="text-sm font-medium">Total refurb cost (items + 10% contingency)</p>
+        <p className="text-lg font-bold text-primary">{fmtGBP(live.total)}</p>
+      </div>
+
       {/* ---- EPC section ---- */}
       <div className="space-y-3 border-t pt-3">
         {epc?.source === "register" && epc.autoMatchConfidence === "best_guess" && (
@@ -576,10 +580,22 @@ export function RefurbEpcPanel({
                   ? `Displayed band: ${listingRate ?? registerRate ?? "—"}`
                   : "No EPC data found yet."}
               </span>
-              <Button size="sm" variant="ghost" onClick={() => setManualOpen(true)}>
-                <PencilLine className="mr-1 h-3 w-3" />{" "}
-                {epc ? "Edit EPC manually" : "Enter EPC manually"}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setManualOpen(true)}>
+                  <PencilLine className="mr-1 h-3 w-3" />{" "}
+                  {epc ? "Edit EPC manually" : "Enter EPC manually"}
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="icon" variant="ghost" title="EPC register settings" className="h-8 w-8">
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-96" align="end">
+                    <EpcCredentialsForm />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           ) : (
             <div className="flex flex-wrap items-end gap-2">
