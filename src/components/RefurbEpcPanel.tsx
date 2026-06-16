@@ -15,10 +15,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
 import {
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   Flame,
   KeyRound,
   Loader2,
@@ -204,14 +203,6 @@ export function RefurbEpcPanel({
     | Record<string, LineChoice>
     | undefined;
   const [choices, setChoices] = useState<Record<string, LineChoice>>(() => stored ?? {});
-  // Which refurb line cards are collapsed to just title + cost.
-  const [collapsedRows, setCollapsedRows] = useState<Set<number>>(new Set());
-  const toggleRowCollapsed = (i: number) =>
-    setCollapsedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
-      return next;
-    });
   // Severity hints from a property-viewing AI analysis (e.g. "damp" noted as severe) — applied
   // once to set a sensible default tier for the matching line, without overriding anything the
   // user has already chosen.
@@ -367,22 +358,8 @@ export function RefurbEpcPanel({
             ) : (
               <Sparkles className="mr-2 h-4 w-4" />
             )}
-            Photos → Refurb
+            AI Refurb
           </Button>
-          {credQ.isSuccess && configured && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={mut.isPending}
-              onClick={() => {
-                setCandidates(null);
-                mut.mutate();
-              }}
-            >
-              <RefreshCw className={`mr-1 h-3 w-3 ${mut.isPending ? "animate-spin" : ""}`} />
-              Refresh EPC
-            </Button>
-          )}
           <span className="text-xs text-muted-foreground">
             {saveMut.isPending ? "Saving…" : "Saved"}
           </span>
@@ -439,81 +416,65 @@ export function RefurbEpcPanel({
 
       <div className="space-y-2">
         {live.rows.map(({ l, k, c, value }, i) => {
-          const collapsed = collapsedRows.has(i);
+          // Cycle order: excluded(−) → low(L) → mid(M) → high(H) → excluded
+          const cycleIdx = !c.include ? 0 : c.tier === "low" ? 1 : c.tier === "high" ? 3 : 2;
+          const CYCLE = [
+            { label: "−", cls: "bg-muted text-muted-foreground border-border" },
+            { label: "L", cls: "bg-sky-50 text-sky-700 border-sky-300" },
+            { label: "M", cls: "bg-amber-50 text-amber-700 border-amber-300" },
+            { label: "H", cls: "bg-red-50 text-red-700 border-red-300" },
+          ] as const;
+          const cycleNext = () => {
+            const nextIdx = (cycleIdx + 1) % 4;
+            if (nextIdx === 0) {
+              setChoices({ ...choices, [k]: { ...c, include: false } });
+            } else {
+              const tier = (["low", "low", "mid", "high"] as const)[nextIdx];
+              setChoices({ ...choices, [k]: { ...c, include: true, tier } });
+            }
+          };
+          const badge = CYCLE[cycleIdx];
           return (
-            <div
+            <CollapsibleCard
               key={i}
-              className={`rounded-md border p-2.5 ${!c.include ? "opacity-40" : ""}`}
-            >
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={c.include}
-                  onCheckedChange={(b) => setChoices({ ...choices, [k]: { ...c, include: !!b } })}
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleRowCollapsed(i)}
-                  className="min-w-0 flex-1 truncate text-left font-medium"
-                  title={l.label}
-                >
-                  {l.label}
-                </button>
-                {!collapsed && (
-                  <ToggleGroup
-                    type="single"
-                    size="sm"
-                    value={c.tier}
-                    onValueChange={(v) =>
-                      v && setChoices({ ...choices, [k]: { ...c, tier: v as any } })
-                    }
+              variant="plain"
+              defaultOpen={false}
+              title={l.label}
+              summary={c.include ? fmtGBP(value) : "Excluded"}
+              className={!c.include ? "opacity-50" : ""}
+              actions={
+                <div className="flex items-center gap-2">
+                  {c.include && (
+                    <span className="text-sm font-semibold">{fmtGBP(value)}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={cycleNext}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border text-xs font-bold transition ${badge.cls}`}
+                    title="Click to cycle: Excluded → Low → Mid → High → Excluded"
                   >
-                    <ToggleGroupItem value="low" className="h-8 px-2 text-xs">
-                      L
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="mid" className="h-8 px-2 text-xs">
-                      M
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="high" className="h-8 px-2 text-xs">
-                      H
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                )}
-                <span className="w-20 shrink-0 text-right font-semibold">
-                  {c.include ? fmtGBP(value) : "—"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleRowCollapsed(i)}
-                  className="shrink-0 text-muted-foreground"
-                  aria-label={collapsed ? "Expand" : "Collapse"}
-                >
-                  {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                </button>
-              </div>
-              {!collapsed && (
-                <div className="mt-1.5 space-y-1">
-                  <div className="text-[10px] text-muted-foreground">
-                    {l.qty} {l.unit} · @ {fmtGBP(l.rate)} · L {fmtGBP(l.low)} · M {fmtGBP(l.mid)} · H {fmtGBP(l.high)}
-                  </div>
-                  {l.note && <div className="w-full text-xs text-muted-foreground">{l.note}</div>}
-                  <div className="flex gap-1">
-                    {l.source === "ai" && (
-                      <Badge variant="outline" className="h-4 text-[9px]">
-                        AI
-                      </Badge>
-                    )}
-                    {l.source === "epc" && (
-                      <Badge
-                        variant="outline"
-                        className="h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700"
-                      >
-                        EPC
-                      </Badge>
-                    )}
-                  </div>
+                    {badge.label}
+                  </button>
                 </div>
-              )}
-            </div>
+              }
+            >
+              <div className="space-y-1">
+                <div className="text-[10px] text-muted-foreground">
+                  {l.qty} {l.unit} · @ {fmtGBP(l.rate)} · L {fmtGBP(l.low)} · M {fmtGBP(l.mid)} · H {fmtGBP(l.high)}
+                </div>
+                {l.note && <div className="text-xs text-muted-foreground">{l.note}</div>}
+                <div className="flex gap-1">
+                  {l.source === "ai" && (
+                    <Badge variant="outline" className="h-4 text-[9px]">AI</Badge>
+                  )}
+                  {l.source === "epc" && (
+                    <Badge variant="outline" className="h-4 border-sky-300 bg-sky-50 text-[9px] text-sky-700">
+                      EPC
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CollapsibleCard>
           );
         })}
       </div>
@@ -585,6 +546,18 @@ export function RefurbEpcPanel({
                   <PencilLine className="mr-1 h-3 w-3" />{" "}
                   {epc ? "Edit EPC manually" : "Enter EPC manually"}
                 </Button>
+                {credQ.isSuccess && configured && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    title="Refresh EPC from register"
+                    disabled={mut.isPending}
+                    onClick={() => { setCandidates(null); mut.mutate(); }}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${mut.isPending ? "animate-spin" : ""}`} />
+                  </Button>
+                )}
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button size="icon" variant="ghost" title="EPC register settings" className="h-8 w-8">

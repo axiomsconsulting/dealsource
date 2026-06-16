@@ -2,7 +2,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { useEffect, useRef, useState } from "react";
-import { PropertyPopupCard, type PropertyCardData } from "./PropertyCard";
+import { PropertyGridCard, type PropertyCardData } from "./PropertyCard";
 
 // Fix Leaflet's broken default icon paths in Vite/webpack bundles
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -251,8 +251,10 @@ export function PropertiesMap({ rows }: { rows: PropertyCardData[] }) {
             position={[ll.lat, ll.lng]}
             icon={makeDivIcon(row.a?.overallScore ?? null)}
           >
-            <Popup>
-              <PropertyPopupCard data={row} />
+            <Popup minWidth={200} maxWidth={220}>
+              <div className="w-[200px]">
+                <PropertyGridCard data={row} />
+              </div>
             </Popup>
           </Marker>
         ))}

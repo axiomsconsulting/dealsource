@@ -97,6 +97,7 @@ export const createOrUpdateDealSheet = createServerFn({ method: "POST" })
           lastSold: pfLight.lastSold ?? null,
           daysOnMarket: pfLight.daysOnMarket ?? pfLight.totalDays ?? null,
         },
+        image_urls: (prop as any).image_urls ?? [],
         refurb_estimate:
           data.include_refurb_breakdown !== false ? ((prop as any).refurb_estimate ?? null) : null,
         market_data: marketData,
@@ -192,7 +193,7 @@ export const getPublicDealSheet = createServerFn({ method: "GET" })
       .eq("is_public", true)
       .maybeSingle();
     if (error || !row) return null;
-    // signed urls for any photos in snapshot — hero photo first, if present
+    // signed urls for any uploaded photos in snapshot — hero photo first, if present
     const allIds: string[] = (row.snapshot as any)?.photoIds ?? [];
     const heroId: string | null = (row as any).hero_photo_id ?? null;
     const orderedIds =
@@ -220,6 +221,16 @@ export const getPublicDealSheet = createServerFn({ method: "GET" })
           };
         }),
       );
+    }
+    // Fall back to listing image_urls from the snapshot when no uploaded photos exist
+    if (photos.length === 0) {
+      const listingUrls: string[] = (row.snapshot as any)?.property?.image_urls ?? [];
+      photos = listingUrls.slice(0, 12).map((url, i) => ({
+        id: `listing-${i}`,
+        url,
+        is_exterior: i === 0,
+        is_floor_plan: false,
+      }));
     }
     return { ...row, photos };
   });

@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { HardHat, Search } from "lucide-react";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
@@ -67,19 +65,16 @@ export function SurveyStrategyPanel({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["property", property.id] }),
   });
 
-  const toggle = (key: string, active: boolean) => {
+  const cycle = (key: string, currentActive: boolean, currentSev: SurveySeverity) => {
+    let nextActive: boolean;
+    let nextSev: SurveySeverity;
+    if (!currentActive) { nextActive = true; nextSev = "low"; }
+    else if (currentSev === "low") { nextActive = true; nextSev = "medium"; }
+    else if (currentSev === "medium") { nextActive = true; nextSev = "high"; }
+    else { nextActive = false; nextSev = "medium"; }
     const next: SurveyFindings = {
       ...local,
-      [key]: { ...(local[key] ?? { severity: "medium" as SurveySeverity }), active },
-    };
-    setLocal(next);
-    onLiveChange?.(next);
-    saveMut.mutate(next);
-  };
-  const setSeverity = (key: string, severity: SurveySeverity) => {
-    const next: SurveyFindings = {
-      ...local,
-      [key]: { ...(local[key] ?? { active: true }), active: true, severity },
+      [key]: { ...(local[key] ?? {}), active: nextActive, severity: nextSev },
     };
     setLocal(next);
     onLiveChange?.(next);
@@ -138,34 +133,27 @@ export function SurveyStrategyPanel({
             className={active ? "border-primary bg-primary/5" : ""}
             actions={
               <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={active}
-                  onCheckedChange={(b) => toggle(issue.key, !!b)}
-                  title="Confirmed by survey"
-                />
-                <ToggleGroup
-                  type="single"
-                  size="sm"
-                  value={severity}
-                  onValueChange={(v) => v && setSeverity(issue.key, v as SurveySeverity)}
-                >
-                  {(["low", "medium", "high"] as SurveySeverity[]).map((s) => (
-                    <ToggleGroupItem
-                      key={s}
-                      value={s}
-                      className="h-9 px-2.5 text-xs sm:h-6 sm:px-2 sm:text-[10px] data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >
-                      {s[0].toUpperCase()}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
                 {displayGbp > 0 && (
-                  <span
-                    className={`text-sm font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}
-                  >
+                  <span className={`text-sm font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>
                     −{fmtGBP(displayGbp)}
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => cycle(issue.key, active, severity)}
+                  title="Click to cycle: None → Low → Medium → High → None"
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border text-xs font-bold transition ${
+                    !active
+                      ? "border-border bg-muted text-muted-foreground"
+                      : severity === "low"
+                        ? "border-sky-300 bg-sky-50 text-sky-700"
+                        : severity === "medium"
+                          ? "border-amber-300 bg-amber-50 text-amber-700"
+                          : "border-red-300 bg-red-50 text-red-700"
+                  }`}
+                >
+                  {!active ? "−" : severity === "low" ? "L" : severity === "medium" ? "M" : "H"}
+                </button>
               </div>
             }
           >

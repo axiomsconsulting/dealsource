@@ -1171,6 +1171,12 @@ function PropertyDetail() {
               {p.pf_json.propertyLight?.multipleBack != null && (
                 <Stat label="Back-on-market" v={String(p.pf_json.propertyLight.multipleBack)} />
               )}
+              {(p.pf_json.propertyLight?.daysOnMarket ?? p.pf_json.propertyLight?.totalDays) != null && (
+                <Stat
+                  label="Days on market"
+                  v={`${p.pf_json.propertyLight?.daysOnMarket ?? p.pf_json.propertyLight?.totalDays} days`}
+                />
+              )}
             </div>
             <PriceHistoryTimeline property={p} />
           </CollapsibleCard>

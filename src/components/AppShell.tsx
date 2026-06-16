@@ -33,6 +33,7 @@ const navLinkActiveProps = {
 
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const router = useRouter();
+  const isHome = router.state.location.pathname === "/welcome";
   const { mode, toggle: toggleColorMode } = useColorMode();
   const { selected, toggle, setAll } = useStrategyFilter();
   const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
@@ -249,7 +250,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px]">
+              <SheetContent side="right" className="w-[300px] pt-[max(1.25rem,env(safe-area-inset-top))]">
                 <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
                 {sheetNav}
               </SheetContent>
@@ -291,16 +292,20 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           scrolling ? "opacity-[0.12]" : "opacity-100",
         )}
       >
-        {/* Left — back button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90 hover:text-background"
-          onClick={() => window.history.back()}
-          aria-label="Go back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        {/* Left — back button (hidden on home screen) */}
+        {!isHome ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-full bg-foreground text-background shadow-sm hover:bg-foreground/90 hover:text-background"
+            onClick={() => window.history.back()}
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        ) : (
+          <div className="h-9 w-9 shrink-0" />
+        )}
 
         {/* Centre — logo */}
         <div className="flex flex-1 justify-center">

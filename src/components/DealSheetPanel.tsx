@@ -70,7 +70,7 @@ export function DealSheetPanel({
         </p>
         <Toggle
           id="hideAddress"
-          label="Hide exact address (show area only)"
+          label="Hide exact address"
           v={hideAddress}
           on={setHideAddress}
         />
