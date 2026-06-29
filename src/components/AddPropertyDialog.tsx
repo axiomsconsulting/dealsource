@@ -12,7 +12,9 @@ import { parsePropertyFilterCsv } from "@/lib/parsers/csv";
 import { parsePropertyFilterJson, type ParsedJsonProperty } from "@/lib/parsers/json";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ChevronDown, ChevronUp, AlertCircle, Image as ImageIcon } from "lucide-react";
+import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ChevronDown, ChevronUp, AlertCircle, Image as ImageIcon, Search } from "lucide-react";
+import { SearchIngestTab } from "@/components/SearchIngestTab";
+import { cleanListingUrl } from "@/lib/listing-url";
 
 /** Splits concatenated JSON objects/array text into individual raw objects — same tolerant
  *  parsing `jsonMut` uses for ingestion, reused here so the live preview matches what submit does. */
@@ -49,7 +51,7 @@ function previewJson(text: string): { item: ParsedJsonProperty; extraKeys: strin
 
 /** Modal "Add property" flow — CSV / JSON / URL / Manual, in one place so it can be triggered
  *  from the nav and from the properties page without navigating away from what you're doing. */
-export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "manual" }) {
+export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "search" | "manual" }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const qc = useQueryClient();
@@ -59,6 +61,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
   const [csvText, setCsvText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [listingUrl, setListingUrl] = useState("");
+  const [listingUrlError, setListingUrlError] = useState<string | null>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
   const jsonTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,7 +139,18 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
   });
 
   const urlMut = useMutation({
-    mutationFn: (url: string) => ingestUrl({ data: { url } }),
+    mutationFn: (url: string) => {
+      // Client-side validation BEFORE the server call so we don't spend a Firecrawl
+      // request on a malformed link.
+      const cleaned = cleanListingUrl(url);
+      if (cleaned.kind === "search") {
+        throw new Error("That's a search results URL. Switch to the Search tab to pick properties from it.");
+      }
+      if (cleaned.kind !== "property") {
+        throw new Error("Open the listing on the property site and paste the address-bar URL.");
+      }
+      return ingestUrl({ data: { url: cleaned.url } });
+    },
     onSuccess: (r) => {
       toast.success(`Ingested "${r.property.address}" from listing`);
       qc.invalidateQueries({ queryKey: ["properties"] });
@@ -153,6 +167,18 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const validateListingUrl = (v: string) => {
+    setListingUrl(v);
+    if (!v.trim()) { setListingUrlError(null); return; }
+    try {
+      const c = cleanListingUrl(v);
+      if (c.host === "unknown") setListingUrlError("Must be a Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation link.");
+      else if (c.kind === "search") setListingUrlError("That's a search results URL — use the Search tab.");
+      else if (c.kind !== "property") setListingUrlError("That doesn't look like a single property listing URL.");
+      else setListingUrlError(null);
+    } catch (e: any) { setListingUrlError(e.message); }
+  };
 
   const onCsvFile = async (f: File) => {
     const text = await f.text();
@@ -185,10 +211,11 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
           Each property is analysed against your active investment profile automatically.
         </p>
         <Tabs defaultValue={defaultTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="csv"><FileSpreadsheet className="mr-2 h-4 w-4" />CSV</TabsTrigger>
             <TabsTrigger value="json"><FileJson className="mr-2 h-4 w-4" />JSON</TabsTrigger>
             <TabsTrigger value="url"><Link2 className="mr-2 h-4 w-4" />URL</TabsTrigger>
+            <TabsTrigger value="search"><Search className="mr-2 h-4 w-4" />Search</TabsTrigger>
             <TabsTrigger value="manual"><ClipboardPaste className="mr-2 h-4 w-4" />Manual</TabsTrigger>
           </TabsList>
 
@@ -264,13 +291,23 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
               <Input
                 placeholder="https://www.rightmove.co.uk/properties/…"
                 value={listingUrl}
-                onChange={(e) => setListingUrl(e.target.value)}
+                onChange={(e) => validateListingUrl(e.target.value)}
               />
-              <Button className="w-full sm:w-auto" disabled={!listingUrl || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
+              <Button className="w-full sm:w-auto" disabled={!listingUrl || !!listingUrlError || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
                 {urlMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
                 Ingest from URL
               </Button>
             </div>
+            {listingUrlError && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{listingUrlError}</span>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="search">
+            <SearchIngestTab onDone={() => setOpen(false)} />
           </TabsContent>
 
           <TabsContent value="manual" className="space-y-3 pt-4">
