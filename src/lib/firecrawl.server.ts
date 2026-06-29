@@ -4,6 +4,10 @@ export interface ScrapedListing {
   address: string | null;
   postcode: string | null;
   asking_price_gbp: number | null;
+  /** Rightmove's price label ("Guide Price", "Offers Over", "Offers in Region of", "POA",
+   *  "Auction Guide", …). Lifted from PAGE_MODEL.propertyData.prices.displayPriceQualifier so
+   *  the UI can show the seller's real pricing posture, not just a plain figure. */
+  price_qualifier: string | null;
   property_type: string | null;
   beds: number | null;
   baths: number | null;
@@ -140,6 +144,7 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
     // styled element rather than plain text) — PAGE_MODEL.propertyData.prices.primaryPrice is the
     // ground-truth figure straight from the page's own data, so it takes priority here.
     asking_price_gbp: pm?.asking_price_gbp ?? numOrNull(j.price ?? j.asking_price ?? j.asking_price_gbp),
+    price_qualifier: pm?.price_qualifier ?? null,
     property_type: (j.property_type ?? j.type) ? String(j.property_type ?? j.type) : null,
     beds: numOrNull(j.bedrooms ?? j.beds),
     baths: numOrNull(j.bathrooms ?? j.baths),
@@ -153,23 +158,49 @@ export async function scrapeListing(url: string): Promise<ScrapedListing> {
   };
 }
 
-/** Extracts the `window.PAGE_MODEL = {...}` JSON blob Rightmove embeds in every property page's
- *  source — this is the same structured data the page's own React app renders from, so it
- *  carries the full display address, exact price and "Reduced on dd/mm/yyyy" listing-history
- *  reason without any of the markdown/LLM-extraction guesswork. Returns null for non-Rightmove
- *  pages or if Firecrawl didn't return raw HTML. */
+/** Extracts Rightmove's embedded page-state blob — historically `window.PAGE_MODEL = {...}`,
+ *  but now served as `window.__PAGE_MODEL = { data: "<flight-encoded JSON>" }` where `data` is
+ *  a stringified array using numeric reference pointers (React Flight-style). This is the same
+ *  structured data the page's own React app renders from, so it carries the full display
+ *  address, exact price, price qualifier ("Guide Price" / "Offers Over" / …) and the
+ *  "Reduced on dd/mm/yyyy" listing-history reason without any markdown/LLM-extraction guesswork.
+ *  Returns a "logical" propertyData object (refs resolved) regardless of which format the
+ *  page used. Null for non-Rightmove pages or if no embedded blob was returned. */
 function extractRightmovePageModel(html: string | null | undefined): any | null {
   if (!html) return null;
-  const marker = "window.PAGE_MODEL";
-  const markerIdx = html.indexOf(marker);
-  if (markerIdx === -1) return null;
-  const eqIdx = html.indexOf("=", markerIdx);
-  const openIdx = html.indexOf("{", eqIdx);
-  if (eqIdx === -1 || openIdx === -1) return null;
+  // Try the new __PAGE_MODEL first (Flight-encoded), then legacy PAGE_MODEL.
+  const candidates = ["window.__PAGE_MODEL", "window.PAGE_MODEL"];
+  for (const marker of candidates) {
+    const idx = html.indexOf(marker);
+    if (idx === -1) continue;
+    const eqIdx = html.indexOf("=", idx);
+    const openIdx = html.indexOf("{", eqIdx);
+    if (eqIdx === -1 || openIdx === -1) continue;
+    const raw = sliceBalancedObject(html, openIdx);
+    if (!raw) continue;
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch { continue; }
+    // New flight format: { data: "[...]" } with numeric references.
+    if (parsed && typeof parsed.data === "string") {
+      try {
+        const arr = JSON.parse(parsed.data);
+        if (Array.isArray(arr) && arr.length && typeof arr[0] === "object") {
+          return resolveFlightRefs(arr, arr[0]);
+        }
+      } catch {/* fall through */}
+    }
+    // Legacy format: already a plain object with propertyData.
+    if (parsed && parsed.propertyData) return parsed;
+  }
+  return null;
+}
 
+/** Reads one brace-balanced JS object literal starting at `start` (must point at `{`), respecting
+ *  string boundaries and escapes. Returns the raw substring or null on EOF. */
+function sliceBalancedObject(src: string, start: number): string | null {
   let depth = 0, inString = false, quote = "", escaped = false;
-  for (let i = openIdx; i < html.length; i++) {
-    const c = html[i];
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
     if (inString) {
       if (escaped) escaped = false;
       else if (c === "\\") escaped = true;
@@ -180,12 +211,29 @@ function extractRightmovePageModel(html: string | null | undefined): any | null 
     if (c === "{") depth++;
     else if (c === "}") {
       depth--;
-      if (depth === 0) {
-        try { return JSON.parse(html.slice(openIdx, i + 1)); } catch { return null; }
-      }
+      if (depth === 0) return src.slice(start, i + 1);
     }
   }
   return null;
+}
+
+/** Walks Rightmove's flight-encoded array. Each numeric value in an object/array slot is a
+ *  pointer into the array (`data[n]`); strings/booleans/null are literal. We only resolve the
+ *  small subtree we need (prices, address, listingHistory, tenure) so we don't have to think
+ *  about whether `data[bedrooms]` is a literal `3` or an index — bedrooms/baths come from
+ *  Firecrawl's LLM extraction. Depth-capped to dodge cycles. */
+function resolveFlightRefs(arr: any[], node: any, depth = 0): any {
+  if (depth > 25) return null;
+  if (typeof node === "number" && Number.isInteger(node) && node >= 0 && node < arr.length) {
+    return resolveFlightRefs(arr, arr[node], depth + 1);
+  }
+  if (Array.isArray(node)) return node.map((v) => resolveFlightRefs(arr, v, depth + 1));
+  if (node && typeof node === "object") {
+    const out: any = {};
+    for (const k of Object.keys(node)) out[k] = resolveFlightRefs(arr, (node as any)[k], depth + 1);
+    return out;
+  }
+  return node;
 }
 
 const FULL_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
@@ -194,6 +242,7 @@ function deriveFromRightmovePageModel(pageModel: any): {
   address: string | null;
   postcode: string | null;
   asking_price_gbp: number | null;
+  price_qualifier: string | null;
   price_reduced_date: string | null;
 } | null {
   const pd = pageModel?.propertyData;
@@ -209,6 +258,9 @@ function deriveFromRightmovePageModel(pageModel: any): {
   const priceStr = pd.prices?.primaryPrice ?? pd.prices?.displayPrice;
   const asking_price_gbp = priceStr != null ? numOrNull(String(priceStr).replace(/[^0-9.]/g, "")) : null;
 
+  const rawQualifier = pd.prices?.displayPriceQualifier ?? pd.prices?.priceQualifier ?? null;
+  const price_qualifier = rawQualifier && String(rawQualifier).trim() ? String(rawQualifier).trim() : null;
+
   let price_reduced_date: string | null = null;
   const reason = pageModel?.propertyData?.listingHistory?.listingUpdateReason;
   if (typeof reason === "string" && /reduced/i.test(reason)) {
@@ -216,7 +268,7 @@ function deriveFromRightmovePageModel(pageModel: any): {
     if (m) price_reduced_date = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
   }
 
-  return { address, postcode, asking_price_gbp, price_reduced_date };
+  return { address, postcode, asking_price_gbp, price_qualifier, price_reduced_date };
 }
 
 function numOrNull(v: any): number | null {
