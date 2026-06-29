@@ -23,7 +23,6 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { ArrowLeft, UserCog } from "lucide-react";
 import { getUserInsights, startImpersonation } from "@/lib/admin.functions";
-import { switchToUser } from "@/lib/impersonation";
 
 export const Route = createFileRoute("/_authenticated/admin/users/$id")({
   head: () => ({ meta: [{ title: "Admin — User details" }] }),
@@ -59,10 +58,17 @@ function AdminUserDetailPage() {
   const impersonateMut = useMutation({
     mutationFn: async () => {
       const { tokenHash } = await startImpersonationFn({ data: { userId: id } });
-      await switchToUser(tokenHash);
+      // Open in a brand-new tab — the storage shim in that tab isolates the
+      // Supabase session to sessionStorage, so this admin tab (and any other
+      // admin tabs) stays signed in as the admin. Multiple admins can each
+      // impersonate independently this way.
+      const w = window.open(`/impersonate-as/${tokenHash}`, "_blank", "noopener");
+      if (!w) {
+        toast.error("Pop-up blocked — allow pop-ups for this site to impersonate.");
+      }
     },
     onMutate: () => setSwitching(true),
-    // switchToUser triggers a full reload to /properties on success.
+    onSuccess: () => setSwitching(false),
     onError: (e: Error) => {
       toast.error(e.message || "Couldn't switch to this user");
       setSwitching(false);
@@ -105,7 +111,7 @@ function AdminUserDetailPage() {
           {isSuperAdmin && profile.role !== "super_admin" && (
             <Button onClick={() => impersonateMut.mutate()} disabled={switching}>
               <UserCog className="mr-2 h-4 w-4" />
-              {switching ? "Switching…" : "View as this user"}
+              {switching ? "Opening…" : "View as this user (new tab)"}
             </Button>
           )}
         </div>
