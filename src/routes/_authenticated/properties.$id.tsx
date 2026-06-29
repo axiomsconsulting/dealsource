@@ -32,6 +32,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
+import { ShareMenu } from "@/components/ShareMenu";
 import { RefurbEpcPanel } from "@/components/RefurbEpcPanel";
 import { RiskChips } from "@/components/RiskChips";
 import { DealScoreInfo } from "@/components/DealScoreInfo";
@@ -382,6 +383,13 @@ function PropertyDetail() {
               : <Eye className="h-5 w-5 text-foreground" strokeWidth={2.5} />
             }
           </Button>
+          <ShareMenu
+            propertyId={id}
+            personaId={persona.id}
+            personaName={persona.name}
+            overrides={over}
+            variant="icon"
+          />
         </div>
 
         {/* Row 3: Action buttons */}
@@ -1260,7 +1268,16 @@ function PropertyDetail() {
           title="Deal sheet"
           summary="Shareable PDF / link"
           actions={
-            <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />
+            <div className="flex items-center gap-1.5">
+              <ShareMenu
+                propertyId={id}
+                personaId={persona.id}
+                personaName={persona.name}
+                overrides={over}
+                variant="button"
+              />
+              <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />
+            </div>
           }
         >
           <DealSheetPanel

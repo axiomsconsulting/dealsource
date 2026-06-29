@@ -7,16 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { recordLogin } from "@/lib/activity.functions";
+import { z } from "zod";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Sign in — Deal Negotiator" }] }),
+  validateSearch: z.object({
+    redirect: z.string().optional(),
+    mode: z.enum(["signin", "signup"]).optional(),
+  }),
   component: AuthPage,
 });
 
 function AuthPage() {
   const router = useRouter();
+  const search = Route.useSearch();
   const recordLoginFn = useServerFn(recordLogin);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(search.mode ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,19 +31,23 @@ function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
+      const redirectTarget =
+        search.redirect && search.redirect.startsWith("/") ? search.redirect : "/welcome";
       const fn =
         mode === "signin"
           ? supabase.auth.signInWithPassword({ email, password })
           : supabase.auth.signUp({
               email,
               password,
-              options: { emailRedirectTo: window.location.origin + "/welcome" },
+              options: {
+                emailRedirectTo: window.location.origin + redirectTarget,
+              },
             });
       const { error } = await fn;
       if (error) throw error;
       recordLoginFn().catch(() => {});
       toast.success(mode === "signin" ? "Signed in" : "Account created");
-      router.navigate({ to: "/welcome" });
+      router.navigate({ to: redirectTarget as any });
     } catch (err: any) {
       toast.error(err.message || "Auth failed");
     } finally {

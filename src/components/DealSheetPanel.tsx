@@ -1,14 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createOrUpdateDealSheet, getMyDealSheet } from "@/lib/deal-sheets.functions";
+import { getMyShareDefaults } from "@/lib/share.functions";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Copy, FileDown, ExternalLink, Loader2 } from "lucide-react";
+import { Copy, FileDown, ExternalLink, Loader2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import type { SliderOverrides } from "@/lib/analysis/types";
-import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 
 export function DealSheetPanel({
   propertyId,
@@ -24,29 +23,27 @@ export function DealSheetPanel({
   const qc = useQueryClient();
   const create = useServerFn(createOrUpdateDealSheet);
   const get = useServerFn(getMyDealSheet);
+  const getDefaults = useServerFn(getMyShareDefaults);
   const sheet = useQuery({
     queryKey: ["dealsheet", propertyId],
     queryFn: () => get({ data: { propertyId } }),
   });
-  const [redact, setRedact] = useState(true);
-  const [hideAddress, setHideAddress] = useState(false);
-  const [hidePhotos, setHidePhotos] = useState(false);
-  const [includeRefurb, setIncludeRefurb] = useState(true);
-  const [includeRisk, setIncludeRisk] = useState(true);
+  const defaultsQ = useQuery({ queryKey: ["share-defaults"], queryFn: () => getDefaults() });
+  const d = defaultsQ.data;
 
   const mut = useMutation({
     mutationFn: () =>
       create({
         data: {
           propertyId,
-          redact,
+          redact: d?.redact ?? true,
           is_public: true,
           overrides: overrides as any,
           personaId,
-          hide_address: hideAddress,
-          hide_photos: hidePhotos,
-          include_refurb_breakdown: includeRefurb,
-          include_risk_flags: includeRisk,
+          hide_address: d?.hide_address ?? false,
+          hide_photos: d?.hide_photos ?? false,
+          include_refurb_breakdown: d?.include_refurb_breakdown ?? true,
+          include_risk_flags: d?.include_risk_flags ?? true,
         },
       }),
     onSuccess: () => {
@@ -64,31 +61,33 @@ export function DealSheetPanel({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2 rounded-md border p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Investor PDF privacy
-        </p>
-        <Toggle
-          id="hideAddress"
-          label="Hide exact address"
-          v={hideAddress}
-          on={setHideAddress}
-        />
-        <Toggle id="hidePhotos" label="Hide all photos" v={hidePhotos} on={setHidePhotos} />
-        <Toggle id="redact" label="Mark exterior photos as redacted" v={redact} on={setRedact} />
-        <Toggle
-          id="includeRefurb"
-          label="Include refurb breakdown"
-          v={includeRefurb}
-          on={setIncludeRefurb}
-        />
-        <Toggle id="includeRisk" label="Include risk flags" v={includeRisk} on={setIncludeRisk} />
+      <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
+        <div className="space-y-0.5 text-xs">
+          <p className="font-semibold uppercase tracking-wide text-muted-foreground">
+            Sharing privacy
+          </p>
+          <p className="text-muted-foreground">
+            {d
+              ? [
+                  d.hide_address ? "address hidden" : "address shown",
+                  d.hide_photos ? "photos hidden" : d.redact ? "exterior redacted" : "photos shown",
+                  d.include_refurb_breakdown ? "refurb included" : "refurb hidden",
+                  d.include_risk_flags ? "risk flags included" : "risk hidden",
+                ].join(" · ")
+              : "Loading defaults…"}
+          </p>
+        </div>
+        <Link to="/profile" search={{ tab: "share" } as any}>
+          <Button size="sm" variant="outline">
+            <Settings2 className="mr-1.5 h-3.5 w-3.5" /> Edit defaults
+          </Button>
+        </Link>
       </div>
       <p className="text-xs text-muted-foreground">
         Snapshot will use investor criteria:{" "}
         <span className="font-medium text-foreground">{personaName}</span>
       </p>
-      <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
+      <Button onClick={() => mut.mutate()} disabled={mut.isPending || !d}>
         {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {token ? "Update deal sheet" : "Generate deal sheet"}
       </Button>
@@ -119,27 +118,6 @@ export function DealSheetPanel({
           </a>
         </div>
       )}
-    </div>
-  );
-}
-
-function Toggle({
-  id,
-  label,
-  v,
-  on,
-}: {
-  id: string;
-  label: string;
-  v: boolean;
-  on: (b: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <Switch id={id} checked={v} onCheckedChange={on} />
-      <Label htmlFor={id} className="text-sm">
-        {label}
-      </Label>
     </div>
   );
 }

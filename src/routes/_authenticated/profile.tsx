@@ -17,6 +17,13 @@ import { fmtGBP } from "@/lib/format";
 import { Bell, Loader2, LogOut, Star, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { SavedSearchesManager } from "@/components/SavedSearchesManager";
+import {
+  getMyShareDefaults,
+  updateMyShareDefaults,
+  DEFAULT_SHARE_DEFAULTS,
+} from "@/lib/share.functions";
+import { Switch } from "@/components/ui/switch";
+import { Share2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Profile — Deal Negotiator" }] }),
@@ -31,6 +38,9 @@ function ProfilePage() {
           <TabsTrigger value="account" className="gap-1.5">
             <UserRound className="h-4 w-4" /> Account
           </TabsTrigger>
+          <TabsTrigger value="share" className="gap-1.5">
+            <Share2 className="h-4 w-4" /> Share defaults
+          </TabsTrigger>
           <TabsTrigger value="favourites" className="gap-1.5">
             <Star className="h-4 w-4" /> Favourites
           </TabsTrigger>
@@ -41,6 +51,9 @@ function ProfilePage() {
         <TabsContent value="account">
           <AccountTab />
         </TabsContent>
+        <TabsContent value="share">
+          <ShareDefaultsTab />
+        </TabsContent>
         <TabsContent value="favourites">
           <FavouritesTab />
         </TabsContent>
@@ -49,6 +62,94 @@ function ProfilePage() {
         </TabsContent>
       </Tabs>
     </AppShell>
+  );
+}
+
+function ShareDefaultsTab() {
+  const qc = useQueryClient();
+  const get = useServerFn(getMyShareDefaults);
+  const upd = useServerFn(updateMyShareDefaults);
+  const q = useQuery({ queryKey: ["share-defaults"], queryFn: () => get() });
+  const [draft, setDraft] = useState(DEFAULT_SHARE_DEFAULTS);
+  useEffect(() => {
+    if (q.data) setDraft(q.data);
+  }, [q.data]);
+  const mut = useMutation({
+    mutationFn: () => upd({ data: draft }),
+    onSuccess: () => {
+      toast.success("Share defaults saved");
+      qc.invalidateQueries({ queryKey: ["share-defaults"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const toggle = (k: keyof typeof draft) => (v: boolean) => setDraft((d) => ({ ...d, [k]: v }));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Sharing privacy defaults</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Applied to every investor deal sheet and shared link you generate from a property page.
+        </p>
+        <ToggleRow
+          label="Hide exact address"
+          desc="Show postcode area + property type instead of full address."
+          checked={draft.hide_address}
+          onChange={toggle("hide_address")}
+        />
+        <ToggleRow
+          label="Hide all photos"
+          desc="No images included in deal sheets or share previews."
+          checked={draft.hide_photos}
+          onChange={toggle("hide_photos")}
+        />
+        <ToggleRow
+          label="Mark exterior photos as redacted"
+          desc="Hide front-of-house shots that reveal the property."
+          checked={draft.redact}
+          onChange={toggle("redact")}
+        />
+        <ToggleRow
+          label="Include refurb breakdown"
+          desc="Show line-item refurb estimates in shared deal sheets."
+          checked={draft.include_refurb_breakdown}
+          onChange={toggle("include_refurb_breakdown")}
+        />
+        <ToggleRow
+          label="Include risk flags"
+          desc="Show listing risk flags in shared deal sheets."
+          checked={draft.include_risk_flags}
+          onChange={toggle("include_risk_flags")}
+        />
+        <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
+          {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save defaults
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ToggleRow({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (b: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{desc}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
   );
 }
 
