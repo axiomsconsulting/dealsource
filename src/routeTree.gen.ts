@@ -13,6 +13,7 @@ import { Route as DealSheetRouteImport } from './routes/deal-sheet'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ImpersonateAsTokenHashRouteImport } from './routes/impersonate-as.$tokenHash'
 import { Route as DealTokenRouteImport } from './routes/deal.$token'
 import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -49,6 +50,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImpersonateAsTokenHashRoute = ImpersonateAsTokenHashRouteImport.update({
+  id: '/impersonate-as/$tokenHash',
+  path: '/impersonate-as/$tokenHash',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DealTokenRoute = DealTokenRouteImport.update({
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
+  '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/_authenticated/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/_authenticated/admin/theming': typeof AuthenticatedAdminThemingRoute
@@ -235,6 +244,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/welcome'
     | '/deal/$token'
+    | '/impersonate-as/$tokenHash'
     | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/theming'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/welcome'
     | '/deal/$token'
+    | '/impersonate-as/$tokenHash'
     | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/theming'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/welcome'
     | '/deal/$token'
+    | '/impersonate-as/$tokenHash'
     | '/_authenticated/admin/campaigns'
     | '/_authenticated/admin/feedback'
     | '/_authenticated/admin/theming'
@@ -301,6 +313,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   DealSheetRoute: typeof DealSheetRoute
   DealTokenRoute: typeof DealTokenRoute
+  ImpersonateAsTokenHashRoute: typeof ImpersonateAsTokenHashRoute
   ApiDealPdfTokenRoute: typeof ApiDealPdfTokenRoute
   ApiPublicRunSearchAlertsRoute: typeof ApiPublicRunSearchAlertsRoute
 }
@@ -333,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/impersonate-as/$tokenHash': {
+      id: '/impersonate-as/$tokenHash'
+      path: '/impersonate-as/$tokenHash'
+      fullPath: '/impersonate-as/$tokenHash'
+      preLoaderRoute: typeof ImpersonateAsTokenHashRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deal/$token': {
@@ -533,6 +553,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   DealSheetRoute: DealSheetRoute,
   DealTokenRoute: DealTokenRoute,
+  ImpersonateAsTokenHashRoute: ImpersonateAsTokenHashRoute,
   ApiDealPdfTokenRoute: ApiDealPdfTokenRoute,
   ApiPublicRunSearchAlertsRoute: ApiPublicRunSearchAlertsRoute,
 }
