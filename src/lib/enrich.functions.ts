@@ -34,6 +34,7 @@ export const enrichFromUrl = createServerFn({ method: "POST" })
     if (scraped.address) patch.address = scraped.address;
     if (scraped.postcode) patch.postcode = scraped.postcode;
     if (scraped.asking_price_gbp != null) patch.asking_price_gbp = scraped.asking_price_gbp;
+    if (scraped.price_qualifier) patch.price_qualifier = scraped.price_qualifier;
     if (scraped.property_type) patch.property_type = scraped.property_type;
     if (scraped.beds != null) patch.beds = scraped.beds;
     if (scraped.baths != null) patch.baths = scraped.baths;
