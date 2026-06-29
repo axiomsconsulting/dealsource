@@ -61,6 +61,11 @@ async function seedPresetsIfEmpty(ctx: any) {
     // property detail page short-circuits to "Not found" without an active persona.
     throw new Error(`Couldn't seed investor profiles: ${error.message}`);
   }
+  // Verify the rows actually landed (RLS or other invisible failure modes).
+  const { data: check, error: checkErr } = await ctx.supabase
+    .from("personas").select("id").eq("user_id", ctx.userId).limit(1).maybeSingle();
+  if (checkErr) throw new Error(`Couldn't verify investor profiles: ${checkErr.message}`);
+  if (!check) throw new Error("Investor profile seeding returned no rows — please contact support.");
 }
 
 export const getOrCreateDefaultPersona = createServerFn({ method: "POST" })
