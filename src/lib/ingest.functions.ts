@@ -80,6 +80,7 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
       tenure: scraped.tenure,
       area_sqm: scraped.area_sqm,
       asking_price_gbp: scraped.asking_price_gbp,
+      price_qualifier: scraped.price_qualifier,
       agent_name: scraped.agent_name,
       lease_years_remaining: scraped.lease_years_remaining,
       image_urls: scraped.image_urls,
