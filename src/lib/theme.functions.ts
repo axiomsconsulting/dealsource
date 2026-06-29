@@ -2,13 +2,19 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireAdminAuth } from "@/integrations/supabase/admin-middleware";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 const ThemeColorsSchema = z.record(z.string(), z.string());
 
 export const getActiveTheme = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+  .handler(async () => {
+    const supabasePublic = createClient<Database>(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
+    );
+    const { data, error } = await supabasePublic
       .from("design_themes")
       .select("*")
       .eq("is_active", true)
