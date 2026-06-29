@@ -42,6 +42,12 @@ export async function switchToUser(tokenHash: string) {
     clearReturnSession();
     throw error;
   }
+  // Hard-reload into the impersonated session so router context, profile query,
+  // and the Supabase bearer attacher all pick up the new auth.uid() before the
+  // first protected server-fn call fires.
+  if (typeof window !== "undefined") {
+    window.location.assign("/properties");
+  }
 }
 
 /** Restores the stored admin session and clears the "viewing as" state. */
@@ -54,4 +60,7 @@ export async function switchBack() {
   });
   clearReturnSession();
   if (error) throw error;
+  if (typeof window !== "undefined") {
+    window.location.assign("/admin/users");
+  }
 }

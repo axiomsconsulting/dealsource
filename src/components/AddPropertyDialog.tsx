@@ -142,7 +142,14 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
       qc.invalidateQueries({ queryKey: ["properties"] });
       setListingUrl("");
       setOpen(false);
-      router.navigate({ to: "/properties/$id", params: { id: r.property.id } });
+      // Hard-reload into the new property detail — guarantees the Supabase bearer
+      // is attached for getProperty's first call (a soft SPA navigate has occasionally
+      // raced the auth header and surfaced as "Not Found" for the freshly-inserted row).
+      if (typeof window !== "undefined") {
+        window.location.assign(`/properties/${r.property.id}`);
+      } else {
+        router.navigate({ to: "/properties/$id", params: { id: r.property.id } });
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });

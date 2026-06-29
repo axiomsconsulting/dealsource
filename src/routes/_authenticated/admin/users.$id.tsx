@@ -62,9 +62,7 @@ function AdminUserDetailPage() {
       await switchToUser(tokenHash);
     },
     onMutate: () => setSwitching(true),
-    onSuccess: () => {
-      router.navigate({ to: "/properties" });
-    },
+    // switchToUser triggers a full reload to /properties on success.
     onError: (e: Error) => {
       toast.error(e.message || "Couldn't switch to this user");
       setSwitching(false);
