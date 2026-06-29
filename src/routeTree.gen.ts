@@ -13,6 +13,7 @@ import { Route as DealSheetRouteImport } from './routes/deal-sheet'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ImpersonateAsTokenHashRouteImport } from './routes/impersonate-as.$tokenHash'
 import { Route as DealTokenRouteImport } from './routes/deal.$token'
 import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
@@ -51,6 +52,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImpersonateAsTokenHashRoute = ImpersonateAsTokenHashRouteImport.update({
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
+  '/share/$token': typeof ShareTokenRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
+  '/share/$token': typeof ShareTokenRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -228,6 +236,7 @@ export interface FileRoutesById {
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
+  '/share/$token': typeof ShareTokenRoute
   '/_authenticated/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -255,6 +264,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/deal/$token'
     | '/impersonate-as/$tokenHash'
+    | '/share/$token'
     | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/settings'
@@ -280,6 +290,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/deal/$token'
     | '/impersonate-as/$tokenHash'
+    | '/share/$token'
     | '/admin/campaigns'
     | '/admin/feedback'
     | '/admin/settings'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/_authenticated/welcome'
     | '/deal/$token'
     | '/impersonate-as/$tokenHash'
+    | '/share/$token'
     | '/_authenticated/admin/campaigns'
     | '/_authenticated/admin/feedback'
     | '/_authenticated/admin/settings'
@@ -327,6 +339,7 @@ export interface RootRouteChildren {
   DealSheetRoute: typeof DealSheetRoute
   DealTokenRoute: typeof DealTokenRoute
   ImpersonateAsTokenHashRoute: typeof ImpersonateAsTokenHashRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   ApiDealPdfTokenRoute: typeof ApiDealPdfTokenRoute
   ApiPublicRunSearchAlertsRoute: typeof ApiPublicRunSearchAlertsRoute
 }
@@ -359,6 +372,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/impersonate-as/$tokenHash': {
@@ -576,6 +596,7 @@ const rootRouteChildren: RootRouteChildren = {
   DealSheetRoute: DealSheetRoute,
   DealTokenRoute: DealTokenRoute,
   ImpersonateAsTokenHashRoute: ImpersonateAsTokenHashRoute,
+  ShareTokenRoute: ShareTokenRoute,
   ApiDealPdfTokenRoute: ApiDealPdfTokenRoute,
   ApiPublicRunSearchAlertsRoute: ApiPublicRunSearchAlertsRoute,
 }
