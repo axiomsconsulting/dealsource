@@ -383,6 +383,13 @@ function PropertyDetail() {
               : <Eye className="h-5 w-5 text-foreground" strokeWidth={2.5} />
             }
           </Button>
+          <ShareMenu
+            propertyId={id}
+            personaId={persona.id}
+            personaName={persona.name}
+            overrides={over}
+            variant="icon"
+          />
         </div>
 
         {/* Row 3: Action buttons */}
