@@ -482,7 +482,7 @@ function PropertyDetail() {
               title="Click to edit asking price"
             >
               <Badge className="cursor-pointer hover:opacity-80">
-                Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
+                {p.price_qualifier ? `${p.price_qualifier} ` : "Asking "}{fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
               </Badge>
             </button>
           ) : (
