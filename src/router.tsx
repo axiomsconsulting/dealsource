@@ -1,6 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { maybeInstallImpersonationStorage } from "@/lib/impersonation-storage";
+
+// Must run before the Supabase singleton is first used (client-side only).
+maybeInstallImpersonationStorage();
 
 export const getRouter = () => {
   const queryClient = new QueryClient({

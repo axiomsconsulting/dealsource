@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getReturnSession, switchBack } from "@/lib/impersonation";
+import { isImpersonationTab } from "@/lib/impersonation-storage";
 import { CampaignNotifications } from "@/components/CampaignNotifications";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +39,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
   const { selected, toggle, setAll } = useStrategyFilter();
   const allSelected = selected.length === ALL_STRATEGY_KEYS.length;
   const [returnSession] = useState(() => getReturnSession());
+  const [newTabImpersonation] = useState(() => isImpersonationTab());
 
   // Fade floating controls to near-transparent while the page is being scrolled
   const [scrolling, setScrolling] = useState(false);
@@ -56,6 +58,16 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
   }, []);
 
   const handleSwitchBack = async () => {
+    if (newTabImpersonation) {
+      // This is the dedicated impersonation tab — closing it is safest, so the
+      // admin's own session in their original tab is untouched.
+      window.close();
+      // If the browser blocks window.close (tab wasn't opened via script),
+      // fall back to signing out so they're not stuck as the other user.
+      await supabase.auth.signOut();
+      window.location.replace("/auth");
+      return;
+    }
     await switchBack();
     router.navigate({ to: "/admin/users" });
   };
@@ -156,13 +168,18 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Impersonation banner — inline (scrolls with page on mobile, visible on all sizes) */}
-      {returnSession && (
+      {(returnSession || newTabImpersonation) && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-3 py-1.5 pt-[max(0.5rem,env(safe-area-inset-top))] text-xs font-medium text-amber-950 sm:px-6">
-          <span>Viewing as {myProfile?.email ?? "another user"} — Super Admin mode</span>
+          <span>
+            Viewing as {myProfile?.email ?? "another user"} — Super Admin mode
+            {newTabImpersonation ? " (isolated tab)" : ""}
+          </span>
           <div className="flex items-center gap-2">
-            <Link to="/admin/users" className="underline">Switch user</Link>
+            {!newTabImpersonation && (
+              <Link to="/admin/users" className="underline">Switch user</Link>
+            )}
             <button onClick={handleSwitchBack} className="rounded bg-amber-950/10 px-2 py-0.5 underline-offset-2 hover:underline">
-              Switch back
+              {newTabImpersonation ? "Close" : "Switch back"}
             </button>
           </div>
         </div>
@@ -170,7 +187,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
       {/* Gold viewport border + floating "Back to admin" button — only while impersonating.
           Border is fixed/inset and pointer-events-none so it overlays without blocking clicks. */}
-      {returnSession && (
+      {(returnSession || newTabImpersonation) && (
         <>
           <div
             aria-hidden
@@ -179,11 +196,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           <button
             type="button"
             onClick={handleSwitchBack}
-            aria-label="Back to admin"
+            aria-label={newTabImpersonation ? "Close impersonation tab" : "Back to admin"}
             className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-[70] flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 shadow-lg ring-2 ring-amber-300 hover:bg-amber-400"
           >
             <LogOut className="h-4 w-4" />
-            Back to admin
+            {newTabImpersonation ? "Close" : "Back to admin"}
           </button>
         </>
       )}
@@ -191,7 +208,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       {/* ── Desktop sticky header (hidden on mobile < 640 px) ─────────────── */}
       <header className={cn(
         "hidden sm:sticky sm:top-0 sm:z-30 sm:block bg-background/80 px-3 backdrop-blur sm:px-6",
-        returnSession ? "pt-1" : "sm:pt-[max(1rem,env(safe-area-inset-top))]",
+        (returnSession || newTabImpersonation) ? "pt-1" : "sm:pt-[max(1rem,env(safe-area-inset-top))]",
       )}>
         <div className="container mx-auto flex items-center justify-between gap-3">
           <Link to="/welcome" className="flex items-center">
