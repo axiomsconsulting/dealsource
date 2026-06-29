@@ -1268,7 +1268,16 @@ function PropertyDetail() {
           title="Deal sheet"
           summary="Shareable PDF / link"
           actions={
-            <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />
+            <div className="flex items-center gap-1.5">
+              <ShareMenu
+                propertyId={id}
+                personaId={persona.id}
+                personaName={persona.name}
+                overrides={over}
+                variant="button"
+              />
+              <FeedbackWidget propertyId={id} sectionKey="deal-sheet" sectionLabel="Deal Sheet" />
+            </div>
           }
         >
           <DealSheetPanel
