@@ -55,7 +55,12 @@ async function seedPresetsIfEmpty(ctx: any) {
     is_default: i === 0,
     ...p.patch,
   }));
-  await ctx.supabase.from("personas").insert(rows);
+  const { error } = await ctx.supabase.from("personas").insert(rows);
+  if (error) {
+    // Surface so we never end up with a user that silently has zero personas — the
+    // property detail page short-circuits to "Not found" without an active persona.
+    throw new Error(`Couldn't seed investor profiles: ${error.message}`);
+  }
 }
 
 export const getOrCreateDefaultPersona = createServerFn({ method: "POST" })
