@@ -32,6 +32,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { PhotosPanel } from "@/components/PhotosPanel";
 import { DealSheetPanel } from "@/components/DealSheetPanel";
+import { ShareMenu } from "@/components/ShareMenu";
 import { RefurbEpcPanel } from "@/components/RefurbEpcPanel";
 import { RiskChips } from "@/components/RiskChips";
 import { DealScoreInfo } from "@/components/DealScoreInfo";
