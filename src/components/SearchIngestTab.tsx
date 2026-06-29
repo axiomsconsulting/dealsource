@@ -70,8 +70,6 @@ export function SearchIngestTab({
     onError: (e: any) => toast.error(e.message),
   });
 
-  // When the parent drives the URL, mirror it locally and optionally auto-preview.
-  const effectiveUrl = controlledUrl ?? searchUrl;
   // Auto-fire preview when controlledUrl changes to a fresh, valid search URL.
   const lastAutoUrl = useRef<string | null>(null);
   useEffect(() => {
