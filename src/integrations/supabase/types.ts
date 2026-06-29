@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          admin_user_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_log_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_jobs: {
         Row: {
           completed: number
@@ -58,6 +100,45 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      ai_usage_log: {
+        Row: {
+          created_at: string
+          feature_key: string
+          id: string
+          property_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feature_key: string
+          id?: string
+          property_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feature_key?: string
+          id?: string
+          property_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       analyses: {
         Row: {
@@ -155,6 +236,98 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_recipients: {
+        Row: {
+          campaign_id: string
+          channels_sent: string[]
+          created_at: string
+          dismissed_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          campaign_id: string
+          channels_sent?: string[]
+          created_at?: string
+          dismissed_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          campaign_id?: string
+          channels_sent?: string[]
+          created_at?: string
+          dismissed_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          audience_type: string
+          body: string
+          channels: string[]
+          created_at: string
+          created_by: string
+          id: string
+          inactive_hours: number | null
+          sent_at: string | null
+          status: string
+          title: string
+          user_ids: string[] | null
+        }
+        Insert: {
+          audience_type: string
+          body: string
+          channels: string[]
+          created_at?: string
+          created_by: string
+          id?: string
+          inactive_hours?: number | null
+          sent_at?: string | null
+          status?: string
+          title: string
+          user_ids?: string[] | null
+        }
+        Update: {
+          audience_type?: string
+          body?: string
+          channels?: string[]
+          created_at?: string
+          created_by?: string
+          id?: string
+          inactive_hours?: number | null
+          sent_at?: string | null
+          status?: string
+          title?: string
+          user_ids?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_sheets: {
         Row: {
           created_at: string
@@ -226,39 +399,128 @@ export type Database = {
       }
       design_themes: {
         Row: {
-          id: string
-          name: string
-          is_active: boolean
-          radius: string
-          font_scale: number
-          light: Json
-          dark: Json
           created_at: string
+          dark: Json
+          font_scale: number
+          id: string
+          is_active: boolean
+          light: Json
+          name: string
+          radius: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          name: string
-          is_active?: boolean
-          radius?: string
-          font_scale?: number
-          light?: Json
-          dark?: Json
           created_at?: string
+          dark?: Json
+          font_scale?: number
+          id?: string
+          is_active?: boolean
+          light?: Json
+          name: string
+          radius?: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          name?: string
-          is_active?: boolean
-          radius?: string
-          font_scale?: number
-          light?: Json
-          dark?: Json
           created_at?: string
+          dark?: Json
+          font_scale?: number
+          id?: string
+          is_active?: boolean
+          light?: Json
+          name?: string
+          radius?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      feedback: {
+        Row: {
+          created_at: string
+          id: string
+          ip_address: string | null
+          location_city: string | null
+          location_country: string | null
+          note: string | null
+          page_path: string | null
+          property_id: string | null
+          reasons: string[]
+          section_key: string
+          section_label: string
+          user_id: string
+          vote: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          location_city?: string | null
+          location_country?: string | null
+          note?: string | null
+          page_path?: string | null
+          property_id?: string | null
+          reasons?: string[]
+          section_key: string
+          section_label: string
+          user_id: string
+          vote: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          location_city?: string | null
+          location_country?: string | null
+          note?: string | null
+          page_path?: string | null
+          property_id?: string | null
+          reasons?: string[]
+          section_key?: string
+          section_label?: string
+          user_id?: string
+          vote?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      login_events: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "login_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personas: {
         Row: {
@@ -268,7 +530,6 @@ export type Database = {
           created_at: string
           id: string
           ignore_eras: string[]
-          investor_type: string | null
           is_default: boolean
           ltv: number
           max_beds: number
@@ -296,7 +557,6 @@ export type Database = {
           created_at?: string
           id?: string
           ignore_eras?: string[]
-          investor_type?: string | null
           is_default?: boolean
           ltv?: number
           max_beds?: number
@@ -324,7 +584,6 @@ export type Database = {
           created_at?: string
           id?: string
           ignore_eras?: string[]
-          investor_type?: string | null
           is_default?: boolean
           ltv?: number
           max_beds?: number
@@ -421,268 +680,6 @@ export type Database = {
         }
         Relationships: []
       }
-      feedback: {
-        Row: {
-          id: string
-          user_id: string
-          property_id: string | null
-          section_key: string
-          section_label: string
-          vote: string
-          reasons: string[]
-          note: string | null
-          page_path: string | null
-          ip_address: string | null
-          location_city: string | null
-          location_country: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          property_id?: string | null
-          section_key: string
-          section_label: string
-          vote: string
-          reasons?: string[]
-          note?: string | null
-          page_path?: string | null
-          ip_address?: string | null
-          location_city?: string | null
-          location_country?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          property_id?: string | null
-          section_key?: string
-          section_label?: string
-          vote?: string
-          reasons?: string[]
-          note?: string | null
-          page_path?: string | null
-          ip_address?: string | null
-          location_city?: string | null
-          location_country?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "feedback_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "feedback_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      login_events: {
-        Row: {
-          id: string
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "login_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_usage_log: {
-        Row: {
-          id: string
-          user_id: string
-          property_id: string | null
-          feature_key: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          property_id?: string | null
-          feature_key: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          property_id?: string | null
-          feature_key?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_usage_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_usage_log_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      admin_audit_log: {
-        Row: {
-          id: string
-          admin_user_id: string
-          target_user_id: string | null
-          action: string
-          metadata: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          admin_user_id: string
-          target_user_id?: string | null
-          action: string
-          metadata?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          admin_user_id?: string
-          target_user_id?: string | null
-          action?: string
-          metadata?: Json | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "admin_audit_log_admin_user_id_fkey"
-            columns: ["admin_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "admin_audit_log_target_user_id_fkey"
-            columns: ["target_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      campaigns: {
-        Row: {
-          id: string
-          title: string
-          body: string
-          audience_type: string
-          inactive_hours: number | null
-          user_ids: string[] | null
-          channels: string[]
-          status: string
-          created_by: string
-          created_at: string
-          sent_at: string | null
-        }
-        Insert: {
-          id?: string
-          title: string
-          body: string
-          audience_type: string
-          inactive_hours?: number | null
-          user_ids?: string[] | null
-          channels: string[]
-          status?: string
-          created_by: string
-          created_at?: string
-          sent_at?: string | null
-        }
-        Update: {
-          id?: string
-          title?: string
-          body?: string
-          audience_type?: string
-          inactive_hours?: number | null
-          user_ids?: string[] | null
-          channels?: string[]
-          status?: string
-          created_by?: string
-          created_at?: string
-          sent_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "campaigns_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      campaign_recipients: {
-        Row: {
-          id: string
-          campaign_id: string
-          user_id: string
-          channels_sent: string[]
-          dismissed_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          campaign_id: string
-          user_id: string
-          channels_sent?: string[]
-          dismissed_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          campaign_id?: string
-          user_id?: string
-          channels_sent?: string[]
-          dismissed_at?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "campaign_recipients_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "campaigns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "campaign_recipients_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       properties: {
         Row: {
           address: string
@@ -714,14 +711,14 @@ export type Database = {
           rent_source: string | null
           risk_flags: Json
           seller_context: Json
-          survey_findings: Json
           source: string
           source_link: string | null
+          survey_findings: Json
           tenure: string | null
           updated_at: string
           user_id: string
-          viewing_notes: Json | null
           viewing_note_history: Json | null
+          viewing_notes: Json | null
         }
         Insert: {
           address: string
@@ -753,14 +750,14 @@ export type Database = {
           rent_source?: string | null
           risk_flags?: Json
           seller_context?: Json
-          survey_findings?: Json
           source?: string
           source_link?: string | null
+          survey_findings?: Json
           tenure?: string | null
           updated_at?: string
           user_id: string
-          viewing_notes?: Json | null
           viewing_note_history?: Json | null
+          viewing_notes?: Json | null
         }
         Update: {
           address?: string
@@ -792,14 +789,14 @@ export type Database = {
           rent_source?: string | null
           risk_flags?: Json
           seller_context?: Json
-          survey_findings?: Json
           source?: string
           source_link?: string | null
+          survey_findings?: Json
           tenure?: string | null
           updated_at?: string
           user_id?: string
-          viewing_notes?: Json | null
           viewing_note_history?: Json | null
+          viewing_notes?: Json | null
         }
         Relationships: []
       }
@@ -921,7 +918,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
