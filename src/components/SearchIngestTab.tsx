@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,7 +20,21 @@ type ItemState = "pending" | "in-progress" | "added" | "skipped" | "failed";
 /** Search-URL ingest flow — paste a Rightmove search URL, preview the properties on the
  *  page, tick the ones to add, then bulk-ingest with a per-item progress line and the
  *  admin-controlled throttle delay between calls. */
-export function SearchIngestTab({ onDone }: { onDone: () => void }) {
+export function SearchIngestTab({
+  onDone,
+  controlledUrl,
+  hideUrlInput = false,
+  autoPreview = false,
+}: {
+  onDone: () => void;
+  /** When set, this URL is used instead of the internal input — lets the parent (URL tab)
+   *  drive the search flow from a unified field. */
+  controlledUrl?: string;
+  /** Hide the built-in input row when the parent already shows one. */
+  hideUrlInput?: boolean;
+  /** Kick off the preview as soon as a valid search URL is set. */
+  autoPreview?: boolean;
+}) {
   const qc = useQueryClient();
   const previewFn = useServerFn(previewSearchUrl);
   const ingestFn = useServerFn(ingestSearchProperty);
@@ -41,8 +55,11 @@ export function SearchIngestTab({ onDone }: { onDone: () => void }) {
   const previewMut = useMutation({
     mutationFn: async (url: string) => {
       const cleaned = cleanListingUrl(url);
-      if (cleaned.host !== "rightmove" || cleaned.kind !== "search") {
-        throw new Error("Paste a Rightmove search URL (the one starting /property-for-sale/find.html).");
+      if (cleaned.kind !== "search") {
+        throw new Error("Paste a search results URL (e.g. Rightmove /property-for-sale/find.html?…).");
+      }
+      if (cleaned.host !== "rightmove") {
+        throw new Error(`Search ingest is currently only tested for Rightmove. ${cleaned.host} search pages aren't supported yet — open a single listing instead.`);
       }
       return previewFn({ data: { url: cleaned.url } });
     },
@@ -52,6 +69,23 @@ export function SearchIngestTab({ onDone }: { onDone: () => void }) {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  // Auto-fire preview when controlledUrl changes to a fresh, valid search URL.
+  const lastAutoUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoPreview || !controlledUrl) return;
+    if (lastAutoUrl.current === controlledUrl) return;
+    try {
+      const c = cleanListingUrl(controlledUrl);
+      if (c.kind === "search" && c.host === "rightmove") {
+        lastAutoUrl.current = controlledUrl;
+        previewMut.mutate(controlledUrl);
+      }
+    } catch {
+      /* ignore — parent shows validation */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlledUrl, autoPreview]);
 
   const items = previewMut.data?.items ?? [];
   const maxBatch = settings.data?.max_per_batch ?? 10;
@@ -132,12 +166,12 @@ export function SearchIngestTab({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="space-y-4 pt-2">
-      <p className="text-sm text-muted-foreground">
+      {!hideUrlInput && <p className="text-sm text-muted-foreground">
         Paste a Rightmove search URL (e.g. <code className="rounded bg-muted px-1 text-xs">/property-for-sale/find.html?...</code>).
         The page is fetched directly — no Firecrawl credits spent — and you can pick which
         properties to add. Each insert is throttled to keep Rightmove happy.
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
+      </p>}
+      {!hideUrlInput && <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           placeholder="https://www.rightmove.co.uk/property-for-sale/find.html?…"
           value={searchUrl}
@@ -150,8 +184,19 @@ export function SearchIngestTab({ onDone }: { onDone: () => void }) {
           {previewMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Preview
         </Button>
-      </div>
-      {urlError && (
+      </div>}
+      {hideUrlInput && controlledUrl && !previewMut.data && (
+        <div className="flex items-center gap-2">
+          <Button
+            disabled={!controlledUrl || previewMut.isPending}
+            onClick={() => previewMut.mutate(controlledUrl)}
+          >
+            {previewMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+            Preview properties on this search
+          </Button>
+        </div>
+      )}
+      {!hideUrlInput && urlError && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{urlError}</span>
