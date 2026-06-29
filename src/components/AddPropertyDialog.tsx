@@ -51,7 +51,7 @@ function previewJson(text: string): { item: ParsedJsonProperty; extraKeys: strin
 
 /** Modal "Add property" flow — CSV / JSON / URL / Manual, in one place so it can be triggered
  *  from the nav and from the properties page without navigating away from what you're doing. */
-export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "search" | "manual" }) {
+export function AddPropertyDialog({ trigger, defaultTab = "url" }: { trigger: ReactNode; defaultTab?: "csv" | "json" | "url" | "manual" }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const qc = useQueryClient();
@@ -62,6 +62,9 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
   const [jsonText, setJsonText] = useState("");
   const [listingUrl, setListingUrl] = useState("");
   const [listingUrlError, setListingUrlError] = useState<string | null>(null);
+  const [listingUrlKind, setListingUrlKind] = useState<"property" | "search" | "unknown" | null>(null);
+  const [listingUrlHost, setListingUrlHost] = useState<string | null>(null);
+  const [listingUrlCleaned, setListingUrlCleaned] = useState<string | null>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
   const jsonTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -144,7 +147,7 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
       // request on a malformed link.
       const cleaned = cleanListingUrl(url);
       if (cleaned.kind === "search") {
-        throw new Error("That's a search results URL. Switch to the Search tab to pick properties from it.");
+        throw new Error("That's a search results URL — preview the listings below instead of ingesting directly.");
       }
       if (cleaned.kind !== "property") {
         throw new Error("Open the listing on the property site and paste the address-bar URL.");
@@ -170,14 +173,27 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
 
   const validateListingUrl = (v: string) => {
     setListingUrl(v);
-    if (!v.trim()) { setListingUrlError(null); return; }
+    if (!v.trim()) {
+      setListingUrlError(null);
+      setListingUrlKind(null);
+      setListingUrlHost(null);
+      setListingUrlCleaned(null);
+      return;
+    }
     try {
       const c = cleanListingUrl(v);
+      setListingUrlHost(c.host);
+      setListingUrlKind(c.kind);
+      setListingUrlCleaned(c.url);
       if (c.host === "unknown") setListingUrlError("Must be a Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation link.");
-      else if (c.kind === "search") setListingUrlError("That's a search results URL — use the Search tab.");
-      else if (c.kind !== "property") setListingUrlError("That doesn't look like a single property listing URL.");
+      else if (c.kind === "unknown") setListingUrlError("Couldn't tell if this is a single property or a search page — open it on the site and copy the address bar.");
       else setListingUrlError(null);
-    } catch (e: any) { setListingUrlError(e.message); }
+    } catch (e: any) {
+      setListingUrlError(e.message);
+      setListingUrlKind(null);
+      setListingUrlHost(null);
+      setListingUrlCleaned(null);
+    }
   };
 
   const onCsvFile = async (f: File) => {
@@ -211,11 +227,10 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
           Each property is analysed against your active investment profile automatically.
         </p>
         <Tabs defaultValue={defaultTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="csv"><FileSpreadsheet className="mr-2 h-4 w-4" />CSV</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="url"><Link2 className="mr-2 h-4 w-4" />Listing URL</TabsTrigger>
             <TabsTrigger value="json"><FileJson className="mr-2 h-4 w-4" />JSON</TabsTrigger>
-            <TabsTrigger value="url"><Link2 className="mr-2 h-4 w-4" />URL</TabsTrigger>
-            <TabsTrigger value="search"><Search className="mr-2 h-4 w-4" />Search</TabsTrigger>
+            <TabsTrigger value="csv"><FileSpreadsheet className="mr-2 h-4 w-4" />CSV</TabsTrigger>
             <TabsTrigger value="manual"><ClipboardPaste className="mr-2 h-4 w-4" />Manual</TabsTrigger>
           </TabsList>
 
@@ -283,31 +298,69 @@ export function AddPropertyDialog({ trigger, defaultTab = "json" }: { trigger: R
 
           <TabsContent value="url" className="space-y-4 pt-4">
             <p className="text-sm text-muted-foreground">
-              Paste a Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation listing link — Firecrawl scrapes the
-              page and a property card is created automatically. You can layer on a Property Filter JSON later from
-              the property page to enrich it further as more data comes in.
+              Paste a <strong>single property</strong> link or a <strong>search results</strong> link from
+              Rightmove, Zoopla, OnTheMarket, Boomin or PrimeLocation. We auto-detect which one it is — single
+              listings ingest immediately, search pages let you tick which properties to add.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
-                placeholder="https://www.rightmove.co.uk/properties/…"
+                placeholder="https://www.rightmove.co.uk/properties/… or /property-for-sale/find.html?…"
                 value={listingUrl}
                 onChange={(e) => validateListingUrl(e.target.value)}
               />
-              <Button className="w-full sm:w-auto" disabled={!listingUrl || !!listingUrlError || urlMut.isPending} onClick={() => urlMut.mutate(listingUrl)}>
-                {urlMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
-                Ingest from URL
-              </Button>
+              {listingUrlKind === "property" && (
+                <Button
+                  className="w-full sm:w-auto"
+                  disabled={!listingUrl || !!listingUrlError || urlMut.isPending}
+                  onClick={() => urlMut.mutate(listingUrl)}
+                >
+                  {urlMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                  Ingest property
+                </Button>
+              )}
             </div>
+
             {listingUrlError && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{listingUrlError}</span>
               </div>
             )}
-          </TabsContent>
 
-          <TabsContent value="search">
-            <SearchIngestTab onDone={() => setOpen(false)} />
+            {/* Portal-tested disclaimer — Rightmove is the reference implementation; other portals still
+                attempt ingest but with reduced confidence on extracted fields. */}
+            {listingUrlHost && listingUrlHost !== "unknown" && listingUrlHost !== "rightmove" && !listingUrlError && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <strong className="capitalize">{listingUrlHost}</strong> ingestion is in testing — Rightmove is the
+                  only portal fully validated so far. We'll still ingest this link; double-check any
+                  auto-filled price, address or photos before relying on the analysis.
+                </span>
+              </div>
+            )}
+
+            {/* Search-results flow — embeds the existing search preview/throttle UI driven from this same input. */}
+            {listingUrlKind === "search" && listingUrlCleaned && !listingUrlError && (
+              <div className="rounded-md border bg-muted/10 p-3">
+                {listingUrlHost !== "rightmove" ? (
+                  <div className="flex items-start gap-2 text-xs text-amber-900">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Search-page ingest is currently only tested for Rightmove. Open an individual listing
+                      on <strong className="capitalize">{listingUrlHost}</strong> and paste that single-property URL above.
+                    </span>
+                  </div>
+                ) : (
+                  <SearchIngestTab
+                    onDone={() => setOpen(false)}
+                    controlledUrl={listingUrlCleaned}
+                    hideUrlInput
+                    autoPreview
+                  />
+                )}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="manual" className="space-y-3 pt-4">
