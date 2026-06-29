@@ -16,6 +16,13 @@ export function mergePriceReductionIntoPfJson(existingPfJson: any, reducedDate: 
   const propertyLight = { ...(pf.propertyLight ?? {}) };
   const propertyDetail = { ...(pf.propertyDetail ?? {}) };
   propertyLight.multipleReduce = Math.max(1, Number(propertyLight.multipleReduce) || 0);
+  // Preserve Rightmove's literal "Reduced on dd/mm/yyyy" string so the Property Log can show
+  // it verbatim — `pricesHisto` alone loses the human-readable reason badge.
+  const dmy = (() => {
+    const m = reducedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : reducedDate;
+  })();
+  propertyLight.listingUpdateReason = `Reduced on ${dmy}`;
   const existingHisto: any[] = Array.isArray(propertyDetail.pricesHisto) ? propertyDetail.pricesHisto : [];
   if (currentPriceGbp != null && !existingHisto.some((e) => e?.date === reducedDate)) {
     propertyDetail.pricesHisto = [...existingHisto, { value: currentPriceGbp, date: reducedDate }];
