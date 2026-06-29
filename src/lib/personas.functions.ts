@@ -53,6 +53,8 @@ async function seedPresetsIfEmpty(ctx: any) {
     name: p.name,
     strategy: p.strategy,
     is_default: i === 0,
+    require_parking: true,
+    require_gas_boiler: true,
     ...p.patch,
   }));
   const { error } = await ctx.supabase.from("personas").insert(rows);
