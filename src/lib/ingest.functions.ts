@@ -19,6 +19,7 @@ const PropertyInputSchema = z.object({
   tenure: z.string().max(60).nullable().optional(),
   area_sqm: z.number().nullable().optional(),
   asking_price_gbp: z.number().nullable().optional(),
+    price_qualifier: z.string().max(60).nullable().optional(),
   source: z.string().max(40).default("manual"),
   source_link: z.string().max(1000).nullable().optional(),
   agent_name: z.string().max(200).nullable().optional(),
