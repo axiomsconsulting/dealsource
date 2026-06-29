@@ -12,7 +12,7 @@ import { parsePropertyFilterCsv } from "@/lib/parsers/csv";
 import { parsePropertyFilterJson, type ParsedJsonProperty } from "@/lib/parsers/json";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ChevronDown, ChevronUp, AlertCircle, Image as ImageIcon, Search } from "lucide-react";
+import { Upload, FileJson, ClipboardPaste, FileSpreadsheet, Link2, Loader2, ChevronDown, ChevronUp, AlertCircle, Image as ImageIcon } from "lucide-react";
 import { SearchIngestTab } from "@/components/SearchIngestTab";
 import { cleanListingUrl } from "@/lib/listing-url";
 
