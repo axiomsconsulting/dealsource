@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, Info, Sliders, Filter, Home, ListChecks, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
+import { ArrowLeft, Info, Sliders, Filter, Home, ListChecks, LogOut, Menu, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useColorMode } from "@/components/ThemeProvider";
 import { useServerFn } from "@tanstack/react-start";
@@ -166,6 +166,26 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             </button>
           </div>
         </div>
+      )}
+
+      {/* Gold viewport border + floating "Back to admin" button — only while impersonating.
+          Border is fixed/inset and pointer-events-none so it overlays without blocking clicks. */}
+      {returnSession && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-[60] border-4 border-amber-400 shadow-[inset_0_0_0_1px_rgba(180,120,0,0.5)]"
+          />
+          <button
+            type="button"
+            onClick={handleSwitchBack}
+            aria-label="Back to admin"
+            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-[70] flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 shadow-lg ring-2 ring-amber-300 hover:bg-amber-400"
+          >
+            <LogOut className="h-4 w-4" />
+            Back to admin
+          </button>
+        </>
       )}
 
       {/* ── Desktop sticky header (hidden on mobile < 640 px) ─────────────── */}
