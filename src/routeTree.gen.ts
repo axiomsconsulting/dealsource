@@ -27,6 +27,7 @@ import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$toke
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 import { Route as AuthenticatedAdminThemingRouteImport } from './routes/_authenticated/admin/theming'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
 import { Route as AuthenticatedAdminCampaignsRouteImport } from './routes/_authenticated/admin/campaigns'
 import { Route as AuthenticatedPropertiesIdViewingRouteImport } from './routes/_authenticated/properties.$id_.viewing'
@@ -126,6 +127,12 @@ const AuthenticatedAdminThemingRoute =
     path: '/theming',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminFeedbackRoute =
   AuthenticatedAdminFeedbackRouteImport.update({
     id: '/feedback',
@@ -171,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
   '/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
@@ -195,6 +203,7 @@ export interface FileRoutesByTo {
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/theming': typeof AuthenticatedAdminThemingRoute
   '/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
@@ -221,6 +230,7 @@ export interface FileRoutesById {
   '/impersonate-as/$tokenHash': typeof ImpersonateAsTokenHashRoute
   '/_authenticated/admin/campaigns': typeof AuthenticatedAdminCampaignsRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/theming': typeof AuthenticatedAdminThemingRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRouteWithChildren
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
@@ -247,6 +257,7 @@ export interface FileRouteTypes {
     | '/impersonate-as/$tokenHash'
     | '/admin/campaigns'
     | '/admin/feedback'
+    | '/admin/settings'
     | '/admin/theming'
     | '/admin/users'
     | '/properties/$id'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/impersonate-as/$tokenHash'
     | '/admin/campaigns'
     | '/admin/feedback'
+    | '/admin/settings'
     | '/admin/theming'
     | '/admin/users'
     | '/properties/$id'
@@ -296,6 +308,7 @@ export interface FileRouteTypes {
     | '/impersonate-as/$tokenHash'
     | '/_authenticated/admin/campaigns'
     | '/_authenticated/admin/feedback'
+    | '/_authenticated/admin/settings'
     | '/_authenticated/admin/theming'
     | '/_authenticated/admin/users'
     | '/_authenticated/properties/$id'
@@ -446,6 +459,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminThemingRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/admin/feedback': {
       id: '/_authenticated/admin/feedback'
       path: '/feedback'
@@ -501,6 +521,7 @@ const AuthenticatedAdminUsersRouteWithChildren =
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminCampaignsRoute: typeof AuthenticatedAdminCampaignsRoute
   AuthenticatedAdminFeedbackRoute: typeof AuthenticatedAdminFeedbackRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminThemingRoute: typeof AuthenticatedAdminThemingRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRouteWithChildren
 }
@@ -509,6 +530,7 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
   {
     AuthenticatedAdminCampaignsRoute: AuthenticatedAdminCampaignsRoute,
     AuthenticatedAdminFeedbackRoute: AuthenticatedAdminFeedbackRoute,
+    AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
     AuthenticatedAdminThemingRoute: AuthenticatedAdminThemingRoute,
     AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRouteWithChildren,
   }
