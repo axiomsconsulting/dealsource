@@ -192,6 +192,7 @@ export const updateProperty = createServerFn({ method: "POST" })
           hide_address: z.boolean().optional(),
           notes: z.string().max(5000).optional(),
           asking_price_gbp: z.number().nullable().optional(),
+          price_qualifier: z.string().max(60).nullable().optional(),
           seller_context: z.any().optional(),
           survey_findings: z.any().optional(),
           viewing_notes: z.any().optional(),
