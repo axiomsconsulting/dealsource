@@ -4,7 +4,8 @@ import { z } from "zod";
 import { computeRiskFlags } from "./analysis/risk";
 import { lookupArticle4WithClient } from "./analysis/article4";
 import { estimateRefurb } from "./analysis/refurb";
-import { assertSupportedListingUrl, scrapeListing } from "./firecrawl.server";
+import { scrapeListing } from "./firecrawl.server";
+import { assertSinglePropertyUrl } from "./listing-url";
 import { mergePriceReductionIntoPfJson } from "./enrich.functions";
 import { tryAutoMatchEpc } from "./epc.functions";
 
@@ -65,8 +66,8 @@ export const ingestFromUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ url: z.string().url() }).parse(input))
   .handler(async ({ data, context }) => {
-    assertSupportedListingUrl(data.url);
-    const scraped = await scrapeListing(data.url);
+    const cleaned = assertSinglePropertyUrl(data.url);
+    const scraped = await scrapeListing(cleaned.url);
     if (!scraped.address)
       throw new Error("Could not extract a property address from that listing.");
 
