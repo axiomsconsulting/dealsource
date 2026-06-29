@@ -709,6 +709,7 @@ export type Database = {
           notes: string | null
           pf_json: Json | null
           postcode: string | null
+          price_qualifier: string | null
           property_type: string | null
           refurb_estimate: Json | null
           rent_source: string | null
@@ -748,6 +749,7 @@ export type Database = {
           notes?: string | null
           pf_json?: Json | null
           postcode?: string | null
+          price_qualifier?: string | null
           property_type?: string | null
           refurb_estimate?: Json | null
           rent_source?: string | null
@@ -787,6 +789,7 @@ export type Database = {
           notes?: string | null
           pf_json?: Json | null
           postcode?: string | null
+          price_qualifier?: string | null
           property_type?: string | null
           refurb_estimate?: Json | null
           rent_source?: string | null

@@ -482,7 +482,7 @@ function PropertyDetail() {
               title="Click to edit asking price"
             >
               <Badge className="cursor-pointer hover:opacity-80">
-                Asking {fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
+                {p.price_qualifier ? `${p.price_qualifier} ` : "Asking "}{fmtGBP(p.asking_price_gbp)} <PencilLine className="ml-1 h-3 w-3" />
               </Badge>
             </button>
           ) : (
@@ -1696,7 +1696,18 @@ function OfferPlanCard({
 
 function PriceHistoryTimeline({ property }: { property: any }) {
   const history = useMemo(() => extractPriceHistory(property), [property]);
-  if (history.length < 2) return null;
+  const updateReason: string | null = property?.pf_json?.propertyLight?.listingUpdateReason ?? null;
+  if (history.length < 2 && !updateReason) return null;
+  if (history.length < 2) {
+    return (
+      <div className="mt-4 border-t pt-3">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Property log
+        </p>
+        <p className="text-sm text-amber-700">{updateReason}</p>
+      </div>
+    );
+  }
   const oldest = history[history.length - 1];
   const newest = history[0];
   const totalChange = newest.value - oldest.value;
@@ -1704,7 +1715,7 @@ function PriceHistoryTimeline({ property }: { property: any }) {
     <div className="mt-4 border-t pt-3">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Tracked price history
+          Property log
         </p>
         {totalChange !== 0 && (
           <span
@@ -1714,10 +1725,13 @@ function PriceHistoryTimeline({ property }: { property: any }) {
             )}
           >
             {totalChange < 0 ? "−" : "+"}
-            {fmtGBP(Math.abs(totalChange))} since {fmtHistoryDate(oldest.date)}
+            {fmtGBP(Math.abs(totalChange))} ({((totalChange / oldest.value) * 100).toFixed(1)}%) since {fmtHistoryDate(oldest.date)}
           </span>
         )}
       </div>
+      {updateReason && (
+        <p className="mb-2 text-xs text-amber-700">{updateReason}</p>
+      )}
       <ul className="space-y-1 text-sm">
         {history.map((h, i) => (
           <li key={`${h.date}-${h.value}`} className="flex items-center justify-between gap-3">
@@ -1739,7 +1753,8 @@ function PriceHistoryTimeline({ property }: { property: any }) {
                   )}
                 >
                   ({h.changeFromPrevious < 0 ? "−" : "+"}
-                  {fmtGBP(Math.abs(h.changeFromPrevious))})
+                  {fmtGBP(Math.abs(h.changeFromPrevious))}
+                  {history[i + 1]?.value ? `, ${((h.changeFromPrevious / history[i + 1].value) * 100).toFixed(1)}%` : ""})
                 </span>
               )}
             </span>

@@ -16,6 +16,13 @@ export function mergePriceReductionIntoPfJson(existingPfJson: any, reducedDate: 
   const propertyLight = { ...(pf.propertyLight ?? {}) };
   const propertyDetail = { ...(pf.propertyDetail ?? {}) };
   propertyLight.multipleReduce = Math.max(1, Number(propertyLight.multipleReduce) || 0);
+  // Preserve Rightmove's literal "Reduced on dd/mm/yyyy" string so the Property Log can show
+  // it verbatim — `pricesHisto` alone loses the human-readable reason badge.
+  const dmy = (() => {
+    const m = reducedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : reducedDate;
+  })();
+  propertyLight.listingUpdateReason = `Reduced on ${dmy}`;
   const existingHisto: any[] = Array.isArray(propertyDetail.pricesHisto) ? propertyDetail.pricesHisto : [];
   if (currentPriceGbp != null && !existingHisto.some((e) => e?.date === reducedDate)) {
     propertyDetail.pricesHisto = [...existingHisto, { value: currentPriceGbp, date: reducedDate }];
@@ -34,6 +41,7 @@ export const enrichFromUrl = createServerFn({ method: "POST" })
     if (scraped.address) patch.address = scraped.address;
     if (scraped.postcode) patch.postcode = scraped.postcode;
     if (scraped.asking_price_gbp != null) patch.asking_price_gbp = scraped.asking_price_gbp;
+    if (scraped.price_qualifier) patch.price_qualifier = scraped.price_qualifier;
     if (scraped.property_type) patch.property_type = scraped.property_type;
     if (scraped.beds != null) patch.beds = scraped.beds;
     if (scraped.baths != null) patch.baths = scraped.baths;
