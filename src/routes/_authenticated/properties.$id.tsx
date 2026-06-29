@@ -253,10 +253,42 @@ function PropertyDetail() {
         <p className="text-muted-foreground">Loading…</p>
       </AppShell>
     );
-  if (!prop.data || !persona || !analysis || !effectiveProperty)
+  if (prop.error || personasQ.error) {
+    const msg = (prop.error as any)?.message ?? (personasQ.error as any)?.message ?? "Unknown error";
     return (
       <AppShell>
-        <p>Not found</p>
+        <div className="space-y-2">
+          <p className="font-medium text-red-600">Couldn't load this property</p>
+          <p className="text-sm text-muted-foreground">{msg}</p>
+          <Button size="sm" variant="outline" onClick={() => { prop.refetch(); personasQ.refetch(); }}>
+            Retry
+          </Button>
+        </div>
+      </AppShell>
+    );
+  }
+  if (!prop.data)
+    return (
+      <AppShell>
+        <p>Property not found</p>
+      </AppShell>
+    );
+  if (!persona)
+    return (
+      <AppShell>
+        <div className="space-y-2">
+          <p className="font-medium">No investor profile yet</p>
+          <p className="text-sm text-muted-foreground">
+            We couldn't load or create your investor profiles. Open the Personas page to create one, then come back.
+          </p>
+          <Link to="/persona"><Button size="sm">Open Personas</Button></Link>
+        </div>
+      </AppShell>
+    );
+  if (!analysis || !effectiveProperty)
+    return (
+      <AppShell>
+        <p>Couldn't compute analysis for this property.</p>
       </AppShell>
     );
 
