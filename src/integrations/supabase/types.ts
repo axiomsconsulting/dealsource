@@ -543,6 +543,41 @@ export type Database = {
           },
         ]
       }
+      peer_shares: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          owner_user_id: string
+          property_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          owner_user_id: string
+          property_id: string
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          owner_user_id?: string
+          property_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peer_shares_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personas: {
         Row: {
           ai_default_enabled: boolean
@@ -683,6 +718,7 @@ export type Database = {
           epc_bearer_token: string | null
           id: string
           role: string
+          share_defaults: Json
         }
         Insert: {
           avatar_url?: string | null
@@ -692,6 +728,7 @@ export type Database = {
           epc_bearer_token?: string | null
           id: string
           role?: string
+          share_defaults?: Json
         }
         Update: {
           avatar_url?: string | null
@@ -701,6 +738,7 @@ export type Database = {
           epc_bearer_token?: string | null
           id?: string
           role?: string
+          share_defaults?: Json
         }
         Relationships: []
       }
