@@ -1,0 +1,1 @@
+create index if not exists usage_periods_owner_idx on public.usage_periods(owner_user_id, period_start desc);

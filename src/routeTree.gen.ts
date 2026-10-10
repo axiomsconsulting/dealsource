@@ -18,11 +18,13 @@ import { Route as ImpersonateAsTokenHashRouteImport } from './routes/impersonate
 import { Route as DealTokenRouteImport } from './routes/deal.$token'
 import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedPricingRouteImport } from './routes/_authenticated/pricing'
 import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAboutRouteImport } from './routes/_authenticated/about'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedPropertiesIndexRouteImport } from './routes/_authenticated/properties.index'
+import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe-webhook'
 import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
 import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
 import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
@@ -79,6 +81,11 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPricingRoute = AuthenticatedPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPersonaRoute = AuthenticatedPersonaRouteImport.update({
   id: '/persona',
   path: '/persona',
@@ -105,6 +112,11 @@ const AuthenticatedPropertiesIndexRoute =
     path: '/properties/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
+  id: '/api/public/stripe-webhook',
+  path: '/api/public/stripe-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicRunSearchAlertsRoute =
   ApiPublicRunSearchAlertsRouteImport.update({
     id: '/api/public/run-search-alerts',
@@ -178,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AuthenticatedAboutRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
+  '/pricing': typeof AuthenticatedPricingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
@@ -191,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
+  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/properties/': typeof AuthenticatedPropertiesIndexRoute
   '/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/properties/$id/guide': typeof AuthenticatedPropertiesIdGuideRoute
@@ -204,6 +218,7 @@ export interface FileRoutesByTo {
   '/about': typeof AuthenticatedAboutRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/persona': typeof AuthenticatedPersonaRoute
+  '/pricing': typeof AuthenticatedPricingRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
@@ -217,6 +232,7 @@ export interface FileRoutesByTo {
   '/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
+  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/properties': typeof AuthenticatedPropertiesIndexRoute
   '/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/properties/$id/guide': typeof AuthenticatedPropertiesIdGuideRoute
@@ -232,6 +248,7 @@ export interface FileRoutesById {
   '/_authenticated/about': typeof AuthenticatedAboutRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/persona': typeof AuthenticatedPersonaRoute
+  '/_authenticated/pricing': typeof AuthenticatedPricingRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/welcome': typeof AuthenticatedWelcomeRoute
   '/deal/$token': typeof DealTokenRoute
@@ -245,6 +262,7 @@ export interface FileRoutesById {
   '/_authenticated/properties/$id': typeof AuthenticatedPropertiesIdRoute
   '/api/deal-pdf/$token': typeof ApiDealPdfTokenRoute
   '/api/public/run-search-alerts': typeof ApiPublicRunSearchAlertsRoute
+  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/_authenticated/properties/': typeof AuthenticatedPropertiesIndexRoute
   '/_authenticated/admin/users/$id': typeof AuthenticatedAdminUsersIdRoute
   '/_authenticated/properties/$id_/guide': typeof AuthenticatedPropertiesIdGuideRoute
@@ -260,6 +278,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/dashboard'
     | '/persona'
+    | '/pricing'
     | '/profile'
     | '/welcome'
     | '/deal/$token'
@@ -273,6 +292,7 @@ export interface FileRouteTypes {
     | '/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
+    | '/api/public/stripe-webhook'
     | '/properties/'
     | '/admin/users/$id'
     | '/properties/$id/guide'
@@ -286,6 +306,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/dashboard'
     | '/persona'
+    | '/pricing'
     | '/profile'
     | '/welcome'
     | '/deal/$token'
@@ -299,6 +320,7 @@ export interface FileRouteTypes {
     | '/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
+    | '/api/public/stripe-webhook'
     | '/properties'
     | '/admin/users/$id'
     | '/properties/$id/guide'
@@ -313,6 +335,7 @@ export interface FileRouteTypes {
     | '/_authenticated/about'
     | '/_authenticated/dashboard'
     | '/_authenticated/persona'
+    | '/_authenticated/pricing'
     | '/_authenticated/profile'
     | '/_authenticated/welcome'
     | '/deal/$token'
@@ -326,6 +349,7 @@ export interface FileRouteTypes {
     | '/_authenticated/properties/$id'
     | '/api/deal-pdf/$token'
     | '/api/public/run-search-alerts'
+    | '/api/public/stripe-webhook'
     | '/_authenticated/properties/'
     | '/_authenticated/admin/users/$id'
     | '/_authenticated/properties/$id_/guide'
@@ -342,6 +366,7 @@ export interface RootRouteChildren {
   ShareTokenRoute: typeof ShareTokenRoute
   ApiDealPdfTokenRoute: typeof ApiDealPdfTokenRoute
   ApiPublicRunSearchAlertsRoute: typeof ApiPublicRunSearchAlertsRoute
+  ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -409,6 +434,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/pricing': {
+      id: '/_authenticated/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof AuthenticatedPricingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/persona': {
       id: '/_authenticated/persona'
       path: '/persona'
@@ -443,6 +475,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/properties/'
       preLoaderRoute: typeof AuthenticatedPropertiesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/stripe-webhook': {
+      id: '/api/public/stripe-webhook'
+      path: '/api/public/stripe-webhook'
+      fullPath: '/api/public/stripe-webhook'
+      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/run-search-alerts': {
       id: '/api/public/run-search-alerts'
@@ -565,6 +604,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAboutRoute: typeof AuthenticatedAboutRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPersonaRoute: typeof AuthenticatedPersonaRoute
+  AuthenticatedPricingRoute: typeof AuthenticatedPricingRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedWelcomeRoute: typeof AuthenticatedWelcomeRoute
   AuthenticatedPropertiesIdRoute: typeof AuthenticatedPropertiesIdRoute
@@ -578,6 +618,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAboutRoute: AuthenticatedAboutRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedPersonaRoute: AuthenticatedPersonaRoute,
+  AuthenticatedPricingRoute: AuthenticatedPricingRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedWelcomeRoute: AuthenticatedWelcomeRoute,
   AuthenticatedPropertiesIdRoute: AuthenticatedPropertiesIdRoute,
@@ -599,6 +640,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShareTokenRoute: ShareTokenRoute,
   ApiDealPdfTokenRoute: ApiDealPdfTokenRoute,
   ApiPublicRunSearchAlertsRoute: ApiPublicRunSearchAlertsRoute,
+  ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

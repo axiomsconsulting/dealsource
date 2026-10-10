@@ -78,6 +78,12 @@ async function logAiUsage(supabase: any, userId: string, propertyId: string | nu
   } catch {
     // never fail the AI call over usage logging
   }
+  try {
+    const { consumeAi } = await import("./billing/entitlements.server");
+    await consumeAi({ supabase, userId }, featureKey);
+  } catch (e) {
+    console.warn("AI credit metering failed", e);
+  }
 }
 
 function parseJsonBlock(text: string): any {
@@ -694,6 +700,10 @@ export const analyseLibraryWithAI = createServerFn({ method: "POST" })
   });
 
 async function runFullAnalysis(context: any, propertyId: string): Promise<AIPayload> {
+  {
+    const { aiPreflight } = await import("./billing/entitlements.server");
+    await aiPreflight(context);
+  }
   const { data: prop, error: pe } = await context.supabase
     .from("properties").select("*").eq("id", propertyId).maybeSingle();
   if (pe || !prop) throw new Error(pe?.message || "Property not found");
