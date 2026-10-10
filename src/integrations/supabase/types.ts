@@ -588,6 +588,7 @@ export type Database = {
           ignore_eras: string[]
           investor_type: string | null
           is_default: boolean
+          is_preset: boolean
           ltv: number
           max_beds: number
           max_offer_gbp: number
@@ -616,6 +617,7 @@ export type Database = {
           ignore_eras?: string[]
           investor_type?: string | null
           is_default?: boolean
+          is_preset?: boolean
           ltv?: number
           max_beds?: number
           max_offer_gbp?: number
@@ -644,6 +646,7 @@ export type Database = {
           ignore_eras?: string[]
           investor_type?: string | null
           is_default?: boolean
+          is_preset?: boolean
           ltv?: number
           max_beds?: number
           max_offer_gbp?: number
@@ -978,12 +981,186 @@ export type Database = {
           },
         ]
       }
+      stripe_events: {
+        Row: {
+          id: string
+          received_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          received_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      subscription_members: {
+        Row: {
+          created_at: string
+          member_user_id: string
+          owner_user_id: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          member_user_id: string
+          owner_user_id: string
+          role?: string
+        }
+        Update: {
+          created_at?: string
+          member_user_id?: string
+          owner_user_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_members_member_user_id_fkey"
+            columns: ["member_user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_members_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          billing_interval: string | null
+          branding: Json
+          cancel_at_period_end: boolean
+          comp: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          plan: string
+          source: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          topup_credits: number
+          trial_ends_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_interval?: string | null
+          branding?: Json
+          cancel_at_period_end?: boolean
+          comp?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          plan?: string
+          source?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          topup_credits?: number
+          trial_ends_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_interval?: string | null
+          branding?: Json
+          cancel_at_period_end?: boolean
+          comp?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          plan?: string
+          source?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          topup_credits?: number
+          trial_ends_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_periods: {
+        Row: {
+          ai_used: number
+          id: string
+          owner_user_id: string
+          period_end: string
+          period_start: string
+        }
+        Insert: {
+          ai_used?: number
+          id?: string
+          owner_user_id: string
+          period_end: string
+          period_start: string
+        }
+        Update: {
+          ai_used?: number
+          id?: string
+          owner_user_id?: string
+          period_end?: string
+          period_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_periods_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      billing_enforced: { Args: never; Returns: boolean }
+      billing_owner: { Args: { _uid: string }; Returns: string }
+      consume_ai_credits: { Args: { n?: number }; Returns: Json }
+      current_usage_window: {
+        Args: { _owner: string }
+        Returns: {
+          period_end: string
+          period_start: string
+        }[]
+      }
+      effective_plan: { Args: { _uid?: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      plan_limits: {
+        Args: { _plan: string }
+        Returns: {
+          ai_per_period: number
+          max_personas: number
+          max_properties: number
+        }[]
+      }
+      refund_ai_credits: {
+        Args: { _period_start: string; from_topup: number; n: number }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
