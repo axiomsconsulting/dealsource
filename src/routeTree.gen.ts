@@ -9,35 +9,39 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as DealSheetRouteImport } from './routes/deal-sheet'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ShareTokenRouteImport } from './routes/share.$token'
-import { Route as ImpersonateAsTokenHashRouteImport } from './routes/impersonate-as.$tokenHash'
-import { Route as DealTokenRouteImport } from './routes/deal.$token'
-import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
-import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
-import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DealSheetRouteImport } from './routes/deal-sheet'
 import { Route as AuthenticatedAboutRouteImport } from './routes/_authenticated/about'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
-import { Route as AuthenticatedPropertiesIndexRouteImport } from './routes/_authenticated/properties.index'
-import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
-import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
-import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
-import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
-import { Route as AuthenticatedAdminThemingRouteImport } from './routes/_authenticated/admin/theming'
-import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
-import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedPersonaRouteImport } from './routes/_authenticated/persona'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedWelcomeRouteImport } from './routes/_authenticated/welcome'
+import { Route as DealTokenRouteImport } from './routes/deal.$token'
+import { Route as ImpersonateAsTokenHashRouteImport } from './routes/impersonate-as.$tokenHash'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as AuthenticatedAdminCampaignsRouteImport } from './routes/_authenticated/admin/campaigns'
-import { Route as AuthenticatedPropertiesIdViewingRouteImport } from './routes/_authenticated/properties.$id_.viewing'
-import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
+import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminThemingRouteImport } from './routes/_authenticated/admin/theming'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
+import { Route as AuthenticatedPropertiesIndexRouteImport } from './routes/_authenticated/properties.index'
+import { Route as AuthenticatedPropertiesIdRouteImport } from './routes/_authenticated/properties.$id'
+import { Route as ApiDealPdfTokenRouteImport } from './routes/api/deal-pdf.$token'
+import { Route as ApiPublicRunSearchAlertsRouteImport } from './routes/api/public/run-search-alerts'
 import { Route as AuthenticatedAdminUsersIdRouteImport } from './routes/_authenticated/admin/users.$id'
+import { Route as AuthenticatedPropertiesIdGuideRouteImport } from './routes/_authenticated/properties.$id_.guide'
+import { Route as AuthenticatedPropertiesIdViewingRouteImport } from './routes/_authenticated/properties.$id_.viewing'
 
-const DealSheetRoute = DealSheetRouteImport.update({
-  id: '/deal-sheet',
-  path: '/deal-sheet',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -45,49 +49,10 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const DealSheetRoute = DealSheetRouteImport.update({
+  id: '/deal-sheet',
+  path: '/deal-sheet',
   getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ImpersonateAsTokenHashRoute = ImpersonateAsTokenHashRouteImport.update({
-  id: '/impersonate-as/$tokenHash',
-  path: '/impersonate-as/$tokenHash',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DealTokenRoute = DealTokenRouteImport.update({
-  id: '/deal/$token',
-  path: '/deal/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedWelcomeRoute = AuthenticatedWelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedPersonaRoute = AuthenticatedPersonaRouteImport.update({
-  id: '/persona',
-  path: '/persona',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAboutRoute = AuthenticatedAboutRouteImport.update({
   id: '/about',
@@ -99,44 +64,45 @@ const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedPropertiesIndexRoute =
-  AuthenticatedPropertiesIndexRouteImport.update({
-    id: '/properties/',
-    path: '/properties/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const ApiPublicRunSearchAlertsRoute =
-  ApiPublicRunSearchAlertsRouteImport.update({
-    id: '/api/public/run-search-alerts',
-    path: '/api/public/run-search-alerts',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiDealPdfTokenRoute = ApiDealPdfTokenRouteImport.update({
-  id: '/api/deal-pdf/$token',
-  path: '/api/deal-pdf/$token',
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPersonaRoute = AuthenticatedPersonaRouteImport.update({
+  id: '/persona',
+  path: '/persona',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWelcomeRoute = AuthenticatedWelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const DealTokenRoute = DealTokenRouteImport.update({
+  id: '/deal/$token',
+  path: '/deal/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedPropertiesIdRoute =
-  AuthenticatedPropertiesIdRouteImport.update({
-    id: '/properties/$id',
-    path: '/properties/$id',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => AuthenticatedAdminRouteRoute,
+const ImpersonateAsTokenHashRoute = ImpersonateAsTokenHashRouteImport.update({
+  id: '/impersonate-as/$tokenHash',
+  path: '/impersonate-as/$tokenHash',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAdminThemingRoute =
-  AuthenticatedAdminThemingRouteImport.update({
-    id: '/theming',
-    path: '/theming',
-    getParentRoute: () => AuthenticatedAdminRouteRoute,
-  } as any)
-const AuthenticatedAdminSettingsRoute =
-  AuthenticatedAdminSettingsRouteImport.update({
-    id: '/settings',
-    path: '/settings',
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminCampaignsRoute =
+  AuthenticatedAdminCampaignsRouteImport.update({
+    id: '/campaigns',
+    path: '/campaigns',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
 const AuthenticatedAdminFeedbackRoute =
@@ -145,17 +111,51 @@ const AuthenticatedAdminFeedbackRoute =
     path: '/feedback',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
-const AuthenticatedAdminCampaignsRoute =
-  AuthenticatedAdminCampaignsRouteImport.update({
-    id: '/campaigns',
-    path: '/campaigns',
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
-const AuthenticatedPropertiesIdViewingRoute =
-  AuthenticatedPropertiesIdViewingRouteImport.update({
-    id: '/properties/$id_/viewing',
-    path: '/properties/$id/viewing',
+const AuthenticatedAdminThemingRoute =
+  AuthenticatedAdminThemingRouteImport.update({
+    id: '/theming',
+    path: '/theming',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
+const AuthenticatedPropertiesIndexRoute =
+  AuthenticatedPropertiesIndexRouteImport.update({
+    id: '/properties/',
+    path: '/properties/',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPropertiesIdRoute =
+  AuthenticatedPropertiesIdRouteImport.update({
+    id: '/properties/$id',
+    path: '/properties/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const ApiDealPdfTokenRoute = ApiDealPdfTokenRouteImport.update({
+  id: '/api/deal-pdf/$token',
+  path: '/api/deal-pdf/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicRunSearchAlertsRoute =
+  ApiPublicRunSearchAlertsRouteImport.update({
+    id: '/api/public/run-search-alerts',
+    path: '/api/public/run-search-alerts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedAdminUsersIdRoute =
+  AuthenticatedAdminUsersIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedAdminUsersRoute,
   } as any)
 const AuthenticatedPropertiesIdGuideRoute =
   AuthenticatedPropertiesIdGuideRouteImport.update({
@@ -163,11 +163,11 @@ const AuthenticatedPropertiesIdGuideRoute =
     path: '/properties/$id/guide',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAdminUsersIdRoute =
-  AuthenticatedAdminUsersIdRouteImport.update({
-    id: '/$id',
-    path: '/$id',
-    getParentRoute: () => AuthenticatedAdminUsersRoute,
+const AuthenticatedPropertiesIdViewingRoute =
+  AuthenticatedPropertiesIdViewingRouteImport.update({
+    id: '/properties/$id_/viewing',
+    path: '/properties/$id/viewing',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -346,18 +346,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/deal-sheet': {
-      id: '/deal-sheet'
-      path: '/deal-sheet'
-      fullPath: '/deal-sheet'
-      preLoaderRoute: typeof DealSheetRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -367,61 +360,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
+    '/deal-sheet': {
+      id: '/deal-sheet'
+      path: '/deal-sheet'
+      fullPath: '/deal-sheet'
+      preLoaderRoute: typeof DealSheetRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/impersonate-as/$tokenHash': {
-      id: '/impersonate-as/$tokenHash'
-      path: '/impersonate-as/$tokenHash'
-      fullPath: '/impersonate-as/$tokenHash'
-      preLoaderRoute: typeof ImpersonateAsTokenHashRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/deal/$token': {
-      id: '/deal/$token'
-      path: '/deal/$token'
-      fullPath: '/deal/$token'
-      preLoaderRoute: typeof DealTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/welcome': {
-      id: '/_authenticated/welcome'
-      path: '/welcome'
-      fullPath: '/welcome'
-      preLoaderRoute: typeof AuthenticatedWelcomeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/profile': {
-      id: '/_authenticated/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof AuthenticatedProfileRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/persona': {
-      id: '/_authenticated/persona'
-      path: '/persona'
-      fullPath: '/persona'
-      preLoaderRoute: typeof AuthenticatedPersonaRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/about': {
       id: '/_authenticated/about'
@@ -437,53 +388,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/properties/': {
-      id: '/_authenticated/properties/'
-      path: '/properties'
-      fullPath: '/properties/'
-      preLoaderRoute: typeof AuthenticatedPropertiesIndexRouteImport
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/run-search-alerts': {
-      id: '/api/public/run-search-alerts'
-      path: '/api/public/run-search-alerts'
-      fullPath: '/api/public/run-search-alerts'
-      preLoaderRoute: typeof ApiPublicRunSearchAlertsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/deal-pdf/$token': {
-      id: '/api/deal-pdf/$token'
-      path: '/api/deal-pdf/$token'
-      fullPath: '/api/deal-pdf/$token'
-      preLoaderRoute: typeof ApiDealPdfTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/properties/$id': {
-      id: '/_authenticated/properties/$id'
-      path: '/properties/$id'
-      fullPath: '/properties/$id'
-      preLoaderRoute: typeof AuthenticatedPropertiesIdRouteImport
+    '/_authenticated/persona': {
+      id: '/_authenticated/persona'
+      path: '/persona'
+      fullPath: '/persona'
+      preLoaderRoute: typeof AuthenticatedPersonaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/users': {
-      id: '/_authenticated/admin/users'
-      path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
-      parentRoute: typeof AuthenticatedAdminRouteRoute
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/theming': {
-      id: '/_authenticated/admin/theming'
-      path: '/theming'
-      fullPath: '/admin/theming'
-      preLoaderRoute: typeof AuthenticatedAdminThemingRouteImport
-      parentRoute: typeof AuthenticatedAdminRouteRoute
+    '/_authenticated/welcome': {
+      id: '/_authenticated/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof AuthenticatedWelcomeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/settings': {
-      id: '/_authenticated/admin/settings'
-      path: '/settings'
-      fullPath: '/admin/settings'
-      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+    '/deal/$token': {
+      id: '/deal/$token'
+      path: '/deal/$token'
+      fullPath: '/deal/$token'
+      preLoaderRoute: typeof DealTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/impersonate-as/$tokenHash': {
+      id: '/impersonate-as/$tokenHash'
+      path: '/impersonate-as/$tokenHash'
+      fullPath: '/impersonate-as/$tokenHash'
+      preLoaderRoute: typeof ImpersonateAsTokenHashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin/campaigns': {
+      id: '/_authenticated/admin/campaigns'
+      path: '/campaigns'
+      fullPath: '/admin/campaigns'
+      preLoaderRoute: typeof AuthenticatedAdminCampaignsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
     '/_authenticated/admin/feedback': {
@@ -493,19 +451,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminFeedbackRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
-    '/_authenticated/admin/campaigns': {
-      id: '/_authenticated/admin/campaigns'
-      path: '/campaigns'
-      fullPath: '/admin/campaigns'
-      preLoaderRoute: typeof AuthenticatedAdminCampaignsRouteImport
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
-    '/_authenticated/properties/$id_/viewing': {
-      id: '/_authenticated/properties/$id_/viewing'
-      path: '/properties/$id/viewing'
-      fullPath: '/properties/$id/viewing'
-      preLoaderRoute: typeof AuthenticatedPropertiesIdViewingRouteImport
+    '/_authenticated/admin/theming': {
+      id: '/_authenticated/admin/theming'
+      path: '/theming'
+      fullPath: '/admin/theming'
+      preLoaderRoute: typeof AuthenticatedAdminThemingRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/properties/': {
+      id: '/_authenticated/properties/'
+      path: '/properties'
+      fullPath: '/properties/'
+      preLoaderRoute: typeof AuthenticatedPropertiesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/properties/$id': {
+      id: '/_authenticated/properties/$id'
+      path: '/properties/$id'
+      fullPath: '/properties/$id'
+      preLoaderRoute: typeof AuthenticatedPropertiesIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/deal-pdf/$token': {
+      id: '/api/deal-pdf/$token'
+      path: '/api/deal-pdf/$token'
+      fullPath: '/api/deal-pdf/$token'
+      preLoaderRoute: typeof ApiDealPdfTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/run-search-alerts': {
+      id: '/api/public/run-search-alerts'
+      path: '/api/public/run-search-alerts'
+      fullPath: '/api/public/run-search-alerts'
+      preLoaderRoute: typeof ApiPublicRunSearchAlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin/users/$id': {
+      id: '/_authenticated/admin/users/$id'
+      path: '/$id'
+      fullPath: '/admin/users/$id'
+      preLoaderRoute: typeof AuthenticatedAdminUsersIdRouteImport
+      parentRoute: typeof AuthenticatedAdminUsersRoute
     }
     '/_authenticated/properties/$id_/guide': {
       id: '/_authenticated/properties/$id_/guide'
@@ -514,12 +514,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPropertiesIdGuideRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/users/$id': {
-      id: '/_authenticated/admin/users/$id'
-      path: '/$id'
-      fullPath: '/admin/users/$id'
-      preLoaderRoute: typeof AuthenticatedAdminUsersIdRouteImport
-      parentRoute: typeof AuthenticatedAdminUsersRoute
+    '/_authenticated/properties/$id_/viewing': {
+      id: '/_authenticated/properties/$id_/viewing'
+      path: '/properties/$id/viewing'
+      fullPath: '/properties/$id/viewing'
+      preLoaderRoute: typeof AuthenticatedPropertiesIdViewingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
