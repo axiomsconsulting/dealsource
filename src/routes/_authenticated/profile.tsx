@@ -17,6 +17,8 @@ import { fmtGBP } from "@/lib/format";
 import { Bell, Loader2, LogOut, Star, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { SavedSearchesManager } from "@/components/SavedSearchesManager";
+import { BillingPanel } from "@/components/BillingPanel";
+import { CreditCard } from "lucide-react";
 import {
   getMyShareDefaults,
   updateMyShareDefaults,
@@ -33,10 +35,13 @@ export const Route = createFileRoute("/_authenticated/profile")({
 function ProfilePage() {
   return (
     <AppShell title="Profile">
-      <Tabs defaultValue="account">
+      <Tabs defaultValue={typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "billing" ? "billing" : "account"}>
         <TabsList>
           <TabsTrigger value="account" className="gap-1.5">
             <UserRound className="h-4 w-4" /> Account
+          </TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1.5">
+            <CreditCard className="h-4 w-4" /> Billing
           </TabsTrigger>
           <TabsTrigger value="share" className="gap-1.5">
             <Share2 className="h-4 w-4" /> Share defaults
@@ -50,6 +55,9 @@ function ProfilePage() {
         </TabsList>
         <TabsContent value="account">
           <AccountTab />
+        </TabsContent>
+        <TabsContent value="billing">
+          <BillingPanel />
         </TabsContent>
         <TabsContent value="share">
           <ShareDefaultsTab />
