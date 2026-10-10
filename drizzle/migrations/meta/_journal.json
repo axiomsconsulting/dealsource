@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791658365668,
+      "tag": "0000_billing_subscriptions_usage",
+      "breakpoints": true
+    }
+  ]
+}
