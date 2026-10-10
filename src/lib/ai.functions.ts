@@ -78,6 +78,12 @@ async function logAiUsage(supabase: any, userId: string, propertyId: string | nu
   } catch {
     // never fail the AI call over usage logging
   }
+  try {
+    const { consumeAi } = await import("./billing/entitlements.server");
+    await consumeAi({ supabase, userId }, featureKey);
+  } catch (e) {
+    console.warn("AI credit metering failed", e);
+  }
 }
 
 function parseJsonBlock(text: string): any {
