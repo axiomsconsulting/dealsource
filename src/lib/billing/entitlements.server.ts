@@ -87,3 +87,12 @@ export function mapDbError(err: { message?: string } | null | undefined): Billin
   const m = /(PROPERTY_LIMIT_REACHED|AI_LIMIT_REACHED):(\d+)/.exec(err?.message ?? "");
   return m ? new BillingError(m[1], { limit: Number(m[2]) }) : null;
 }
+
+/** Throws AI_LIMIT_REACHED before spending if the user has no credits left. */
+export async function aiPreflight(ctx: Ctx) {
+  const e = await getEntitlements(ctx.supabase, ctx.userId);
+  if (e.isAdmin || !e.enforced) return;
+  if (e.usage.aiUsed >= e.usage.aiLimit && e.usage.topup <= 0) {
+    throw new Error("You've used all your AI credits for this period. Buy a top-up or upgrade your plan on the Pricing page.");
+  }
+}
